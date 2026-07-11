@@ -51,14 +51,17 @@ the accumulator books real-looking data. Needs `python-multipart` in the venv
 (form parsing). `dev/dev.env` (gitignored) holds a working dev config —
 recreate via README "Local development"; login is christina/devpass.
 
-### Frontend (`frontend/`) — source complete (subagent), build artifacts exist
+### Frontend (`frontend/`) — source complete, build verified, served by backend
 
 Vite + React 18 + TS + Tailwind v3 + Recharts + @novnc/novnc +
 @fontsource/jetbrains-mono. All pages/tabs per plan §5: Login, Fleet, VmDetail
 (Overview/Graphs/Console/Rescue/Tasks), Provision, Node; api.ts wraps CSRF and
-401-redirect. `dist/` built successfully at least once. The subagent died at
-"screenshot the pages" polish stage, so: **build passes, but the UI has not been
-visually inspected in a browser yet.**
+401-redirect (contract spot-checked against the backend). `npx tsc --noEmit`
+and `npm run build` pass clean; the built `dist/` is served by the backend
+(index, assets, SPA fallback, path-traversal guard all verified with curl).
+**Not yet done: an actual in-browser visual pass** — no Chromium on this box.
+Easiest: `ssh -L 8787:127.0.0.1:8787 hermes-agent`, start mock+backend per the
+cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
 
 ### Nix (`nix/`) + docs — WRITTEN, NOT BUILT (no nix on this box)
 
@@ -73,22 +76,22 @@ visually inspected in a browser yet.**
 
 ## Immediate next steps (in order)
 
-1. Serve `frontend/dist` from the backend (`HLIDSKJALF_STATIC_DIR=$PWD/frontend/dist`
-   added to dev env), open http://127.0.0.1:8787, click through every page
-   against the mock; fix whatever looks broken (esp. Recharts sizing, empty
-   states, bandwidth charts, provision task log).
-2. `cd frontend && npx tsc --noEmit && npm run build` to confirm the tree still
-   builds clean; check the api.ts contract against backend responses (shapes
-   documented in the subagent prompt = plan §4 table).
-3. git: repo is initialized on `main`; commit everything (`.gitignore` in
-   place). Create `github.com/jivsan/Hlidskjalf` and push when ready.
-4. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
+1. Visual pass in a real browser against the mock (see Frontend section above);
+   fix whatever looks broken (esp. Recharts sizing, empty states, bandwidth
+   charts, provision task log).
+2. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
    `nix flake check`.
-5. Real deployment (Christina, manual): `docs/bootstrap.md` on hella → secrets
+3. Real deployment (Christina, manual): `docs/bootstrap.md` on hella → secrets
    env on heimdall → flake input + Traefik + DNS in dotfiles (plan §7).
-6. M2–M4 acceptance against real hella with **scratch VMIDs ≥ 900 only**;
+4. M2–M4 acceptance against real hella with **scratch VMIDs ≥ 900 only**;
    confirm plan §10 open items (real storage IDs, real protected VMIDs —
    heimdall/hermes-agent/HAOS VMIDs still unknown, VLAN 30 gateway).
+
+## Git
+
+Committed on `main`, pushed to git@github.com:jivsan/Hlidskjalf.git (SSH key
+`~/.ssh/id_ed25519_github`, wired via `core.sshCommand`). Author identity for
+this repo: `jivsan <chrsol3@gmail.com>` — no co-author trailers.
 
 ## Open decisions / deferred
 
