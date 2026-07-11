@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-bg text-fg font-mono;
+    color-scheme: dark;
+  }
+  body {
+    @apply min-h-screen antialiased text-sm;
+  }
+  ::selection {
+    background-color: rgba(255, 79, 163, 0.35);
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-border-token rounded-card;
+  }
+  .metric {
+    font-variant-numeric: tabular-nums;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-card border text-sm
+      disabled:opacity-40 disabled:cursor-not-allowed transition-none select-none;
+  }
+  .btn-cyan {
+    @apply btn border-cyan/50 text-cyan hover:bg-cyan/10;
+  }
+  .btn-pink {
+    @apply btn border-pink/60 text-pink hover:bg-pink/10;
+  }
+  .btn-plain {
+    @apply btn border-border-token text-fg hover:bg-border-token/40;
+  }
+  .btn-red {
+    @apply btn border-red/60 text-red hover:bg-red/10;
+  }
+  .btn-amber {
+    @apply btn border-amber/60 text-amber hover:bg-amber/10;
+  }
+  .input {
+    @apply bg-bg border border-border-token rounded-card px-3 py-1.5 text-sm text-fg w-full
+      placeholder:text-muted focus:outline-none focus:border-pink/70;
+  }
+  .label {
+    @apply block text-xs text-muted mb-1;
+  }
+}
+
+/* Recessive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2f3549 transparent;
+}

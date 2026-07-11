@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hlidskjalf"
+version = "0.1.0"
+description = "Hlidskjalf — self-hosted Proxmox VPS panel (Odin's high seat over hella)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "websockets>=13.0",
+    "aiosqlite>=0.20",
+    "argon2-cffi>=23.1",
+    "pydantic-settings>=2.4",
+    "itsdangerous>=2.2",
+]
+
+[project.scripts]
+hlidskjalf = "hlidskjalf.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hlidskjalf"]
