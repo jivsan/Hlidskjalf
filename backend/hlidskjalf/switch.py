@@ -1,19 +1,20 @@
-"""Arista EOS switch client for port visualization.
+"""Arista EOS switch client for port visualization (eAPI only).
 
-Prefers eAPI (recommended - enable on switch with 'management api http-commands').
-Falls back to SSH + text parsing using paramiko if eAPI is disabled.
+Enable eAPI on switch:
+  management api http-commands
+    protocol https
+    no shutdown
+
+Fetches ports, LLDP neighbors, descriptions, counters for visualization.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
 import re
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Optional
 
 import httpx
-import paramiko
 
 from .config import get_settings
 
@@ -30,6 +31,7 @@ class PortInfo:
     input_rate: int = 0  # bps
     output_rate: int = 0 # bps
     active: bool = False # for UI blinking
+    lldp_neighbor: Optional[dict] = field(default=None)  # e.g. {"system_name": "...", "port": "..."} from LLDP
 
 
 class AristaClient:
@@ -39,19 +41,12 @@ class AristaClient:
         self.port = s.switch_port
         self.username = s.switch_username
         self.password = s.switch_password
-        self.use_eapi = s.switch_use_eapi
-        self.ssh_port = s.switch_ssh_port
 
     async def get_ports(self) -> list[PortInfo]:
-        """Return list of ports with status, rates, descriptions."""
-        if self.use_eapi and self.username and self.password:
-            try:
-                return await self._get_ports_eapi()
-            except Exception:
-                # fall through to SSH
-                pass
-
-        return await self._get_ports_ssh()
+        """Return list of ports with status, rates, descriptions, LLDP (pure eAPI, no SSH fallback)."""
+        if not (self.username and self.password):
+            return []
+        return await self._get_ports_eapi()
 
     async def _get_ports_eapi(self) -> list[PortInfo]:
         """Use Arista eAPI (JSON-RPC over HTTPS)."""
@@ -62,6 +57,7 @@ class AristaClient:
             "show interfaces status",
             "show interfaces description",
             "show interfaces counters rates",
+            "show lldp neighbors",
         ]
 
         payload = {
@@ -84,12 +80,13 @@ class AristaClient:
             raise RuntimeError(data["error"])
 
         results = data.get("result", [])
-        if len(results) < 3:
+        if len(results) < 4:
             return []
 
         status_data = results[0]
         desc_data = results[1]
         counters_data = results[2]
+        lldp_data = results[3]
 
         # Build description map
         desc_map: dict[str, str] = {}
@@ -104,6 +101,15 @@ class AristaClient:
             in_rate = int(stats.get("inBitsRate", 0) or 0)
             out_rate = int(stats.get("outBitsRate", 0) or 0)
             rate_map[iface] = (in_rate, out_rate)
+
+        # Build LLDP map (simple: last neighbor per local port)
+        lldp_map: dict[str, dict] = {}
+        for neigh in lldp_data.get("lldpNeighbors", []):
+            local_if = neigh.get("port", "")
+            system = neigh.get("neighborDevice", "") or neigh.get("systemName", "")
+            neigh_port = neigh.get("neighborPort", "") or ""
+            if local_if and system:
+                lldp_map[local_if] = {"system_name": system, "port": neigh_port}
 
         ports: list[PortInfo] = []
         for name, info in status_data.get("interfaceStatuses", {}).items():
@@ -129,6 +135,7 @@ class AristaClient:
                     input_rate=in_r,
                     output_rate=out_r,
                     active=active,
+                    lldp_neighbor=lldp_map.get(name),
                 )
             )
 
@@ -136,95 +143,8 @@ class AristaClient:
         ports.sort(key=lambda p: self._port_sort_key(p.name))
         return ports
 
-    async def _get_ports_ssh(self) -> list[PortInfo]:
-        """SSH fallback using paramiko + simple parsing."""
-        if not (self.username and self.password):
-            return []
-
-        def _ssh_work() -> list[PortInfo]:
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                self.host,
-                port=self.ssh_port,
-                username=self.username,
-                password=self.password,
-                timeout=8,
-                look_for_keys=False,
-            )
-
-            ports: list[PortInfo] = []
-
-            # 1. interfaces status
-            stdin, stdout, _ = client.exec_command("show interfaces status | json")
-            status_raw = stdout.read().decode()
-            try:
-                status_data = json.loads(status_raw)
-            except Exception:
-                status_data = {}
-
-            # 2. descriptions
-            stdin, stdout, _ = client.exec_command("show interfaces description | json")
-            desc_raw = stdout.read().decode()
-            try:
-                desc_data = json.loads(desc_raw)
-            except Exception:
-                desc_data = {}
-
-            desc_map = {
-                i.get("interface", ""): i.get("description", "")
-                for i in desc_data.get("interfaceDescriptions", [])
-            }
-
-            # 3. rates (if available)
-            try:
-                stdin, stdout, _ = client.exec_command("show interfaces counters rates | json")
-                rate_raw = stdout.read().decode()
-                rate_data = json.loads(rate_raw)
-            except Exception:
-                rate_data = {}
-
-            rate_map = {}
-            for iface, stats in rate_data.get("interfaces", {}).items():
-                rate_map[iface] = (
-                    int(stats.get("inBitsRate", 0) or 0),
-                    int(stats.get("outBitsRate", 0) or 0),
-                )
-
-            for name, info in status_data.get("interfaceStatuses", {}).items():
-                if not name.lower().startswith(("ethernet", "et")):
-                    continue
-
-                status = info.get("linkStatus", "notconnect")
-                speed = str(info.get("bandwidth", ""))
-                duplex = info.get("duplex", "")
-                vlan = str(info.get("vlanInformation", {}).get("vlanId", "")) or None
-
-                in_r, out_r = rate_map.get(name, (0, 0))
-                active = (in_r > 1000) or (out_r > 1000)
-
-                ports.append(
-                    PortInfo(
-                        name=name,
-                        status=status,
-                        speed=speed,
-                        duplex=duplex,
-                        vlan=vlan,
-                        description=desc_map.get(name, ""),
-                        input_rate=in_r,
-                        output_rate=out_r,
-                        active=active,
-                    )
-                )
-
-            client.close()
-            ports.sort(key=lambda p: self._port_sort_key(p.name))
-            return ports
-
-        return await asyncio.to_thread(_ssh_work)
-
     def _port_sort_key(self, name: str) -> tuple:
-        # Sort Ethernet1, Ethernet1/1, etc.
+        # Sort Ethernet1, Ethernet2, etc.
         m = re.search(r"(\d+)(?:/(\d+))?", name)
         if m:
             return (int(m.group(1)), int(m.group(2) or 0))
