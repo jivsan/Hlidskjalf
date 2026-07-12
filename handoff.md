@@ -6,6 +6,7 @@ The design source of truth is `plan.md`; this file is only "what is done / what'
 **Recent session work:** 
 - Backend subagent 019f562a-2ff2-7e10-919c-1024e085ca18 completed: pure eAPI (no SSH), LLDP via eAPI, dev/mock_switch.py (52-port 7050TX with LLDP/rates/desc/status), PortInfo updates, docs.
 - Frontend subagent 019f562a-3fd9-7081-b2e8-1532a824eb19 completed: SVG physical faceplate (exact 7050TX-48T-4SFP+ layout with bezel/rack ears, clickable ports/LEDs for status/activity/LLDP, rack-like), Top Talkers (rate-sorted), enhanced panel with LLDP+descriptions+inline notes, Flux-human styling (clean cards, subtle depth, readable, less glow).
+- Frontend UI specialist: upgraded faceplate from SVG to premium non-SVG `<canvas>` (see CHANGELOG for details: realistic gradients/bevels/ports/LEDs/hit detection/DPI/RAF). No backend mods.
 - PR subagent completed branch/PR actions.
 Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (rebased to latest main, mock added via --theirs in conflict, force-pushed). PR creation attempted via GitHub API (401 Bad credentials). All documented live in handoff + CHANGELOG.
 

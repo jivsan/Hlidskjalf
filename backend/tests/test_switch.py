@@ -108,7 +108,7 @@ async def test_response_validation_partial_results():
     c.host = "h"
     fake_resp = AsyncMock()
     fake_resp.status_code = 200
-    fake_resp.raise_for_status = AsyncMock()
+    fake_resp.raise_for_status = lambda: None  # sync to avoid await warn
     fake_resp.json = lambda: {"result": [{}]}  # <4 results
     with patch("hlidskjalf.switch.httpx.AsyncClient") as mock_client:
         inst = mock_client.return_value.__aenter__.return_value
