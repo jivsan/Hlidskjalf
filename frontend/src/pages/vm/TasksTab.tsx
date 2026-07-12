@@ -9,10 +9,13 @@ function exitChip(task: RecentTask) {
   if (task.endtime == null) {
     return <span className="text-amber">running</span>;
   }
-  if (task.status === "OK") {
+  // Prefer the explicit exit result; fall back to `status` for PVE variants
+  // that report "OK"/error directly there.
+  const result = task.exitstatus ?? task.status;
+  if (result === "OK") {
     return <span className="text-cyan">OK</span>;
   }
-  return <span className="text-red">{task.status ?? "?"}</span>;
+  return <span className="text-red">{result ?? "?"}</span>;
 }
 
 export function TasksTab({ vmid }: { vmid: number }) {

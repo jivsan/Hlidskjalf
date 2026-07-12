@@ -25,6 +25,11 @@ export function NodePage() {
   const points = metrics.data ?? [];
   const st = info?.status;
   const loadavg = Array.isArray(st?.loadavg) ? st.loadavg.join(" ") : null;
+  // PVE nests memory under status.memory (used/total); real PVE has no flat
+  // maxcpu — the core count lives in cpuinfo.cpus. Tolerate both shapes.
+  const memUsed = st?.memory?.used ?? st?.mem ?? null;
+  const memTotal = st?.memory?.total ?? st?.maxmem ?? null;
+  const cores = st?.maxcpu ?? st?.cpuinfo?.cpus ?? null;
 
   const pct0 = (v: number) => formatPercent(v, 0);
 
@@ -48,16 +53,16 @@ export function NodePage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Card title="CPU">
             <div className="text-sm metric mb-2">
-              {formatPercent(st.maxcpu > 0 ? st.cpu : null)}{" "}
-              <span className="text-muted">of {st.maxcpu} cores</span>
+              {formatPercent(st.cpu)}{" "}
+              {cores != null && <span className="text-muted">of {cores} cores</span>}
             </div>
             <ProgressBar fraction={st.cpu} />
           </Card>
           <Card title="RAM">
             <div className="text-sm metric mb-2">
-              {formatBytes(st.mem)} <span className="text-muted">/ {formatBytes(st.maxmem)}</span>
+              {formatBytes(memUsed)} <span className="text-muted">/ {formatBytes(memTotal)}</span>
             </div>
-            <ProgressBar fraction={st.maxmem > 0 ? st.mem / st.maxmem : 0} />
+            <ProgressBar fraction={memTotal ? (memUsed ?? 0) / memTotal : 0} />
           </Card>
         </div>
       )}
