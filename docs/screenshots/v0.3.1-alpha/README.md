@@ -13,8 +13,8 @@ All screenshots captured live from the dev stack (mocks + backend + frontend on 
 
 **After (v0.3.1-alpha) - Real captured screenshots:**
 
-- Switch faceplate (React/CSS - matches actual DCS-7050TX-48 1U: rack ears, vents, metal chassis, recessed RJ45 jacks with LEDs above, 48 copper + 4 QSFP cages, labels): ![Switch v0.3.1](v031-switch.png)
-- Fleet overview: ![Fleet v0.3.1](v031-fleet.png)
+- Switch faceplate (React/CSS - matches actual DCS-7050TX-48 1U: rack ears, vents, metal chassis, recessed RJ45 jacks with LEDs above, 48 copper + 4 QSFP cages, labels): ![Switch v0.3.1 realistic](v03-realistic-switch.png)
+- Fleet overview: ![Fleet v0.3.1 realistic](v03-realistic-main.png)
 
 ## Key Changes in v0.3.1-alpha
 
@@ -29,9 +29,11 @@ All screenshots captured live from the dev stack (mocks + backend + frontend on 
 - Top talkers list also clickable.
 - Graceful with cached data on switch error.
 
-**Real screenshot of the Switch faceplate (React/CSS):**
+**Real screenshot of the Switch faceplate (React/CSS physical 1U):**
 
-![Switch faceplate v0.3.1-alpha](v031-switch.png)
+![Switch faceplate v0.3.1-alpha](v03-realistic-switch.png)
+
+(Also available as v031-switch.png)
 
 The faceplate now looks like the physical hardware instead of blocky/cartoon.
 
