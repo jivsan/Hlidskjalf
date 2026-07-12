@@ -180,3 +180,29 @@ set -a; source ../dev/dev.env; set +a                    # from backend/
 ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787     #   (login christina/devpass)
 npm run dev                                              # from frontend/, :5173 proxies to :8787
 ```
+
+## PR coordination notes (documentation/release specialist)
+
+Branches created & pushed:
+- feat/switch-eapi-lldp (pure eAPI refactor, LLDP, mock_switch, cleanup)
+- feat/switch-svg-ui (SVG faceplate, Top Talkers, LLDP+notes UI, Flux CSS)
+
+**Prepared PR description template (Flux inspiration + cyberpunk but human feel):**
+
+```
+feat(switch): [title]
+
+Enhances the Arista 7050TX switch visualizer to better match the Flux panel's practical machine-to-port mapping insight, rendered with our signature cyberpunk server-room aesthetic — but human: clean Tokyo Night cards, subtle rack bezels and physical port SVG (not over-the-top neon), usable typography and spacing inspired by gigahost Flux.
+
+See:
+- handoff.md (this file)
+- CHANGELOG.md (Unreleased)
+- plan.md § for design language
+
+All incremental diffs documented live. Uses eAPI + mock for dev. Verified builds/tests.
+```
+
+GitHub API call attempted (via curl + ~/.hlidskjalf_gh_token); fell back to manual open instructions due to 401. Update handoff after PR #s land (e.g. #5, #6).
+
+Use `gh pr create --head feat/switch-...` once gh + auth available.
+```

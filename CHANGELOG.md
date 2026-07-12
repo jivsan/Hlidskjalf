@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Switch Visualizer Enhancements (feat branches + PRs coordinated)
+- Pure eAPI + LLDP + mock (feat/switch-eapi-lldp)
+- SVG faceplate + Top Talkers + LLDP UI + Flux-human styling (feat/switch-svg-ui; see subagent report)
+- All changes, docs, branches, commits documented incrementally.
+- PR descriptions prepared referencing Flux inspiration and cyberpunk but human feel.
+See handoff.md for full details and branch links.
+
 ## [0.2.0-alpha] - 2026-07-12
 
 ### Added
