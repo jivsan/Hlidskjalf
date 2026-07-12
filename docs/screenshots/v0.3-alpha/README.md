@@ -6,9 +6,49 @@ This release includes the major switch visualizer enhancements (Arista 7050TX in
 
 All changes from the v0.2-alpha work + new switch section.
 
-**Before (v0.2-alpha):** See [../v0.2-alpha/README.md](../v0.2-alpha/README.md) for the previous state (grid-based port list, basic network elements, no dedicated switch faceplate).
+**Before (v0.2-alpha) examples:**
+- Fleet: ![Fleet before](fleet.png)
+- VM Overview: ![VM overview before](vm-overview.png)
+- Node: ![Node before](node.png)
 
-**After (v0.3-alpha):** New features and visual improvements detailed below. (Note: Full PNG captures of the updated UI will be added post-merge and testing. This section documents the changes for comparison.)
+See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
+
+**After (v0.3-alpha):** The new switch section and UI refinements. (Real PNGs of the live /switch page with SVG faceplate will be added after testing. This README provides the comparison and description.)
+
+## Comparison: Before vs After
+
+### Fleet / Overview (baseline unchanged visually in this release, but now complemented by switch)
+- **Before (v0.2):** Standard table + basic cards.
+- **After (v0.3):** Same core, but integrated with the new dedicated switch visualizer for full network view.
+
+### New: Switch Section (/switch) - Major v0.3 Addition
+- **Physical Faceplate (SVG):** Renders like the real Arista 7050TX hardware.
+  - Accurate port layout (48x 10G-T + 4x SFP+).
+  - Clickable ports to set/edit notes.
+  - Color-coded status (green=connected, red=down).
+  - Blinking LEDs for live activity (cyan IN, pink OUT).
+  - LLDP info: shows connected device name and port ("what machine goes where").
+  - Fetched interface descriptions from the switch + user notes.
+
+- **Top Talkers:** Live top ports by traffic.
+- **Rack-like presentation:** Bezel, ears, industrial look inside the cyberpunk UI.
+
+**Example text rendering of the faceplate (actual is interactive SVG in the app):**
+
+```
+[ ARISTA 7050TX-48T-4SFP+  •  RACK 47 ]
+[Port grid with status LEDs + blinking activity + LLDP labels]
+SFP ports on right
+Click any port → edit note (persisted in panel DB)
+```
+
+Visit the live panel at `/switch` (after starting the dev servers) to see the real thing.
+
+### Styling Improvements (v0.3)
+- More human/Flux-like: cleaner cards, subtle effects, better readability.
+- Still cyberpunk Tokyo Night (cyan/pink neon) but refined.
+
+Full before gallery in v0.2-alpha. The switch is the key new "screenshot" feature for v0.3-alpha.
 
 ## Comparison: Before vs After
 
