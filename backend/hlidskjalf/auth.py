@@ -96,7 +96,10 @@ def start_session(response: Response, username: str) -> str:
         secure=False,
         path="/",
     )
-    return csrf_for(signed)  # csrf still based on the signed value for simplicity
+    # CSRF must be derived from the same value require_csrf / /api/session use,
+    # which is the *username* (the unsigned cookie value). Deriving it from the
+    # signed cookie here would hand out a token that never matches on mutations.
+    return csrf_for(username)
 
 
 def end_session(response: Response) -> None:
