@@ -35,6 +35,7 @@ async def list_ports(
                 "inputRate": p.input_rate,
                 "outputRate": p.output_rate,
                 "active": p.active,
+                "lldpNeighbor": p.lldp_neighbor,
             }
         )
     return result

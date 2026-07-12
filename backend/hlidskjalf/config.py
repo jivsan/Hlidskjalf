@@ -50,8 +50,6 @@ class Settings(BaseSettings):
     switch_port: int = 443
     switch_username: str = ""
     switch_password: str = ""
-    switch_use_eapi: bool = True  # preferred over SSH
-    switch_ssh_port: int = 22
 
     # Paths
     static_dir: str = ""  # built frontend dist; empty = API only
