@@ -18,6 +18,12 @@
 @layer components {
   .card {
     @apply bg-surface border border-border-token rounded-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: box-shadow 0.1s ease, border-color 0.1s ease;
+  }
+  .card:hover {
+    border-color: #3a415a;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
   }
   .metric {
     font-variant-numeric: tabular-nums;
@@ -54,4 +60,16 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: #2f3549 transparent;
+}
+
+/* Switch faceplate / rack like - Flux human feel (clean, readable, not over-glow) */
+.svg-faceplate {
+  filter: contrast(1.05) saturate(0.95);
+}
+.switch-port {
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.switch-port:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
