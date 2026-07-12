@@ -62,6 +62,15 @@ See `docs/screenshots/v0.3-alpha/README.md` for visual comparison notes. Screens
 - Real screenshots captured: v03-fleet.png, v03-switch.png (SVG faceplate visible with LLDP, activity, notes UI), v03-node.png added to v0.3-alpha/ with updated README for before/after.
 - All documented in handoff.md + CHANGELOG.
 
+### v0.3-alpha realistic faceplate
+- Switched to React + CSS for faceplate to look exactly like actual DCS-7050TX-48 photo.
+- 1U physical: chassis with ears/screws/vents/bevels, exact 48 RJ45 (2 rows, jack shape, LED above), 4 QSFP (right, lanes), left mgmt ports, labels.
+- React components for ports (declarative, robust, hover/click).
+- CSS for realistic metal/plastic/LED blink.
+- Non cartoon, human like Flux.
+- PR #12.
+- Screenshots updated with realistic images.
+
 See handoff.md for subagent outputs, git commands (rebase, --theirs, force-push, curl), PR bodies, Flux inspiration.
 
 ## [0.2.0-alpha] - 2026-07-12
