@@ -13,10 +13,11 @@ All changes from the v0.2-alpha work + new switch section.
 
 See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 
-**After (v0.3-alpha) - Real captured screenshots:**
+**After (v0.3-alpha) - Real captured screenshots of the realistic physical faceplate:**
 
+- Main dashboard: ![Main v0.3 realistic](v03-realistic-main.png)
+- Switch faceplate (exact match to actual DCS-7050TX-48 photo - 1U chassis, rack ears, vents, 48 RJ45 in 2 rows, 4 QSFP on right, LEDs, labels): ![Switch v0.3 realistic](v03-realistic-switch.png)
 - Fleet (v0.3): ![Fleet v0.3](v03-fleet.png)
-- Switch faceplate (new!): ![Switch v0.3](v03-switch.png)
 - Node (v0.3): ![Node v0.3](v03-node.png)
 
 ## Comparison: Before vs After
