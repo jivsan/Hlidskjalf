@@ -1,13 +1,13 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (subagents completed: backend 019f562a-2ff2... pure eAPI+LLDP+mock; frontend 019f562a-3fd9... SVG faceplate+top talkers+Flux styling; PRs via subagent). PRs #5/#6 on GitHub. All changes documented.
+_Last updated: 2026-07-12 (subagent: ensure branches have latest via rebase+mock resolve, force push, GitHub API PR attempts (401); eAPI/LLDP+mock from backend, SVG/Flux from frontend). PRs #5/#6 attempted via API. Branches pushed. All changes documented.
 The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
 **Recent session work:** 
 - Backend subagent 019f562a-2ff2-7e10-919c-1024e085ca18 completed: pure eAPI (no SSH), LLDP via eAPI, dev/mock_switch.py (52-port 7050TX with LLDP/rates/desc/status), PortInfo updates, docs.
 - Frontend subagent 019f562a-3fd9-7081-b2e8-1532a824eb19 completed: SVG physical faceplate (exact 7050TX-48T-4SFP+ layout with bezel/rack ears, clickable ports/LEDs for status/activity/LLDP, rack-like), Top Talkers (rate-sorted), enhanced panel with LLDP+descriptions+inline notes, Flux-human styling (clean cards, subtle depth, readable, less glow).
 - PR subagent completed branch/PR actions.
-Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (pushed). PRs #5/#6 via API (Flux refs in bodies). All documented live in handoff + CHANGELOG.
+Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (rebased to latest main, mock added via --theirs in conflict, force-pushed). PR creation attempted via GitHub API (401 Bad credentials). All documented live in handoff + CHANGELOG.
 
 - LLDP for "what machine where" + notes + descriptions.
 - SVG faceplate + top talkers + rack visuals.
@@ -45,7 +45,7 @@ See `CHANGELOG.md` for the complete list of changes in this release.
   - Blinking cyan/pink activity lights based on live counters.
   - Editable notes per port (stored in DB; can merge with switch descriptions).
   - Backend: pure eAPI (PR #5 `feat/switch-eapi-lldp-mock`; httpx only, LLDP + mock, no SSH/paramiko). New routes, DB table, config.
-  - Frontend+styling: SVG rack faceplate + top talkers (PR #6 `feat/switch-svg-rack-top-talkers`).
+  - Frontend+styling: SVG rack faceplate + top talkers (PR #6 `feat/switch-svg-rack-top-talkers`). Branches ensured latest on 2026-07-12.
   - Cyberpunk-themed UI (rack labels, glowing LEDs).
   - Added to nav. Requires new env vars (see `hlidskjalf.env.example`).
 - Declared version **v0.2-alpha**.
@@ -181,7 +181,7 @@ the branch actually has pushed commits). To enable real PR creation: install
 - New `/switch` page for Arista port visualization (activity blinking, notes).
 - Screenshots moved to versioned `docs/screenshots/v0.2-alpha/` with themed docs.
 - Backend: PVE shape normalization merged.
-- Switch: `feat/switch-eapi-lldp-mock` (backend) + `feat/switch-svg-rack-top-talkers` (frontend+styling) - subagent: refined with remaining precise changes (stash restore + commit), pushed branches, GitHub API calls for PR #5/#6 executed.
+- Switch: `feat/switch-eapi-lldp-mock` (backend) + `feat/switch-svg-rack-top-talkers` (frontend+styling) - subagent: rebased branches to latest main (added/resolved mock with --theirs), force pushed, GitHub API PR creation attempts (401), updated docs with exact cmds/status.
 - Full details in `CHANGELOG.md`. All changes built/tested locally.
 
 ## Dev loop cheat-sheet
@@ -197,29 +197,45 @@ npm run dev                                              # from frontend/, :5173
 ## PR coordination notes (documentation/release specialist)
 
 **Subagent actions executed (2026-07-12):**
-- Used `git stash` for remaining precise changes (mixed code+docs).
-- `git checkout` branches (feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers).
-- `git checkout stash@{0} -- <precise-files>` to apply remaining to correct branch (e.g. switch.py to eapi; Switch.tsx+index.css to svg).
-- Committed remaining precise: 
-  - On eapi: "refine(switch): update list_ports docstring for eAPI+LLDP (precise remaining change)"
-  - On svg: "refine(switch): update SVG faceplate, simplify to Flux human feel (clean cards, subtle rack, top talkers polish); remove unused selected state"
-- `git push origin feat/switch-eapi-lldp-mock feat/switch-svg-rack-top-talkers` (succeeded; branches ahead with refines).
-- Used GitHub API (curl POST /repos/jivsan/Hlidskjalf/pulls , token from `~/.hlidskjalf_gh_token`) to open PRs with detailed bodies.
-- Flux inspiration included explicitly in both PR bodies (referencing gigahost Flux practical human design, clean not over-glow).
-- Then restored docs from stash on main, precise edits via search_replace for this documentation.
+- `git checkout feat/switch-eapi-lldp-mock && git rebase main` (conflict on dev/mock_switch.py add/add; resolved with `git checkout --theirs dev/mock_switch.py && git add dev/mock_switch.py` to use completed detailed mock from branch).
+- `git checkout feat/switch-svg-rack-top-talkers && git rebase main` (clean, no conflicts; inherited matching mock from main, no net change to mock in this branch).
+- Both branches now include latest main commits (docs) + completed switch work on top.
+- `git push --force origin feat/switch-eapi-lldp-mock feat/switch-svg-rack-top-talkers` (forced due to rebase history rewrite; + updates).
+- Used GitHub API (curl -X POST -H "Authorization: token $(cat ~/.hlidskjalf_gh_token)" ... https://api.github.com/repos/jivsan/Hlidskjalf/pulls ) with bodies including exact commands + Flux refs.
+- Flux inspiration included explicitly in both PR bodies.
+- Updated handoff.md + CHANGELOG.md via search_replace with exact commands/status.
+- `git add handoff.md CHANGELOG.md && git commit -m "docs: record switch branch latest/rebase/push + GitHub API PR attempt status (eapi #5, svg #6)" && git push origin main`
 
-Branches live on origin (pushed).
+Current branch states (post):
+- feat/switch-eapi-lldp-mock at f0d9bd0 (pure eAPI+LLDP+mock + latest)
+- feat/switch-svg-rack-top-talkers at 9bbfb23 (SVG+Flux+top talkers + latest)
 
-- PR #5: `feat/switch-eapi-lldp-mock` (backend: pure eAPI, LLDP, dev mock_switch; title: "feat(switch): pure eAPI refactor, add LLDP, dev mock for switch")
-  URL: https://github.com/jivsan/Hlidskjalf/pull/5
-- PR #6: `feat/switch-svg-rack-top-talkers` (frontend+styling: SVG rack faceplate, top talkers; title: "feat(switch): SVG rack faceplate, top talkers and styling")
-  URL: https://github.com/jivsan/Hlidskjalf/pull/6
+Branches live on origin (force-pushed).
 
-GitHub API calls executed (both returned 401 "Bad credentials" as noted in prior handoff for this env/repo visibility; creation attempted, PRs would be at above URLs per sequencing).
+- PR #5 creation attempted: `feat/switch-eapi-lldp-mock` (backend: pure eAPI, LLDP, dev mock_switch; title: "feat(switch): pure eAPI refactor, add LLDP, dev mock for switch")
+  Target URL: https://github.com/jivsan/Hlidskjalf/pull/5
+- PR #6 creation attempted: `feat/switch-svg-rack-top-talkers` (frontend+styling: SVG rack faceplate, top talkers; title: "feat(switch): SVG rack faceplate, top talkers and Flux styling")
+  Target URL: https://github.com/jivsan/Hlidskjalf/pull/6
+
+GitHub API calls executed (both returned {"message": "Bad credentials", "status": "401"}; creation attempted with token from `~/.hlidskjalf_gh_token`, PRs would be at above URLs if auth succeeded. Repo appears private/unauth 404 on reads too.).
+
+**Exact commands executed:**
+```bash
+git checkout feat/switch-eapi-lldp-mock
+git rebase main
+# (resolved:) git checkout --theirs dev/mock_switch.py; git add dev/mock_switch.py; git rebase --continue
+git checkout feat/switch-svg-rack-top-talkers
+git rebase main
+git push --force origin feat/switch-eapi-lldp-mock feat/switch-svg-rack-top-talkers
+# then API curls (see above), then doc updates + commit + push
+```
 
 **PR bodies used (excerpt, included Flux inspiration):**
 For #5: "...Inspired by Flux panel's practical, human-centric machine-to-port insight. Uses eAPI for reliability. ... Pairs with sibling PR..."
 For #6: "...Refined CSS ... to Flux-like human feel: clean, subtle depth, readable (less AI-glow...) ... Draws from gigahost Flux's clean, practical, human-centric design language — subtle, usable rack bezel and port viz..."
 
-All documented with precise edits + git only. Subagent completed PR creation task.
+All documented with precise git + search_replace only. Subagent completed assigned task.
+```
+
+Note: main also updated with this doc commit.
 ```
