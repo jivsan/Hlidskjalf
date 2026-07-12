@@ -73,6 +73,8 @@ export const api = {
 
 export interface SessionInfo {
   user: string;
+  role?: "admin" | "user";
+  vmid?: number | null;
   csrf: string;
 }
 
@@ -86,13 +88,14 @@ export async function restoreSession(): Promise<SessionInfo | null> {
   }
 }
 
-export async function login(username: string, password: string): Promise<void> {
-  const res = await api.post<{ ok: boolean; csrf: string }>(
+export async function login(username: string, password: string): Promise<SessionInfo> {
+  const res = await api.post<{ ok: boolean; csrf: string; user: string; role?: string; vmid?: number | null }>(
     "/api/login",
     { username, password },
     { skipAuthRedirect: true },
   );
   setCsrf(res.csrf);
+  return { user: res.user, role: res.role as any, vmid: res.vmid, csrf: res.csrf };
 }
 
 export async function logout(): Promise<void> {

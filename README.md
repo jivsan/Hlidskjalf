@@ -18,14 +18,14 @@ setup on hella.
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.1-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.2-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
 
-**Current (v0.3.1-alpha - realistic React+CSS physical faceplate for DCS-7050TX-48, LLDP, Top Talkers):**  
-[v0.3.1-alpha/README.md](docs/screenshots/v0.3.1-alpha/README.md)  
+**Current (v0.3.2-alpha - Multi-user admin + user (VPS) panels, one VM per user, scoped views, user management):**  
+[v0.3.2-alpha/README.md](docs/screenshots/v0.3.2-alpha/README.md)  
 (Real captured screenshots after merges)
 
 **Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)

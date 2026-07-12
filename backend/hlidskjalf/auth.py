@@ -1,10 +1,9 @@
-"""Single-user auth: argon2 password verify, signed session cookie, CSRF.
+"""Multi-user auth with roles (admin / user).
 
-Session: itsdangerous-signed value in an HttpOnly SameSite=Strict cookie.
-CSRF: an HMAC derived from the session value is returned to the SPA at login
-(and from GET /api/session); every mutating request must echo it in the
-X-Hlidskjalf-CSRF header. The cookie is HttpOnly so a same-site injection
-can't read it to forge the header.
+Each regular user is assigned exactly one VM (VPS model).
+Admins see everything and can manage users + provision.
+
+Session value is now the *username* (signed). We validate the user still exists on use.
 """
 
 import hashlib
@@ -19,6 +18,7 @@ from fastapi import Cookie, Header, HTTPException, Request, Response
 from itsdangerous import BadSignature, TimestampSigner
 
 from .config import get_settings
+from .db import Db  # for type hints only
 
 COOKIE_NAME = "hlidskjalf_session"
 CSRF_HEADER = "X-Hlidskjalf-CSRF"
@@ -51,10 +51,29 @@ def check_login_rate() -> None:
     _login_attempts.append(now)
 
 
-def verify_password(username: str, password: str) -> bool:
+def hash_password(password: str) -> str:
+    return _hasher.hash(password)
+
+
+async def verify_user(db: Db, username: str, password: str) -> dict | None:
+    """Return user dict (without hash) if password matches, else None."""
+    user = await db.get_user_by_username(username)
+    if not user:
+        return None
+    try:
+        if _hasher.verify(user["password_hash"], password):
+            # strip sensitive
+            return {k: v for k, v in user.items() if k != "password_hash"}
+    except VerifyMismatchError:
+        pass
+    return None
+
+
+# Back-compat for very first bootstrap before DB users exist (dev)
+def _legacy_verify(username: str, password: str) -> bool:
     s = get_settings()
     if not s.admin_password_hash:
-        raise HTTPException(500, "HLIDSKJALF_ADMIN_PASSWORD_HASH not configured")
+        return False
     if not secrets.compare_digest(username, s.admin_user):
         return False
     try:
@@ -63,20 +82,20 @@ def verify_password(username: str, password: str) -> bool:
         return False
 
 
-def start_session(response: Response) -> str:
-    """Set the session cookie; return the CSRF token for the SPA."""
-    value = secrets.token_urlsafe(32)
-    signed = _signer().sign(value).decode()
+def start_session(response: Response, username: str) -> str:
+    """Set the session cookie containing the username; return the CSRF token."""
+    # We sign the username directly. On use we re-validate against DB.
+    signed = _signer().sign(username).decode()
     response.set_cookie(
         COOKIE_NAME,
         signed,
         max_age=get_settings().session_max_age,
         httponly=True,
         samesite="strict",
-        secure=False,  # TLS terminates at Traefik; cookie never leaves the LAN
+        secure=False,
         path="/",
     )
-    return csrf_for(value)
+    return csrf_for(signed)  # csrf still based on the signed value for simplicity
 
 
 def end_session(response: Response) -> None:
@@ -84,6 +103,7 @@ def end_session(response: Response) -> None:
 
 
 def _unsign(cookie: str | None) -> str:
+    """Returns the username stored in the signed session cookie."""
     if not cookie:
         raise HTTPException(401, "Not logged in")
     try:
@@ -95,7 +115,7 @@ def _unsign(cookie: str | None) -> str:
 async def require_session(
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
 ) -> str:
-    """Dependency for read endpoints; returns the raw session value."""
+    """Dependency: returns the username from the session cookie."""
     return _unsign(session)
 
 
@@ -103,7 +123,7 @@ async def require_csrf(
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
     csrf: str | None = Header(default=None, alias=CSRF_HEADER),
 ) -> str:
-    """Dependency for mutating endpoints: session + matching CSRF header."""
+    """Mutating: validates CSRF and returns username."""
     value = _unsign(session)
     if not csrf or not hmac.compare_digest(csrf, csrf_for(value)):
         raise HTTPException(403, f"Missing or bad {CSRF_HEADER} header")
@@ -111,5 +131,22 @@ async def require_csrf(
 
 
 def session_from_request(request: Request) -> str:
-    """For WebSocket handshakes (no dependency injection of cookies there)."""
+    """WebSocket: returns username."""
     return _unsign(request.cookies.get(COOKIE_NAME))
+
+
+# --- User + role helpers (call from handlers: user = await get_current_user(username, db)) ---
+
+async def get_current_user(username: str, db: Db) -> dict:
+    """Load user record (role + assigned vmid). Falls back for legacy bootstrap."""
+    user = await db.get_user_by_username(username)
+    if user:
+        return {k: v for k, v in user.items() if k != "password_hash"}
+    s = get_settings()
+    if secrets.compare_digest(username, s.admin_user):
+        return {"username": username, "role": "admin", "vmid": None}
+    raise HTTPException(401, "User no longer exists")
+
+
+def is_admin(user: dict) -> bool:
+    return (user or {}).get("role") == "admin"

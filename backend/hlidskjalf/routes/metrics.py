@@ -4,8 +4,9 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import require_session
-from ..deps import get_metrics, get_pve
+from ..auth import get_current_user, is_admin, require_session
+from ..db import Db
+from ..deps import get_db, get_metrics, get_pve
 from ..pve import PveClient
 
 router = APIRouter()
@@ -20,8 +21,12 @@ async def vm_metrics(
     cf: Literal["AVERAGE", "MAX"] = "AVERAGE",
     pve: PveClient = Depends(get_pve),
     source=Depends(get_metrics),
-    _=Depends(require_session),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user) and user.get("vmid") != vmid:
+        raise HTTPException(403, "You do not have access to this VM's metrics")
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -33,13 +38,20 @@ async def node_metrics(
     timeframe: Timeframe = "hour",
     cf: Literal["AVERAGE", "MAX"] = "AVERAGE",
     source=Depends(get_metrics),
-    _=Depends(require_session),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     return await source.get_node_series(timeframe, cf)
 
 
 @router.get("/api/node")
-async def node_info(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
+async def node_info(pve: PveClient = Depends(get_pve), db: Db = Depends(get_db), username: str = Depends(require_session)):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     raw = await pve.get(f"/nodes/{pve.node}/status") or {}
     storage = await pve.get(f"/nodes/{pve.node}/storage")
 

@@ -1,14 +1,26 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { logout } from "../api";
+import type { CurrentUser } from "../App";
 import { useToast } from "./Toast";
 
-const NAV = [
-  { to: "/", label: "Fleet", exact: true },
-  { to: "/switch", label: "Switch" },
-  { to: "/new", label: "Provision" },
-  { to: "/node", label: "Node" },
-];
+function getNavForRole(user: CurrentUser | null) {
+  if (!user) return [];
+  if (user.role === "admin") {
+    return [
+      { to: "/", label: "Fleet", exact: true },
+      { to: "/switch", label: "Switch" },
+      { to: "/new", label: "Provision" },
+      { to: "/node", label: "Node" },
+      { to: "/users", label: "Users" },
+    ];
+  }
+  // Regular user (VPS customer) — minimal nav focused on their VM
+  return [
+    { to: "/", label: "My VM", exact: true },
+    { to: "/switch", label: "Switch" },
+  ];
+}
 
 function navClass(isActive: boolean): string {
   return `block px-3 py-2 rounded-card text-sm ${
@@ -16,10 +28,12 @@ function navClass(isActive: boolean): string {
   }`;
 }
 
-export function Layout() {
+export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; onLogout?: () => void }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const NAV = getNavForRole(currentUser);
 
   const doLogout = async () => {
     try {
@@ -27,6 +41,7 @@ export function Layout() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "logout failed");
     }
+    if (onLogout) onLogout();
     navigate("/login");
   };
 
@@ -52,6 +67,11 @@ export function Layout() {
           <span className="text-cyan">skjalf</span>
         </div>
         <nav className="space-y-1 flex-1">{links()}</nav>
+        <div className="px-3 pt-3 mt-2 border-t border-border-token text-xs text-muted">
+          {currentUser.username}
+          {currentUser.role === "user" && currentUser.vmid ? ` (vm ${currentUser.vmid})` : ""}
+          <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-white/5">{currentUser.role}</span>
+        </div>
         <button className="text-left px-3 py-2 text-sm text-muted hover:text-red" onClick={doLogout}>
           logout
         </button>
@@ -81,6 +101,9 @@ export function Layout() {
           >
             logout
           </button>
+          <div className="px-3 py-1 text-[10px] text-muted">
+            {currentUser.username} · {currentUser.role}
+          </div>
         </nav>
       )}
 
