@@ -64,11 +64,15 @@ export function OverviewTab({ vm, onChanged }: { vm: VmDetail; onChanged: () => 
                 <span style={{ color: CHART.pink }}>▮</span> out {formatBytes(vm.netout)}
               </span>
             </div>
-            <div className="h-2 rounded-full overflow-hidden flex bg-border-token/40">
-              <div className="h-full bg-cyan" style={{ width: `${inShare * 100}%` }} />
-              <div className="h-full w-0.5 bg-surface shrink-0" />
-              <div className="h-full bg-pink flex-1" />
-            </div>
+            {bwTotal > 0 ? (
+              <div className="h-2 rounded-full overflow-hidden flex bg-border-token/40">
+                <div className="h-full bg-cyan" style={{ width: `${inShare * 100}%` }} />
+                <div className="h-full w-0.5 bg-surface shrink-0" />
+                <div className="h-full bg-pink flex-1" />
+              </div>
+            ) : (
+              <div className="h-2 rounded-full bg-border-token/40" />
+            )}
             <div className="text-xs text-muted">total {formatBytes(bwTotal)}</div>
           </div>
         </Card>

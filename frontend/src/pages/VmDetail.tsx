@@ -39,11 +39,12 @@ export function VmDetailPage() {
     : "overview";
   const setTab = (t: Tab) => setSearchParams(t === "overview" ? {} : { tab: t }, { replace: true });
 
-  // Pause detail polling while the console tab is active (keep last data).
+  // Slow the detail poll right down while the console tab is active (keep last
+  // data, avoid churn) — but still fetch at least once, so a direct load of
+  // ?tab=console isn't stuck on the loading spinner forever.
   const detail = usePoll(
     () => api.get<VmDetail>(`/api/vms/${vmid}`),
-    3000,
-    tab !== "console",
+    tab === "console" ? 60000 : 3000,
   );
 
   const doAction = async (action: PowerAction) => {

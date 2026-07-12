@@ -73,7 +73,10 @@ export interface RecentTask {
   user: string;
   starttime: number;
   endtime?: number;
+  // PVE reports the run state in `status` and the result in `exitstatus`; some
+  // list endpoints instead put "OK"/error directly in `status`. Handle both.
   status?: string;
+  exitstatus?: string;
 }
 
 export type Timeframe = "hour" | "day" | "week" | "month";
@@ -103,11 +106,16 @@ export interface NodeStorage {
 
 export interface NodeInfo {
   name: string;
+  // PVE /nodes/{node}/status shape (passed through verbatim by the backend):
+  // memory/rootfs are nested objects; core count lives in cpuinfo on real PVE.
   status: {
     cpu: number;
-    maxcpu: number;
-    mem: number;
-    maxmem: number;
+    maxcpu?: number;
+    cpuinfo?: { cpus?: number; cores?: number };
+    mem?: number;
+    maxmem?: number;
+    memory?: { used: number; total: number; free?: number };
+    rootfs?: { used: number; total: number };
     uptime: number;
     loadavg?: number[] | string[];
     [k: string]: unknown;
