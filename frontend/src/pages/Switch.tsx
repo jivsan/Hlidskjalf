@@ -95,7 +95,7 @@ export function SwitchPage() {
   //  - malformed port names (backend _normalize ensures EthernetN keys)
   // Canvas chosen for smooth RAF LEDs / high quality bezels (vs prior SVG).
   // Port geoms + refs designed so visual subagent can evolve without touching poll/data layer.
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // canvasRef removed - using React components for faceplate now
   const [hovered, setHovered] = useState<string | null>(null);
 
   // Fixed logical coords (match wrapper aspect 720x175)
@@ -139,6 +139,83 @@ export function SwitchPage() {
   useEffect(() => { portMapRef.current = portMap; }, [portMap]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
   useEffect(() => { hoveredRef.current = hovered; }, [hovered]);
+
+  // drawing helpers (defined before drawFaceplate useCallback for identifier resolution)
+  const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+  const drawScrew = (ctx: CanvasRenderingContext2D, cx: number, cy: number) => {
+    ctx.save();
+    ctx.fillStyle = '#353c4f'; ctx.beginPath(); ctx.arc(cx, cy, 2.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1f2433'; ctx.beginPath(); ctx.arc(cx, cy, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#4a5168'; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(cx - 1.1, cy); ctx.lineTo(cx + 1.1, cy);
+    ctx.moveTo(cx, cy - 1.1); ctx.lineTo(cx, cy + 1.1); ctx.stroke();
+    ctx.restore();
+  };
+  const drawMiniRJ45 = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isMgmt: boolean) => {
+    ctx.save();
+    ctx.fillStyle = isMgmt ? '#1a2030' : '#161b29';
+    roundRect(ctx, x, y, w, h, 1.2); ctx.fill();
+    ctx.fillStyle = '#0b0e16'; roundRect(ctx, x + 1.2, y + 1.8, w - 2.4, h - 3.2, 0.6); ctx.fill();
+    ctx.fillStyle = '#0e121b'; ctx.fillRect(x + 2.5, y + 1.2, w - 5, 1);
+    ctx.restore();
+  };
+  const drawRJ45 = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isUp: boolean, isActive: boolean, isHighlight: boolean, num: number, time: number) => {
+    const body = isUp ? '#1a2232' : '#0e121e';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 2.5; ctx.shadowOffsetX = 0.3; ctx.shadowOffsetY = 0.8;
+    ctx.fillStyle = body; roundRect(ctx, x, y, w, h, 1.4); ctx.fill(); ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,0.09)'; roundRect(ctx, x + 0.4, y + 0.4, w - 0.8, 1.8, 0.9); ctx.fill();
+    ctx.fillStyle = '#07090f'; roundRect(ctx, x + 1.6, y + 2.2, w - 3.2, h - 4, 0.7); ctx.fill();
+    ctx.fillStyle = '#0c0f17'; ctx.fillRect(x + 3.2, y + 1.1, w - 6.4, 1.1);
+    ctx.strokeStyle = '#252c3b'; ctx.lineWidth = 0.35;
+    for (let k = 0; k < 8; k++) { const lx = x + 2.6 + (k * (w - 5.2) / 7.5); ctx.beginPath(); ctx.moveTo(lx, y + 3.6); ctx.lineTo(lx, y + h - 2); ctx.stroke(); }
+    if (isHighlight) { ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 1.1; roundRect(ctx, x - 1, y - 1, w + 2, h + 2, 1.8); ctx.stroke(); }
+    const ledCx = x + w / 2; const ledCy = y - 4.2;
+    let ledCol = isUp ? '#22c55e' : '#f7768e';
+    ctx.save();
+    let blinkBoost = 0;
+    if (isActive) { const phase = Math.sin(time * 6.2) * 0.5 + 0.5; if (phase > 0.5) { ledCol = '#4ade80'; blinkBoost = 1; } }
+    ctx.fillStyle = ledCol; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.95, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.95, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.arc(ledCx - 0.65, ledCy - 0.65, 0.65, 0, Math.PI * 2); ctx.fill();
+    if (blinkBoost > 0) { ctx.fillStyle = 'rgba(74, 222, 128, 0.35)'; ctx.beginPath(); ctx.arc(ledCx, ledCy, 3.2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = isHighlight ? '#c8d0e8' : '#5f677f'; ctx.font = '5px system-ui, monospace'; ctx.textAlign = 'center';
+    ctx.fillText(String(num), x + w / 2, y + h + 7.2); ctx.textAlign = 'start';
+  };
+  const drawQSFP = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isUp: boolean, isActive: boolean, isHighlight: boolean, num: number, time: number) => {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 0.6;
+    const cageGrad = ctx.createLinearGradient(x, y, x + w, y);
+    cageGrad.addColorStop(0, '#181d29'); cageGrad.addColorStop(0.5, '#12161f'); cageGrad.addColorStop(1, '#0d1019');
+    ctx.fillStyle = cageGrad; roundRect(ctx, x, y, w, h, 1.2); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = isHighlight ? '#ff4fa3' : '#2c3344'; ctx.lineWidth = isHighlight ? 1.3 : 0.7;
+    roundRect(ctx, x, y, w, h, 1.2); ctx.stroke();
+    ctx.fillStyle = '#080a10'; roundRect(ctx, x + 2, y + 2.5, w - 4, h - 5.5, 0.6); ctx.fill();
+    ctx.strokeStyle = '#1f2533'; ctx.lineWidth = 0.5;
+    for (let l = 0; l < 4; l++) { const lx = x + 3.5 + l * ((w - 7) / 3); ctx.beginPath(); ctx.moveTo(lx, y + 3.5); ctx.lineTo(lx, y + h - 3.5); ctx.stroke(); }
+    if (isHighlight) { ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 1.2; roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, 1.5); ctx.stroke(); }
+    const ledCx = x + w / 2; const ledCy = y - 3.8;
+    let ledCol = isUp ? '#22c55e' : '#f7768e';
+    if (isActive) { if ((Math.floor(time * 5.5) % 2) === 0) ledCol = '#4ade80'; }
+    ctx.fillStyle = ledCol; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.75, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.75, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = isHighlight ? '#d0d8ee' : '#4a516a'; ctx.font = '5px system-ui, monospace'; ctx.textAlign = 'center';
+    ctx.fillText(String(num), x + w / 2, y + h + 6.5);
+    ctx.fillStyle = '#3a4158'; ctx.font = '3.8px system-ui, monospace'; ctx.fillText('40G', x + w / 2, y + h + 10.2);
+    ctx.textAlign = 'start';
+  };
 
   // High-quality draw with depth layers
   const drawFaceplate = useCallback(() => {
@@ -561,17 +638,7 @@ export function SwitchPage() {
     setSelected(name);
   };
 
-  const renderFaceplate = () => (
-    <canvas
-      ref={canvasRef}
-      onClick={onCanvasClick}
-      onMouseMove={onCanvasMove}
-      onMouseLeave={onCanvasLeave}
-      className="canvas-faceplate"
-      aria-label="Arista DCS-7050TX-48 front panel faceplate - realistic canvas render"
-      role="img"
-    />
-  );
+  // (old canvas render removed - now using renderReactFaceplate for React/CSS physical 1U)
 
   return (
     <div className="space-y-6">
