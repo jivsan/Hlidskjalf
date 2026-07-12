@@ -1,9 +1,10 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (completed: React faceplate finalized + hooks fixed + real screenshots captured + v0.3.1-alpha docs + stack running in dev for review. PRs merged locally on feat/switch-react-faceplate. Named v0.3.1-alpha per request.)_
+_Last updated: 2026-07-12 (release engineer subagent: ran full dev stack (mock_pve+backend+switch env+frontend), fixed Switch.tsx to React+CSS realistic faceplate, puppeteer screenshots to /tmp + docs, created+committed+pushed branch feat/switch-realistic-faceplate, GitHub API PR (existing #13), updated handoff/CHANGELOG with all steps + PR link. Documented thoroughly.)_
 The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
 **Recent session work:** 
+- **Release engineer (this task):** Ran dev stack via run_terminal_command (mock_pve 18006, mock_switch https 18080 w/ certs, backend w/ dev.env switch=127.0.0.1:18080, frontend vite 5173). Verified /switch renders realistic faceplate (tsc clean, 52 ports from eAPI mock flow, no errors in logs). Updated puppeteer script, captured /tmp/v03-realistic-*.png (switch, faceplate, main), copied to docs/screenshots/v0.3-alpha/. Created branch feat/switch-realistic-faceplate, git add only relevant (Switch.tsx + pngs), detailed commit, push -u. GitHub API (token ~/.hlidskjalf_gh_token + python urllib) for PR (422 already-exists; existing https://github.com/jivsan/Hlidskjalf/pull/13 with exact title). Updated handoff.md + CHANGELOG.md. All steps documented.
 - Backend subagent 019f562a-2ff2-7e10-919c-1024e085ca18 completed: pure eAPI (no SSH), LLDP via eAPI, dev/mock_switch.py (52-port 7050TX with LLDP/rates/desc/status), PortInfo updates, docs.
 - Frontend subagent 019f562a-3fd9-7081-b2e8-1532a824eb19 completed: SVG physical faceplate (exact 7050TX-48T-4SFP+ layout with bezel/rack ears, clickable ports/LEDs for status/activity/LLDP, rack-like), Top Talkers (rate-sorted), enhanced panel with LLDP+descriptions+inline notes, Flux-human styling (clean cards, subtle depth, readable, less glow).
 - Frontend UI specialist: upgraded faceplate from SVG to premium non-SVG `<canvas>` (see CHANGELOG for details: realistic gradients/bevels/ports/LEDs/hit detection/DPI/RAF). No backend mods.
@@ -17,7 +18,12 @@ Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (rebased 
 
 **Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
 
-## ⚡ Current state — v0.3.1-alpha (React faceplate done, screenshots captured, dev running, PRs coordinated/merged)
+## ⚡ Current state — v0.3.1-alpha (React+CSS realistic faceplate landed on feat/switch-realistic-faceplate, PR #13, screenshots + docs updated, full stack verified)
+
+- React+CSS 1U physical faceplate for DCS-7050TX-48: exact layout, realistic recessed RJ45+QSFP details, live CSS blinks, interactive.
+- Dev stack run + puppeteer screenshots (v03-realistic-*) + PR via API + docs.
+- Branch pushed, PR: https://github.com/jivsan/Hlidskjalf/pull/13
+- See CHANGELOG [Unreleased] for decisions/alts.
 
 - Completed user request: realistic React/CSS faceplate, run dev, new screenshots, v0.3.1-alpha naming + docs.
 - Stack: mocks + backend 8787 + frontend 5173 running. Visit /switch after login to see.

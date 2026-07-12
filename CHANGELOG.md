@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added / Changed (release engineer task)
+- Full dev stack verification run (`run_terminal_command`): mock_pve, backend (with switch env pointing to mock https), frontend. Confirmed `/switch` renders realistic React+CSS faceplate with no errors (52 ports from mock eAPI, live rates/LLDP/activity).
+- Updated/ran puppeteer script: screenshots saved `/tmp/v03-realistic-*.png` (full switch, focused faceplate crop, context), copied to `docs/screenshots/v0.3-alpha/`.
+- Branch `feat/switch-realistic-faceplate` created, relevant changes committed (detailed msg covering React/CSS impl, realism match to actual DCS-7050TX-48, alts considered), pushed.
+- GitHub API (token at `~/.hlidskjalf_gh_token`, python urllib) used to create PR titled exactly "feat(switch): realistic 1U physical faceplate for DCS-7050TX-48 using React+CSS". Result: existing PR #13 (https://github.com/jivsan/Hlidskjalf/pull/13) — body includes changes desc, physical match, alternatives (Canvas/CSS/DOM/image/Three.js; React+CSS chosen).
+- `handoff.md` + `CHANGELOG.md` updated with all steps, subagent/release actions, screenshots, PR link.
+- Faceplate: 1U realistic via React DOM + rich CSS (bevel chassis, recessed RJ45 w/ latch+pins, QSFP cages, vents, LEDs, labels). Clickable, live status blink, integrates with sidebar/notes/top-talkers. Exact hardware layout.
+
 ### Changed
 - **Switch faceplate fully refactored from Canvas to pure declarative React + Tailwind/CSS** (feat/switch-react-faceplate):
   - New small components: `Rj45Port` and `QsfpPort` (or render* helpers) with explicit TS `PortProps` (name, num, isUp, isActive, isSel, isHov, onClick, title/LLDP).
