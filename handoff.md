@@ -1,6 +1,6 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (post v0.2-alpha work — see CHANGELOG.md for full details). 
+_Last updated: 2026-07-12 (switch eAPI+LLDP+mock+SVG+Flux-human on feat/switch-eapi-lldp + feat/switch-svg-ui; monitored+branched+pushed+PRs prepped). 
 The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
 **Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
