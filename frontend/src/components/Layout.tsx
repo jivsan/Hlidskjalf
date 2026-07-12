@@ -5,6 +5,7 @@ import { useToast } from "./Toast";
 
 const NAV = [
   { to: "/", label: "Fleet", exact: true },
+  { to: "/switch", label: "Switch" },
   { to: "/new", label: "Provision" },
   { to: "/node", label: "Node" },
 ];

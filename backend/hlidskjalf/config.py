@@ -40,6 +40,19 @@ class Settings(BaseSettings):
     clone_storage: str = "local-lvm"
     metrics_source: str = "rrd"  # rrd | prometheus (phase 2)
 
+    # Arista switch (7050TX etc.)
+    # Recommended: enable eAPI on the switch:
+    #   management api http-commands
+    #     protocol https
+    #     no shutdown
+    # Then use username/password or token. Falls back to SSH if eapi disabled.
+    switch_host: str = "10.0.20.2"
+    switch_port: int = 443
+    switch_username: str = ""
+    switch_password: str = ""
+    switch_use_eapi: bool = True  # preferred over SSH
+    switch_ssh_port: int = 22
+
     # Paths
     static_dir: str = ""  # built frontend dist; empty = API only
     state_dir: str = "/var/lib/hlidskjalf"

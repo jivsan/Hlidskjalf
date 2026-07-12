@@ -8,6 +8,7 @@ import { Fleet } from "./pages/Fleet";
 import { Login } from "./pages/Login";
 import { NodePage } from "./pages/NodePage";
 import { Provision } from "./pages/Provision";
+import { SwitchPage } from "./pages/Switch";
 import { VmDetailPage } from "./pages/VmDetail";
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
           {authed ? (
             <Route element={<Layout />}>
               <Route path="/" element={<Fleet />} />
+              <Route path="/switch" element={<SwitchPage />} />
               <Route path="/vm/:vmid" element={<VmDetailPage />} />
               <Route path="/new" element={<Provision />} />
               <Route path="/node" element={<NodePage />} />

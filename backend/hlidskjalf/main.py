@@ -14,7 +14,7 @@ from .config import get_settings
 from .datasources.rrd import RRDSource
 from .db import Db
 from .pve import PveClient, PveError
-from .routes import bandwidth, console, metrics, provision, rescue, vms
+from .routes import bandwidth, console, metrics, provision, rescue, switch, vms
 
 log = logging.getLogger("hlidskjalf")
 
@@ -93,6 +93,7 @@ app.include_router(bandwidth.router)
 app.include_router(provision.router)
 app.include_router(rescue.router)
 app.include_router(console.router)
+app.include_router(switch.router)
 
 
 # --- static SPA -------------------------------------------------------------

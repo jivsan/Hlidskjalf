@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request
 from .config import Settings, get_settings
 from .db import Db
 from .pve import PveClient
+from .switch import AristaClient, get_switch_client
 
 
 def get_pve(request: Request) -> PveClient:
@@ -17,6 +18,11 @@ def get_db(request: Request) -> Db:
 
 def get_metrics(request: Request):
     return request.app.state.metrics
+
+
+def get_switch(request: Request) -> AristaClient:
+    # Lazy - client is cheap to instantiate
+    return get_switch_client()
 
 
 def settings() -> Settings:

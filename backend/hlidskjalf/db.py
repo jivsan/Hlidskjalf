@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS rescue (
     slot_prev  TEXT,                     -- original value of that slot ('' = unset)
     entered_at TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS switch_port_notes (
+    name       TEXT PRIMARY KEY,
+    note       TEXT    NOT NULL,
+    updated_at TEXT    NOT NULL
+);
 """
 
 
@@ -133,6 +138,20 @@ class Db:
     async def rescue_all(self) -> list[int]:
         cur = await self.conn.execute("SELECT vmid FROM rescue")
         return [r["vmid"] for r in await cur.fetchall()]
+
+    # --- switch port notes ----------------------------------------------------
+
+    async def set_port_note(self, name: str, note: str) -> None:
+        await self.conn.execute(
+            """INSERT OR REPLACE INTO switch_port_notes (name, note, updated_at)
+               VALUES (?, ?, ?)""",
+            (name, note, datetime.now(timezone.utc).isoformat()),
+        )
+        await self.conn.commit()
+
+    async def get_port_notes(self) -> dict[str, str]:
+        cur = await self.conn.execute("SELECT name, note FROM switch_port_notes")
+        return {r["name"]: r["note"] for r in await cur.fetchall()}
 
 
 def today_utc() -> str:
