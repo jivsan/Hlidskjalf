@@ -23,8 +23,12 @@ setup on hella.
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
-Live v0.3-alpha feeds (with switch faceplate): [v0.3-alpha/README.md](docs/screenshots/v0.3-alpha/README.md)  
-Previous (v0.2-alpha): [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
+
+**Current (v0.3-alpha - new switch faceplate, LLDP, Top Talkers):**  
+[v0.3-alpha/README.md](docs/screenshots/v0.3-alpha/README.md)  
+(Contains before images from v0.2 + description of the new SVG switch section)
+
+**Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 
 All shots captured against the development mock PVE (`dev/mock_pve.py`).
 
