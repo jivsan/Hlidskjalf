@@ -97,11 +97,14 @@ async def request_logging_middleware(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Log full tracebacks at ERROR. Return consistent JSON errors.
+    """Log full tracebacks at ERROR and return a GENERIC 500 to the client.
 
-    When settings.debug, include traceback snippet (for admins).
+    The full entry (including the traceback and exception type) is recorded in
+    the admin-only ``recent_errors`` buffer, surfaced via ``GET /api/debug/errors``.
+    It is NEVER placed in the HTTP response body — not even when settings.debug is
+    true — so that internals (tracebacks, exception types, messages) are never
+    disclosed to clients, including unauthenticated ones.
     """
-    settings = get_settings()
     client = request.client.host if request.client else "-"
 
     if isinstance(exc, HTTPException):
@@ -122,6 +125,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         exc_info=True,
     )
 
+    # Record the full entry (with traceback) for admins only — never to the client.
     error_entry = {
         "ts": time.time(),
         "method": request.method,
@@ -129,23 +133,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         "client": client,
         "error": str(exc),
         "error_type": type(exc).__name__,
+        "traceback": "\n".join(tb.strip().split("\n")[-20:]),
     }
-    if settings.debug:
-        # traceback snippet for admins in debug mode
-        lines = tb.strip().split("\n")
-        error_entry["traceback"] = "\n".join(lines[-20:])
-
     debug_module._append_recent(debug_module.recent_errors, error_entry)
 
-    # consistent JSON error response
-    content = {"detail": "Internal server error"}
-    if settings.debug:
-        content = {
-            "detail": str(exc),
-            "error_type": type(exc).__name__,
-            "traceback": error_entry.get("traceback"),
-        }
-    return JSONResponse(status_code=500, content=content)
+    # Generic response for everyone, regardless of settings.debug.
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.exception_handler(PveError)
@@ -162,14 +155,19 @@ class LoginBody(BaseModel):
 
 
 @app.post("/api/login")
-async def login(body: LoginBody, response: Response, db: Db = Depends(get_db)):
-    auth.check_login_rate()
+async def login(body: LoginBody, request: Request, response: Response, db: Db = Depends(get_db)):
+    client_ip = request.client.host if request.client else "-"
+    auth.check_login_rate(client_ip)
 
     # Try DB user first
     user = await auth.verify_user(db, body.username, body.password)
     if not user:
-        # Legacy fallback for the very first time before users table seed
-        if not auth._legacy_verify(body.username, body.password):
+        # Legacy env-hash fallback is ONLY valid during fresh bootstrap, i.e.
+        # before any user row exists. Once real users are seeded (normal startup
+        # runs ensure_bootstrap_admin), the env admin_password_hash is no longer
+        # an accepted login path — otherwise a stale/weak env hash would be a
+        # permanent backdoor even after the admin password is changed in the DB.
+        if await db.list_users() or not auth._legacy_verify(body.username, body.password):
             raise HTTPException(401, "Bad username or password")
         # On legacy success, make sure the bootstrap user exists now
         user = await db.get_user_by_username(body.username) or {
