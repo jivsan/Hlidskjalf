@@ -18,12 +18,13 @@ setup on hella.
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.2-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
-Live v0.2-alpha feeds: [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
+Live v0.3-alpha feeds (with switch faceplate): [v0.3-alpha/README.md](docs/screenshots/v0.3-alpha/README.md)  
+Previous (v0.2-alpha): [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 
 All shots captured against the development mock PVE (`dev/mock_pve.py`).
 

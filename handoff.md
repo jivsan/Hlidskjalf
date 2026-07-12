@@ -244,4 +244,11 @@ All documented with precise git + search_replace only. Subagent completed assign
 ```
 
 Note: main also updated with this doc commit.
+
+**User provided PAT**: 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
+- Written to ~/.hlidskjalf_gh_token (600).
+- Used to merge PR #8 and #9 successfully (squash).
+- Confirmed via API.
+
+v0.3-alpha screenshots section created for comparison including switch.
 ```
