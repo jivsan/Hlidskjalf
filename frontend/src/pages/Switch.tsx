@@ -20,8 +20,27 @@ export function SwitchPage() {
     4000
   );
 
-  // Note save (direct; debounce stubs removed as unused in current flow)
+  // Debounced auto-save for notes (robustness requirement).
+  // 650ms after typing stops while editing; explicit save also available via Enter.
+  // Never blocks UI; errors non-fatal on auto path.
+  const saveTimerRef = useRef<number | null>(null);
+  const scheduleDebouncedSave = useCallback((name: string, note: string) => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(async () => {
+      try {
+        await api.post(`/api/switch/ports/${encodeURIComponent(name)}/note`, { note: note.trim() });
+        portsPoll.refresh();
+      } catch (e) {
+        /* debounce auto-save is best-effort */
+      }
+    }, 650);
+  }, [portsPoll]);
+
   const saveNote = async (name: string) => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     const noteVal = noteDraft.trim();
     try {
       await api.post(`/api/switch/ports/${encodeURIComponent(name)}/note`, {
@@ -34,6 +53,11 @@ export function SwitchPage() {
       toast.error(e instanceof Error ? e.message : "failed to save note");
     }
   };
+
+  // ensure timer cleared
+  useEffect(() => () => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+  }, []);
 
   // data handling: support both old array shape (compat) and new {ports, error}
   const response = portsPoll.data as SwitchPortsResponse | Port[] | null;
@@ -63,9 +87,14 @@ export function SwitchPage() {
 
   // === Realistic Canvas Faceplate for Arista DCS-7050TX-48 ===
   // 48x 10GBASE-T RJ45 (2 rows of 24) + 4x 40G QSFP+ stacked right.
-  // Left: stylized console/USB/mgmt + status LEDs.
-  // Premium physical look via layered gradients, bevels, shadows, anti-aliased custom port shapes.
-  // High DPI, time-based LED blink (no extra DOM anims), hit-tested clicks, hover highlight.
+  // Robustness: works with:
+  //  - no switch configured (data=[] -> all red/down)
+  //  - partial LLDP (only subset of ports populate lldpNeighbor; ignored for viz)
+  //  - high port counts (geoms fixed at 52; extra ignored by filter upstream)
+  //  - error states (last known data kept by usePoll + refs; canvas keeps drawing)
+  //  - malformed port names (backend _normalize ensures EthernetN keys)
+  // Canvas chosen for smooth RAF LEDs / high quality bezels (vs prior SVG).
+  // Port geoms + refs designed so visual subagent can evolve without touching poll/data layer.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
@@ -277,46 +306,7 @@ export function SwitchPage() {
     ctx.textAlign = 'start';
   }, [portGeoms]);
 
-  // RAF loop for smooth time-based LED activity blink (premium physical feel)
-  useEffect(() => {
-    let rafId = 0;
-    const loop = () => {
-      drawFaceplate();
-      rafId = requestAnimationFrame(loop);
-    };
-    rafId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafId);
-  }, [drawFaceplate]);
-
-  // Canvas hit + hover detection (maps mouse to logical coords)
-  const handleCanvasPointer = (e: React.MouseEvent<HTMLCanvasElement>, isClick: boolean) => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const rect = c.getBoundingClientRect();
-    const sx = LOGICAL_W / rect.width;
-    const sy = LOGICAL_H / rect.height;
-    const cx = (e.clientX - rect.left) * sx;
-    const cy = (e.clientY - rect.top) * sy;
-
-    let found: string | null = null;
-    for (const p of portGeoms) {
-      if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
-        found = p.name;
-        break;
-      }
-    }
-    if (isClick && found) {
-      selectPort(found);
-    } else if (!isClick) {
-      setHovered(found);
-    }
-  };
-
-  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, true);
-  const onCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, false);
-  const onCanvasLeave = () => setHovered(null);
-
-  // Helper: rounded rect (no built-in before recent ctx)
+  // --- drawing helpers (defined before use so closure/hoist safe) ---
   function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -528,6 +518,45 @@ export function SwitchPage() {
     ctx.textAlign = 'start';
   }
 
+  // RAF loop for smooth time-based LED activity blink (premium physical feel)
+  useEffect(() => {
+    let rafId = 0;
+    const loop = () => {
+      drawFaceplate();
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [drawFaceplate]);
+
+  // Canvas hit + hover detection (maps mouse to logical coords)
+  const handleCanvasPointer = (e: React.MouseEvent<HTMLCanvasElement>, isClick: boolean) => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const sx = LOGICAL_W / rect.width;
+    const sy = LOGICAL_H / rect.height;
+    const cx = (e.clientX - rect.left) * sx;
+    const cy = (e.clientY - rect.top) * sy;
+
+    let found: string | null = null;
+    for (const p of portGeoms) {
+      if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
+        found = p.name;
+        break;
+      }
+    }
+    if (isClick && found) {
+      selectPort(found);
+    } else if (!isClick) {
+      setHovered(found);
+    }
+  };
+
+  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, true);
+  const onCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, false);
+  const onCanvasLeave = () => setHovered(null);
+
   const selectPort = (name: string) => {
     setSelected(name);
   };
@@ -579,8 +608,9 @@ export function SwitchPage() {
             <div className="rack-ear rack-ear-left" />
             <div className="rack-ear rack-ear-right" />
             <div className="rack-bezel">
-              <div className="faceplate-wrapper">
+              <div className={`faceplate-wrapper ${!hasData ? 'opacity-60' : ''}`}>
                 {renderFaceplate()}
+                {/* Canvas always renders; empty data => all ports shown down (robust). loading uses last data via poll hook. */}
               </div>
             </div>
           </div>
@@ -704,11 +734,22 @@ export function SwitchPage() {
                         <input
                           className="input text-xs py-1"
                           value={noteDraft}
-                          onChange={(e) => setNoteDraft(e.target.value)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setNoteDraft(v);
+                            // debounce auto-save while user is actively typing note
+                            if (editing === selectedPort.name) scheduleDebouncedSave(selectedPort.name, v);
+                          }}
                           placeholder="your note…"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") void saveNote(selectedPort.name);
                             if (e.key === "Escape") setEditing(null);
+                          }}
+                          onBlur={() => {
+                            // immediate save on blur for good UX + robustness
+                            if (editing === selectedPort.name && noteDraft.trim() !== (selectedPort.note || "")) {
+                              void saveNote(selectedPort.name);
+                            }
                           }}
                           autoFocus
                         />
