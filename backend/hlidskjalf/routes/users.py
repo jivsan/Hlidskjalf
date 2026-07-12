@@ -82,6 +82,9 @@ async def set_password(
     if not is_admin(me) and not secrets.compare_digest(target, username):
         raise HTTPException(403, "Can only change your own password (or be admin)")
 
+    if not await db.get_user_by_username(target):
+        raise HTTPException(404, f"No user named '{target}'")
+
     new_hash = auth.hash_password(body.password)
     await db.update_user_password(target, new_hash)
     return {"ok": True}
@@ -98,6 +101,9 @@ async def assign_vmid(
     me = await get_current_user(username, db)
     if not is_admin(me):
         raise HTTPException(403, "Admin only")
+
+    if not await db.get_user_by_username(target):
+        raise HTTPException(404, f"No user named '{target}'")
 
     if body.vmid is not None:
         users = await db.list_users()
@@ -118,6 +124,19 @@ async def delete_user(
     me = await get_current_user(username, db)
     if not is_admin(me):
         raise HTTPException(403, "Admin only")
+
+    target_user = await db.get_user_by_username(target)
+    if not target_user:
+        raise HTTPException(404, f"No user named '{target}'")
+
+    # Never leave the panel without an admin. A sole admin can only be targeted
+    # by themselves (any other admin acting would make the count >= 2), so this
+    # guard fires before the generic self-delete guard below.
+    if target_user.get("role") == "admin":
+        admin_count = sum(1 for u in await db.list_users() if u.get("role") == "admin")
+        if admin_count <= 1:
+            raise HTTPException(400, "Cannot delete the last admin")
+
     if secrets.compare_digest(target, username):
         raise HTTPException(400, "Cannot delete yourself")
 
