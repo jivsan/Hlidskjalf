@@ -6,20 +6,24 @@ This release includes the major switch visualizer enhancements (Arista 7050TX in
 
 All changes from the v0.2-alpha work + new switch section.
 
-**Before (v0.2-alpha) examples (copied from previous version for direct comparison):**
+**Before (v0.2-alpha) examples:**
 - Fleet: ![Fleet before](fleet.png)
 - VM Overview: ![VM overview before](vm-overview.png)
 - Node: ![Node before](node.png)
 
 See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 
-**After (v0.3-alpha):** The new switch section and UI refinements. (Real PNGs of the live /switch page with SVG faceplate will be added after testing. This README provides the comparison and description.)
+**After (v0.3-alpha) - Real captured screenshots:**
+
+- Fleet (v0.3): ![Fleet v0.3](v03-fleet.png)
+- Switch faceplate (new!): ![Switch v0.3](v03-switch.png)
+- Node (v0.3): ![Node v0.3](v03-node.png)
 
 ## Comparison: Before vs After
 
-### Fleet / Overview (baseline unchanged visually in this release, but now complemented by switch)
-- **Before (v0.2):** Standard table + basic cards.
-- **After (v0.3):** Same core, but integrated with the new dedicated switch visualizer for full network view.
+### Fleet / Overview
+- **Before (v0.2):** Standard table + basic cards. (see fleet.png above)
+- **After (v0.3):** Enhanced with more integrated network awareness; the new switch section provides port-level visibility. (see v03-fleet.png above)
 
 ### New: Switch Section (/switch) - Major v0.3 Addition
 - **Physical Faceplate (SVG):** Renders like the real Arista 7050TX hardware.
@@ -33,16 +37,11 @@ See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 - **Top Talkers:** Live top ports by traffic.
 - **Rack-like presentation:** Bezel, ears, industrial look inside the cyberpunk UI.
 
-**Example text rendering of the faceplate (actual is interactive SVG in the app):**
+**Real screenshot of the Switch faceplate (SVG mimicking physical 7050TX):**
 
-```
-[ ARISTA 7050TX-48T-4SFP+  •  RACK 47 ]
-[Port grid with status LEDs + blinking activity + LLDP labels]
-SFP ports on right
-Click any port → edit note (persisted in panel DB)
-```
+![Switch v0.3](v03-switch.png)
 
-Visit the live panel at `/switch` (after starting the dev servers) to see the real thing.
+Visit the live panel at `/switch` (after starting the dev servers with switch env) to interact with the real SVG faceplate, LLDP, top talkers, etc.
 
 ### Styling Improvements (v0.3)
 - More human/Flux-like: cleaner cards, subtle effects, better readability.
