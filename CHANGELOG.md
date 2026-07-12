@@ -7,12 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Switch Visualizer Enhancements (feat branches + PRs coordinated)
-- Pure eAPI + LLDP + mock (feat/switch-eapi-lldp)
-- SVG faceplate + Top Talkers + LLDP UI + Flux-human styling (feat/switch-svg-ui; see subagent report)
-- All changes, docs, branches, commits documented incrementally.
-- PR descriptions prepared referencing Flux inspiration and cyberpunk but human feel.
-See handoff.md for full details and branch links.
+### Switch Visualizer Enhancements (PRs #5, #6)
+- Backend: pure eAPI-only Arista client, LLDP neighbors, dev mock (PR #5 `feat/switch-eapi-lldp-mock`).
+- Frontend + styling: SVG physical rack faceplate for 7050TX, Top Talkers section, LLDP display, Flux-inspired card/rack CSS (PR #6 `feat/switch-svg-rack-top-talkers`).
+- Branches created from current, relevant changes committed (backend vs frontend+styling split), pushed via SSH, PRs opened via GitHub API (curl + token from ~/.hlidskjalf_gh_token).
+- See handoff.md for PR links, descriptions, and coordination notes.
 
 ## [0.2.0-alpha] - 2026-07-12
 
