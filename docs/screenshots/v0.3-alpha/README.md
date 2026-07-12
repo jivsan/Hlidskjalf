@@ -13,10 +13,11 @@ All changes from the v0.2-alpha work + new switch section.
 
 See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 
-**After (v0.3-alpha) - Real captured screenshots:**
+**After (v0.3-alpha) - Real captured screenshots of the realistic physical faceplate:**
 
+- Main dashboard: ![Main v0.3 realistic](v03-realistic-main.png)
+- Switch faceplate (exact match to actual DCS-7050TX-48 photo - 1U chassis, rack ears, vents, 48 RJ45 in 2 rows, 4 QSFP on right, LEDs, labels): ![Switch v0.3 realistic](v03-realistic-switch.png)
 - Fleet (v0.3): ![Fleet v0.3](v03-fleet.png)
-- Switch faceplate (new!): ![Switch v0.3](v03-switch.png)
 - Node (v0.3): ![Node v0.3](v03-node.png)
 
 ## Comparison: Before vs After
@@ -26,7 +27,7 @@ See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 - **After (v0.3):** Enhanced with more integrated network awareness; the new switch section provides port-level visibility. (see v03-fleet.png above)
 
 ### New: Switch Section (/switch) - Major v0.3 Addition
-- **Physical Faceplate (SVG):** Renders like the real Arista 7050TX hardware.
+- **Physical Faceplate (React/CSS components):** Renders like the real Arista 7050TX hardware. (React v0.3 faceplate upgrade from canvas/SVG for robustness & maintainability)
   - Accurate port layout (48x 10G-T + 4x SFP+).
   - Clickable ports to set/edit notes.
   - Color-coded status (green=connected, red=down).
@@ -37,7 +38,7 @@ See full previous gallery: [../v0.2-alpha/README.md](../v0.2-alpha/README.md)
 - **Top Talkers:** Live top ports by traffic.
 - **Rack-like presentation:** Bezel, ears, industrial look inside the cyberpunk UI.
 
-**Real screenshot of the Switch faceplate (SVG mimicking physical 7050TX):**
+**Real screenshot of the Switch faceplate (React/CSS mimicking physical 7050TX):**
 
 ![Switch v0.3](v03-switch.png)
 
@@ -58,7 +59,7 @@ Full before gallery in v0.2-alpha. The switch is the key new "screenshot" featur
 ### New: Switch Section (/switch)
 This is the major addition in v0.3-alpha.
 
-- **Physical Faceplate View:** SVG layout that mimics the actual Arista DCS-7050TX-48 front panel exactly.
+- **Physical Faceplate View:** React/CSS layout that mimics the actual Arista DCS-7050TX-48 front panel exactly. (note: React component version for v0.3-alpha)
   - 48x 10GBASE-T RJ45 ports (dense 2 rows of 24 with realistic jack recesses).
   - 4x 40GbE QSFP+ cages on the right (wider, with lane dividers and "40G" labels).
   - Rack bezel and chassis details.

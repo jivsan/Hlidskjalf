@@ -65,7 +65,7 @@
     inset 0 3px 6px rgba(0, 0, 0, 0.65),
     inset 0 -2px 3px rgba(255, 255, 255, 0.04),
     0 6px 16px rgba(0, 0, 0, 0.55);
-  padding: 8px; /* tighter for crisp canvas faceplate */
+  padding: 6px;
   position: relative;
 }
 
@@ -78,23 +78,36 @@
   pointer-events: none;
 }
 
-/* Rack mount ear hints */
+/* Rack mount ear hints - physical 1U ears with screw holes */
 .rack-ear {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
   width: 14px;
   height: 42px;
-  background: #2a2f44;
+  background: #252a3a;
   border: 1px solid #3a4058;
   border-radius: 2px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.3);
+  z-index: 2;
 }
+.rack-ear-left { left: -20px; }
+.rack-ear-right { right: -20px; }
+.rack-ear .screw {
+  position: absolute;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: #1a1f2e;
+  border: 1px solid #4a5168;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.1);
+}
+.rack-ear .screw:nth-child(1) { top: 6px; }
+.rack-ear .screw:nth-child(2) { bottom: 6px; }
 
-.rack-ear-left { left: -18px; }
-.rack-ear-right { right: -18px; }
-
-/* LED styles (for both DOM and SVG integration) */
+/* LED styles (shared for panel LEDs + port LEDs) */
 .led {
   display: inline-block;
   width: 7px;
@@ -115,29 +128,489 @@
 }
 
 @keyframes led-blink {
-  50% { opacity: 0.15; }
+  50% { opacity: 0.2; }
 }
 
-/* Canvas faceplate for realistic Arista hardware viz (premium metal, 3D bevels, anti-aliased ports) */
+/* Realistic physical 1U Arista DCS-7050TX-48 React faceplate
+   Dark metal chassis, bevels, recessed RJ45 jacks w/ LED above, QSFP cages, vents, rack ears.
+   Flux-human: clean, tactile, not cartoonish or over-polished. */
 .faceplate-wrapper {
   width: 100%;
   max-width: 720px;
   aspect-ratio: 720 / 175;
-  background: #0a0c14;
+  background: #0b0e17;
   border-radius: 1px;
   overflow: hidden;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+  position: relative;
 }
 
-.canvas-faceplate {
+/* Main chassis metal plate - multi layer for depth */
+.arista-chassis {
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(180deg, #282e3f 0%, #1e2433 14%, #141a28 52%, #0c101a 94%);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,0.05),
+    inset 0 -3px 4px rgba(0,0,0,0.55),
+    0 1px 2px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+
+/* Inner matte face plate */
+.arista-inner {
+  position: absolute;
+  inset: 8px 10px 8px 10px;
+  background: linear-gradient(180deg, #12161f 0%, #0a0d15 100%);
+  border: 1px solid #1f2533;
+  border-radius: 1px;
+  box-shadow: inset 0 1px 4px rgba(0,0,0,0.7);
+}
+
+/* Ventilation grills - realistic thin slots (top + bottom) */
+.vents {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 3px;
+  display: flex;
+  gap: 29px;
+  z-index: 1;
+  pointer-events: none;
+}
+.vents.top { top: 9px; }
+.vents.bottom { bottom: 9px; }
+.vents::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 26px,
+    #1c222e 26px 27px
+  );
+  opacity: 0.85;
+}
+
+/* Left management area: CON/USB/MGMT + status LEDs */
+.mgmt-area {
+  position: absolute;
+  left: 14px;
+  top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  z-index: 2;
+}
+.mgmt-port {
+  width: 9px;
+  height: 7px;
+  background: #161b29;
+  border: 1px solid #252c3b;
+  border-radius: 1px;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.8);
+  position: relative;
+}
+.mgmt-port.usb {
+  height: 5.5px;
+  background: #1a1f2c;
+}
+.mgmt-port::after {
+  content: "";
+  position: absolute;
+  top: 1.5px; left: 1.5px; right: 1.5px; bottom: 1.5px;
+  background: #0b0e16;
+  border-radius: 0.5px;
+}
+.mgmt-label {
+  position: absolute;
+  left: 23px;
+  font: 4.5px / 1 system-ui, monospace;
+  color: #5e667d;
+  white-space: nowrap;
+}
+.status-leds {
+  position: absolute;
+  left: 14px;
+  top: 102px;
+  display: flex;
+  flex-direction: column;
+  gap: 6.5px;
+}
+.status-led {
+  width: 3.2px;
+  height: 3.2px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0,0,0,0.4);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.2) inset;
+}
+.status-led.sys { background: #22c55e; }
+.status-led.fan { background: #3b82f6; }
+.status-led.ps { background: #eab308; }
+.status-label {
+  position: absolute;
+  left: 20px;
+  font: 3.5px / 1 system-ui, monospace;
+  color: #3f475f;
+  white-space: nowrap;
+}
+
+/* Model + row labels */
+.model-label {
+  position: absolute;
+  left: 28px;
+  top: 6px;
+  font: 6px / 1 system-ui, sans-serif;
+  color: #5b637a;
+  letter-spacing: 0.3px;
+  z-index: 3;
+}
+.model-label .model {
+  font-weight: 600;
+  font-size: 8.5px;
+  color: #b8c5ff;
   display: block;
+  margin-top: -1px;
+}
+.model-label .spec {
+  font-size: 4.5px;
+  color: #4a516a;
+  margin-top: -0.5px;
+}
+.row-label {
+  position: absolute;
+  left: 48px;
+  font: 4.5px / 1 system-ui, sans-serif;
+  color: #3f475f;
+  z-index: 3;
+}
+.row-label.top { top: 55px; }
+.row-label.bottom { top: 89px; }
+
+/* Ports container area */
+.ports-area {
+  position: absolute;
+  left: 62px;
+  top: 46px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 2;
+}
+
+/* Copper RJ45 grid: exactly 2 rows of 24 */
+.ports-grid-copper {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 1.6px;
+  margin-bottom: 12px;
+}
+
+/* QSFP cages: 4 stacked vertically on right */
+.ports-grid-qsfp {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* RJ45 Port component - realistic recessed jack + LED above */
+.rj45-port {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.28 / 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 60ms ease, filter 60ms ease;
+  outline: none;
+}
+.rj45-port:hover {
+  transform: translateY(-0.5px);
+  filter: brightness(1.08);
+}
+.rj45-port.selected {
+  z-index: 10;
+}
+.rj45-port .port-led {
+  position: absolute;
+  top: -3.5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3.1px;
+  height: 3.1px;
+  border-radius: 50%;
+  background: #f7768e;
+  border: 0.4px solid rgba(0,0,0,0.5);
+  box-shadow: 0 0 0 0.4px rgba(255,255,255,0.6) inset;
+  z-index: 1;
+  transition: background 60ms ease;
+}
+.rj45-port.up .port-led { background: #22c55e; }
+.rj45-port.active .port-led {
+  animation: port-led-blink 650ms steps(2, end) infinite;
+}
+.rj45-port.active.up .port-led {
+  background: #4ade80;
+}
+.rj45-port.selected .port-led {
+  box-shadow: 0 0 0 1px #ff4fa3, 0 0 0 0.4px rgba(255,255,255,0.6) inset;
+}
+
+.rj45-port .jack {
+  position: relative;
+  width: 86%;
+  height: 78%;
+  background: linear-gradient(180deg, #1a2232 0%, #0e121e 100%);
+  border: 0.8px solid #252c3b;
+  border-radius: 1.2px;
+  box-shadow:
+    inset 0 1px 1.5px rgba(255,255,255,0.06),
+    inset 0 -1px 2px rgba(0,0,0,0.7),
+    0 0.5px 1px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.rj45-port.down .jack {
+  background: linear-gradient(180deg, #12171f 0%, #090c15 100%);
+}
+
+.rj45-port .recess {
+  position: absolute;
+  inset: 1.6px 1.8px 2.2px 1.8px;
+  background: #07090f;
+  border: 0.5px solid #13171f;
+  border-radius: 0.6px;
+  box-shadow: inset 0 0.8px 1.5px rgba(0,0,0,0.9);
+}
+
+/* Latch notch at top of jack */
+.rj45-port .recess::before {
+  content: "";
+  position: absolute;
+  top: -0.5px; left: 22%; right: 22%;
+  height: 1.1px;
+  background: #0c0f17;
+}
+
+/* 8 contact pins (realistic) */
+.rj45-port .contacts {
+  position: absolute;
+  inset: 2.2px 2.2px 1.8px 2.2px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 0.8px;
+}
+.rj45-port .contacts span {
+  width: 0.7px;
+  height: 58%;
+  background: #252c3b;
+  border-radius: 0.3px;
+}
+
+/* Port number label */
+.rj45-port .port-num {
+  position: absolute;
+  bottom: -6.5px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 4.8px / 1 system-ui, monospace;
+  color: #5f677f;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+}
+.rj45-port.selected .port-num,
+.rj45-port:hover .port-num {
+  color: #c8d0e8;
+}
+
+/* QSFP+ Port - realistic metal cage with 4-lane slot */
+.qsfp-port {
+  position: relative;
+  width: 19px;
+  height: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 60ms ease, filter 60ms ease;
+  outline: none;
+  z-index: 3;
+}
+.qsfp-port:hover {
+  transform: scale(1.02);
+  filter: brightness(1.06);
+}
+.qsfp-port.selected {
+  z-index: 11;
+}
+
+.qsfp-port .cage {
+  position: relative;
   width: 100%;
   height: 100%;
-  cursor: pointer;
-  touch-action: none;
+  background: linear-gradient(90deg, #181d29 0%, #12161f 50%, #0d1019 100%);
+  border: 0.7px solid #2c3344;
+  border-radius: 1px;
+  box-shadow:
+    0 0.5px 1.5px rgba(0,0,0,0.5),
+    inset 0 0.5px 1px rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.qsfp-port.up .cage {
+  border-color: #3a4158;
 }
 
-/* Keep legacy svg-led for other LEDs in panel; svg-port rules removed as we migrated to canvas */
-.svg-led {
-  transition: fill 80ms ease;
+.qsfp-port .slot {
+  position: absolute;
+  inset: 1.8px 1.6px 1.8px 1.6px;
+  background: #080a10;
+  border: 0.4px solid #1f2533;
+  border-radius: 0.4px;
+  box-shadow: inset 0 0.5px 1px rgba(0,0,0,0.85);
 }
+
+/* 4 lane dividers inside QSFP */
+.qsfp-port .lanes {
+  position: absolute;
+  inset: 2.6px 2.4px 2.4px 2.4px;
+  display: flex;
+  justify-content: space-between;
+}
+.qsfp-port .lanes span {
+  width: 0.6px;
+  background: #1f2533;
+  height: 100%;
+}
+
+.qsfp-port .port-led {
+  position: absolute;
+  top: -2.8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2.8px;
+  height: 2.8px;
+  border-radius: 50%;
+  background: #f7768e;
+  border: 0.4px solid rgba(0,0,0,0.45);
+  box-shadow: 0 0 0 0.3px rgba(255,255,255,0.5) inset;
+  z-index: 1;
+}
+.qsfp-port.up .port-led { background: #22c55e; }
+.qsfp-port.active .port-led {
+  animation: port-led-blink 580ms steps(2, end) infinite;
+}
+.qsfp-port.active.up .port-led {
+  background: #4ade80;
+}
+.qsfp-port.selected .cage {
+  border-color: #ff4fa3;
+  box-shadow: 0 0 0 0.8px #ff4fa3;
+}
+
+.qsfp-port .port-num {
+  position: absolute;
+  bottom: -5.5px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 4.2px / 1 system-ui, monospace;
+  color: #4a516a;
+}
+.qsfp-port .qsfp-speed {
+  position: absolute;
+  bottom: -9.5px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 3.2px / 1 system-ui, monospace;
+  color: #3a4158;
+}
+.qsfp-port.selected .port-num,
+.qsfp-port:hover .port-num {
+  color: #d0d8ee;
+}
+
+/* Blink animation for port activity LEDs (CSS, no JS RAF needed) */
+@keyframes port-led-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.18; }
+}
+
+/* Footer / chassis footer text */
+.chassis-footer {
+  position: absolute;
+  bottom: 2px;
+  right: 10px;
+  font: 4px / 1 system-ui, sans-serif;
+  color: #2f364a;
+  z-index: 3;
+  letter-spacing: 0.2px;
+}
+
+/* Robust states inside faceplate */
+.faceplate-wrapper.loading .arista-chassis { opacity: 0.7; }
+.faceplate-wrapper.error .arista-chassis { opacity: 0.55; filter: saturate(0.6); }
+.port-rj45.down, .port-qsfp.down { opacity: 0.85; }
+
+/* Legacy canvas class kept for compat but unused */
+.canvas-faceplate { display: none; }
+.svg-led { transition: fill 80ms ease; }
+
+/* --- Enhanced realistic port styling for <Rj45Port> / <QsfpPort> (or inline render) --- */
+/* RJ45: dark metal body, deep recess jack, latch notch, 8 pin contacts, LED above with glass effect */
+.port-rj45, .rj45-port {
+  width: 11px; height: 9px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
+  background: linear-gradient(180deg, #1f2636 0%, #12171f 100%);
+  border: 1px solid #2c3344; border-radius: 1px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 1px rgba(0,0,0,0.6);
+  cursor: pointer; transition: transform 60ms ease, box-shadow 60ms ease, border-color 60ms;
+  margin: 0 0.5px; vertical-align: top;
+}
+.port-rj45:hover, .rj45-port:hover { transform: translateY(-0.5px); border-color: #4a5168; }
+.port-rj45.selected, .rj45-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3, inset 0 1px 0 rgba(255,255,255,0.06); }
+.port-rj45.up { background: linear-gradient(180deg, #21293a 0%, #141a24 100%); }
+.port-rj45 .port-body, .rj45-port .jack { position: relative; width: 9px; height: 7px; background: #0a0c14; border: 1px solid #181d28; border-radius: 0.5px; margin-top: 0.5px; }
+.port-rj45 .jack-hole, .rj45-port .recess { position: absolute; inset: 1px 1.5px 1px 1.5px; background: #05070d; border-radius: 0.5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.9); }
+.port-rj45 .contacts, .rj45-port .contacts { position: absolute; inset: 0.5px 1px; display: flex; justify-content: space-between; }
+.port-rj45 .contacts span, .rj45-port .contacts span { width: 0.6px; background: #252c3b; margin-top: 0.5px; }
+.port-rj45 .port-led, .rj45-port .port-led {
+  position: absolute; top: -2.5px; left: 50%; transform: translateX(-50%);
+  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.5);
+  box-shadow: 0 0 1px rgba(255,255,255,0.4) inset;
+  z-index: 2;
+}
+.port-rj45.up .port-led, .rj45-port.up .port-led { background: #22c55e; }
+.port-rj45.active .port-led, .rj45-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
+.port-rj45 .port-num, .rj45-port .port-num { font-size: 4.5px; color: #5f677f; margin-top: 0.5px; line-height: 1; }
+
+/* QSFP cage: metal gradient, slotted interior, deeper recess */
+.port-qsfp, .qsfp-port {
+  width: 14px; height: 12px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
+  background: linear-gradient(180deg, #1a1f2b 0%, #10141d 100%);
+  border: 1px solid #2a3040; border-radius: 1px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.5);
+  cursor: pointer; margin: 1px 0; transition: border-color 60ms, transform 60ms;
+}
+.port-qsfp:hover, .qsfp-port:hover { border-color: #4a5168; }
+.port-qsfp.selected, .qsfp-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3; }
+.port-qsfp .port-led, .qsfp-port .port-led {
+  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.4);
+  z-index: 2;
+}
+.port-qsfp.up .port-led, .qsfp-port.up .port-led { background: #22c55e; }
+.port-qsfp.active .port-led, .qsfp-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
+.port-qsfp .cage, .qsfp-port .cage { width: 12px; height: 9px; background: #07090f; border: 1px solid #1f2533; margin-top: 1px; position: relative; }
+.port-qsfp .lanes, .qsfp-port .lanes { position: absolute; inset: 1px; display: flex; justify-content: space-between; }
+.port-qsfp .lanes span, .qsfp-port .lanes span { width: 1px; background: #1f2533; }
+.port-qsfp .port-num, .qsfp-port .port-num { font-size: 4px; color: #4a516a; line-height: 1; }
+.port-qsfp .qsfp-speed, .qsfp-port .qsfp-speed { font-size: 3px; color: #3a4158; margin-top: -1px; }
+
+/* Row grid layout for ports in chassis */
+.ports-grid, .ports-grid-copper, .ports-grid-qsfp { display: flex; flex-wrap: nowrap; gap: 1px; }
+.ports-grid-qsfp { flex-direction: column; margin-left: 4px; }

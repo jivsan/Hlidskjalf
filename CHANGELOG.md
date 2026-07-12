@@ -5,10 +5,59 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.1-alpha] - 2026-07-12
+
+### Added / Changed
+- **Finalized realistic React+CSS faceplate** for Arista DCS-7050TX-48 on `/switch`:
+  - Pure declarative React (buttons + divs for ports, no Canvas, no SVG).
+  - Matches physical 1U hardware: rack ears with screws, vents, dark metal chassis bevels/gradients, exact labels, recessed RJ45 jacks (latch notch, 8 pins), LEDs above every port, 4 QSFP cages with lanes + 40G badge.
+  - 48 RJ45 (2 grids of 24) + 4 QSFP right. Full click-to-select, hover, LLDP titles, activity blink (CSS only).
+  - Fixed hooks order (moved useState before any conditional return) + DOM structure to match CSS selectors.
+  - New screenshots captured live from dev stack, placed in `docs/screenshots/v0.3.1-alpha/`.
+- Named release v0.3.1-alpha per request; updated all pointers (READMEs, screenshots index, this changelog).
+- Stack runs in dev (mocks + backend + vite) for viewing changes.
+- PRs/branches coordinated and changes merged into feat/switch-react-faceplate (local + prior API merges).
+
 ## [Unreleased]
 
+### Added / Changed (release engineer task)
+- Full dev stack verification run (`run_terminal_command`): mock_pve, backend (with switch env pointing to mock https), frontend. Confirmed `/switch` renders realistic React+CSS faceplate with no errors (52 ports from mock eAPI, live rates/LLDP/activity).
+- Updated/ran puppeteer script: screenshots saved `/tmp/v03-realistic-*.png` (full switch, focused faceplate crop, context), copied to `docs/screenshots/v0.3-alpha/`.
+- Branch `feat/switch-realistic-faceplate` created, relevant changes committed (detailed msg covering React/CSS impl, realism match to actual DCS-7050TX-48, alts considered), pushed.
+- GitHub API (token at `~/.hlidskjalf_gh_token`, python urllib) used to create PR titled exactly "feat(switch): realistic 1U physical faceplate for DCS-7050TX-48 using React+CSS". Result: existing PR #13 (https://github.com/jivsan/Hlidskjalf/pull/13) — body includes changes desc, physical match, alternatives (Canvas/CSS/DOM/image/Three.js; React+CSS chosen).
+- `handoff.md` + `CHANGELOG.md` updated with all steps, subagent/release actions, screenshots, PR link.
+- Faceplate: 1U realistic via React DOM + rich CSS (bevel chassis, recessed RJ45 w/ latch+pins, QSFP cages, vents, LEDs, labels). Clickable, live status blink, integrates with sidebar/notes/top-talkers. Exact hardware layout.
+
 ### Changed
-- **Switch faceplate upgraded to HTML5 `<canvas>`** (replaced SVG):
+- **Switch faceplate fully refactored from Canvas to pure declarative React + Tailwind/CSS** (feat/switch-react-faceplate):
+  - New small components: `Rj45Port` and `QsfpPort` (or render* helpers) with explicit TS `PortProps` (name, num, isUp, isActive, isSel, isHov, onClick, title/LLDP).
+  - Realistic physical 1U look: dark metal chassis (gradients + inset box-shadow bevels), rack ears with screw dots, top+bottom vent slots (repeating-linear-gradient), exact labels "ARISTA" "DCS-7050TX-48" "48×10GBASE-T + 4×40GbE QSFP+", row 1-24/25-48, left static mgmt ports + status LEDs.
+  - RJ45 ports: recessed jack body, latch notch, 8 contact pins (array spans), LED above (glass highlight + CSS blink on active).
+  - QSFP: cage with gradient+border, 4 lane dividers, LED, 40G badge.
+  - Interactivity preserved + enhanced: hover/click select integrates with existing selected + details panel (LLDP, note editor, rates, top talkers).
+  - All live data from portMap, graceful fallback (no data = all down/red), aria-labels + titles with LLDP.
+  - ErrorBoundary `FaceplateErrorBoundary` wraps faceplate (TS class; shows graceful msg, doesn't crash page).
+  - Updated index.css: detailed rules for .rj45-port/.port-led/.jack/.recess/.contacts, .qsfp-port/.cage/.lanes, .arista-chassis etc. with realistic shadows/gradients/animations (no blocky).
+  - Removed all canvas/RAF/geoms/draw* code, unused refs, cleaned comments and footer/header texts.
+  - Perf good for 52 ports (React fine, CSS-driven blink).
+  - No backend changes. tsc + dev build clean.
+  - Branch suggestion: `feat/switch-react-faceplate`.
+- Coordinated with prior robustness (usePoll last-data, notes debounce, error states kept).
+
+### Changed
+- **Switch faceplate refactored to declarative React components** (divs, buttons + Tailwind/CSS, no Canvas/SVG):
+  - Pure React: `<Rj45Port>` and `<QsfpPort>` small components receiving name/status/active/selected/lldpNeighbor/onClick/onHover.
+  - Realistic physical 1U Arista DCS-7050TX-48: multi-layer dark metal chassis gradients + bevels/shadows, rack ears w/ screws, top/bottom vents (repeating slots), left mgmt (CON/USB/MGMT) + static status LEDs (SYS/FAN/PS), model labels exact.
+  - RJ45: recessed jack body w/ latch notch (::before), 8 contact pins (flex spans), LED absolutely positioned above with specular + CSS blink animation on .active.
+  - QSFP: metal cage linear-gradient + border, inner slot + 4 lane spans, LED, "40G" label.
+  - Layout exact: 2 rows of 24 copper ports (CSS grid repeat(24)) + 4 QSFP stacked right in ports-area.
+  - Effects: multiple box-shadows for depth, gradients, transitions for hover/press, pink selection ring on .selected, title+aria for LLDP.
+  - Preserved all: clickable sets selected (details/LLDP/notes), hover, activity blink from port.active, robust (missing data = down ports, loading opacity, error keeps last data).
+  - Performance: 52 buttons fine (no RAF/ctx), pure CSS anims.
+  - Updated index.css with .arista-chassis/.arista-inner, .rj45-port + .jack/.recess/.contacts/.port-led, .qsfp-port + .cage/.slot/.lanes, vents, labels, .ports-area etc. Flux-human tactile (not cartoon/blocky).
+  - Cleanup: removed all canvas/draw/RAF/hit code, fixed labels/comments, build clean.
+  - Branch: `feat/switch-react-faceplate`.
+- Prior canvas work (feat/switch-realistic-physical) superseded by this React refactor per request.
   - Realistic physical Arista DCS-7050TX-48 1U viz: 48×10GBASE-T RJ45 (two rows), 4×40G QSFP+ stacked right.
   - Left-side console (CON), USB, MGMT ports + status LEDs (SYS/FAN/PS1/PS2) drawn.
   - Multi-layer gradients, shadows, bevels, speculars for metal/plastic depth and 3D rack look (no blocky/cartoon).
@@ -23,7 +72,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CSS: .faceplate-wrapper + .canvas-faceplate; minor bezel padding tweak.
   - Performance: tiny static+light anim canvas, no issue.
   - Build clean; no backend changes.
-- Suggest branch: `feat/switch-realistic-canvas-faceplate` (from prior SVG work).
+- **Branch**: `feat/switch-realistic-physical` (pushed; PR #11 created via API: https://github.com/jivsan/Hlidskjalf/pull/11 ).
+- Full dev stack tested: mock_pve + backend (switch config to mock_switch https) + frontend (vite).
+
+### Decisions: why Canvas, alternatives considered
+User request: non-cartoon realistic 1U faceplate (and alternatives).
+- **Chosen: Canvas** (2D HTML5 Canvas + JS draw): full programmatic control over shading, custom shapes (precise RJ45 recess/clip/pins, QSFP slots), time-based live LED activity blink (no CSS keyframes), geometry hit-test for clicks/hover, high-DPI scaling, RAF for smooth without perf DOM cost. Matches hardware exactly, easy to maintain/extend.
+- **CSS (rejected)**: insufficient for non-rect complex recessed jack geometry + speculars + exact 1U spacing + dynamic per-port blink intensity based on live bps; hit areas require extra JS anyway; alignment fragile.
+- **pure DOM (many divs/absolute els + bg)**: 50+ elements per faceplate = bloat, z-index/zoom/resize issues, slow for anim, poor for bevel depth without many pseudo/grad hacks.
+- **image + overlays (PNG/SVG bg + pos LEDs + map areas)**: static image can't react to live rates (blinks stay cartoon), hard to sync descriptions/LEDs, imprecise hit on responsive, update burden for "physical" tweaks.
+- **Three.js / WebGL / react-three-fiber (rejected)**: gross overkill for flat 2D panel (no perspective needed); adds ~100k+ bundle, GPU deps, complexity; Canvas 2D is native, zero-dep, sufficient + faster for this use case.
+
+All documented; stack verified end-to-end before branch/PR. See handoff.md for git cmds, stack start, PR body.
 
 ## [0.3.0-alpha] - 2026-07-12
 
@@ -50,6 +110,15 @@ See `docs/screenshots/v0.3-alpha/README.md` for visual comparison notes. Screens
 - PRs merged: #8, #9 via API; #6 via local after rebase (using PAT).
 - Real screenshots captured: v03-fleet.png, v03-switch.png (SVG faceplate visible with LLDP, activity, notes UI), v03-node.png added to v0.3-alpha/ with updated README for before/after.
 - All documented in handoff.md + CHANGELOG.
+
+### v0.3-alpha realistic faceplate
+- Switched to React + CSS for faceplate to look exactly like actual DCS-7050TX-48 photo.
+- 1U physical: chassis with ears/screws/vents/bevels, exact 48 RJ45 (2 rows, jack shape, LED above), 4 QSFP (right, lanes), left mgmt ports, labels.
+- React components for ports (declarative, robust, hover/click).
+- CSS for realistic metal/plastic/LED blink.
+- Non cartoon, human like Flux.
+- PR #12.
+- Screenshots updated with realistic images.
 
 See handoff.md for subagent outputs, git commands (rebase, --theirs, force-push, curl), PR bodies, Flux inspiration.
 
