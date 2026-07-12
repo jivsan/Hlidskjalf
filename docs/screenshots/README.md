@@ -16,7 +16,7 @@ Live telemetry feeds from the Hlidskjalf panel are archived here by version.
 
 | VERSION     | STATUS     | DESCRIPTION                              | ACCESS |
 |-------------|------------|------------------------------------------|--------|
-| **v0.3-alpha** | ACTIVE     | Arista switch faceplate (SVG), LLDP neighbors, top talkers, notes. Flux-inspired human cyberpunk styling. | [ENTER →](v0.3-alpha/README.md) |
+| **v0.3-alpha** | ACTIVE     | Arista switch faceplate (SVG), LLDP neighbors, top talkers, notes. Flux-inspired human cyberpunk styling. Real screenshots of /switch included. | [ENTER →](v0.3-alpha/README.md) |
 | **v0.2-alpha** | ARCHIVED   | Previous baseline (grid ports, basic network). | [ENTER →](v0.2-alpha/README.md) |
 | (future)    | PENDING    | Next rack calibration                    | — |
 
