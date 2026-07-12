@@ -3,6 +3,8 @@
 _Last updated: 2026-07-12 (switch eAPI+LLDP+mock+SVG+Flux-human on feat/switch-eapi-lldp + feat/switch-svg-ui; monitored+branched+pushed+PRs prepped). 
 The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
+**Ongoing work:** Switch enhancements documented, branches (feat/switch-eapi-lldp, feat/switch-svg-ui) created/pushed, PRs coordinated (API attempted w/ token). Sub-agents completed frontend SVG work.
+
 **Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
 
 ## ⚡ Current state — v0.2-alpha (main green)
