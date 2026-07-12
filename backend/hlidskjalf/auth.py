@@ -14,11 +14,12 @@ from collections import deque
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from fastapi import Cookie, Header, HTTPException, Request, Response
+from fastapi import Cookie, Depends, Header, HTTPException, Request, Response
 from itsdangerous import BadSignature, TimestampSigner
 
 from .config import get_settings
 from .db import Db  # for type hints only
+from .deps import get_db
 
 COOKIE_NAME = "hlidskjalf_session"
 CSRF_HEADER = "X-Hlidskjalf-CSRF"
@@ -150,3 +151,17 @@ async def get_current_user(username: str, db: Db) -> dict:
 
 def is_admin(user: dict) -> bool:
     return (user or {}).get("role") == "admin"
+
+
+async def require_admin_user(
+    username: str = Depends(require_session),
+    db: Db = Depends(get_db),
+) -> dict:
+    """Dependency: returns the admin user dict or raises 403 for non-admins.
+
+    Works with multi-user admin checks (role == 'admin').
+    """
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
+    return user

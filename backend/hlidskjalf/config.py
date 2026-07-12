@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     clone_storage: str = "local-lvm"
     metrics_source: str = "rrd"  # rrd | prometheus (phase 2)
 
+    # Logging & debug
+    log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR
+    debug: bool = False  # enables /api/debug/* and verbose error details for admins
+
     # Arista switch (7050TX etc.)
     # Recommended: enable eAPI on the switch:
     #   management api http-commands
