@@ -62,49 +62,19 @@ export function SwitchPage() {
 
   const selectedPort = selected ? portMap.get(selected) : null;
 
-  // === Canvas: realistic non-cartoon 1U physical faceplate (per user request) ===
+  // Canvas refs and consts (top level hooks before useCallback)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
   const LOGICAL_W = 720;
   const LOGICAL_H = 175;
 
-  const portGeoms = useMemo(() => {
-    const geoms: Array<{ name: string; x: number; y: number; w: number; h: number; num: number; isQSFP: boolean }> = [];
-    const pW = 13.2, pH = 10.2, gap = 2.05, startX = 66, row1Y = 54, row2Y = 90;
-    for (let i = 1; i <= 48; i++) {
-      const row = i <= 24 ? 0 : 1; const col = i <= 24 ? (i-1) : (i-25);
-      const x = startX + col * (pW + gap); const y = row === 0 ? row1Y : row2Y;
-      geoms.push({ name: `Ethernet${i}`, x, y, w: pW, h: pH, num: i, isQSFP: false });
-    }
-    const qX=595, qW=20, qH=15.5, qStartY=50, qGap=19.5;
-    [49,50,51,52].forEach((num, idx) => geoms.push({ name: `Ethernet${num}`, x: qX, y: qStartY + idx * qGap, w: qW, h: qH, num, isQSFP: true }));
-    return geoms;
-  }, []);
 
-  const portMapRef = useRef(portMap); const selectedRef = useRef<string | null>(selected); const hoveredRef = useRef<string | null>(hovered);
-  useEffect(() => { portMapRef.current = portMap; }, [portMap]);
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
-  useEffect(() => { hoveredRef.current = hovered; }, [hovered]);
 
-  const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
-    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
-  };
-  const drawScrew = (ctx: CanvasRenderingContext2D, cx: number, cy: number) => {
-    ctx.save(); ctx.fillStyle = '#353c4f'; ctx.beginPath(); ctx.arc(cx, cy, 2.8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#1f2433'; ctx.beginPath(); ctx.arc(cx, cy, 1.3, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#4a5168'; ctx.lineWidth = 0.6; ctx.beginPath();
-    ctx.moveTo(cx - 1.1, cy); ctx.lineTo(cx + 1.1, cy); ctx.moveTo(cx, cy - 1.1); ctx.lineTo(cx, cy + 1.1); ctx.stroke(); ctx.restore();
-  };
-  const drawMiniRJ45 = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isMgmt: boolean) => {
-    ctx.save(); ctx.fillStyle = isMgmt ? '#1a2030' : '#161b29'; roundRect(ctx, x, y, w, h, 1.2); ctx.fill();
-    ctx.fillStyle = '#0b0e16'; roundRect(ctx, x + 1.2, y + 1.8, w - 2.4, h - 3.2, 0.6); ctx.fill();
-    ctx.fillStyle = '#0e121b'; ctx.fillRect(x + 2.5, y + 1.2, w - 5, 1); ctx.restore();
-  };
+
+
+  // helpers
+
   const drawRJ45 = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isUp: boolean, isActive: boolean, isHighlight: boolean, num: number, time: number) => {
     const body = isUp ? '#1a2232' : '#0e121e';
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 2.5; ctx.shadowOffsetX = 0.3; ctx.shadowOffsetY = 0.8;
@@ -143,75 +113,6 @@ export function SwitchPage() {
     ctx.fillStyle = '#3a4158'; ctx.font = '3.8px system-ui, monospace'; ctx.fillText('40G', x + w / 2, y + h + 10.2); ctx.textAlign = 'start';
   };
 
-  const drawFaceplate = useCallback(() => {
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: true }); if (!ctx) return;
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    if (canvas.width !== Math.floor(LOGICAL_W * dpr) || canvas.height !== Math.floor(LOGICAL_H * dpr)) {
-      canvas.width = Math.floor(LOGICAL_W * dpr); canvas.height = Math.floor(LOGICAL_H * dpr);
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const W = LOGICAL_W, H = LOGICAL_H; const time = Date.now() / 1000; ctx.clearRect(0, 0, W, H);
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1;
-    const chassisGrad = ctx.createLinearGradient(0, 0, 0, H);
-    chassisGrad.addColorStop(0, '#282e3f'); chassisGrad.addColorStop(0.12, '#1e2433'); chassisGrad.addColorStop(0.5, '#141a28'); chassisGrad.addColorStop(0.92, '#0c101a');
-    ctx.fillStyle = chassisGrad; roundRect(ctx, 4, 2, W - 8, H - 4, 3); ctx.fill(); ctx.restore();
-    ctx.fillStyle = 'rgba(255,255,255,0.06)'; roundRect(ctx, 5, 3, W - 10, 5, 2); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(ctx, 5, H - 8, W - 10, 5, 2); ctx.fill();
-    const innerGrad = ctx.createLinearGradient(0, 12, 0, H - 12); innerGrad.addColorStop(0, '#12161f'); innerGrad.addColorStop(1, '#0a0d15');
-    ctx.fillStyle = innerGrad; roundRect(ctx, 12, 10, W - 24, H - 20, 2); ctx.fill();
-    ctx.strokeStyle = '#1f2533'; ctx.lineWidth = 0.8; roundRect(ctx, 12, 10, W - 24, H - 20, 2); ctx.stroke();
-    ctx.strokeStyle = '#1c222e'; ctx.lineWidth = 0.7;
-    for (let i = 0; i < 22; i++) { const vx = 18 + i * 31; ctx.beginPath(); ctx.moveTo(vx, 12.5); ctx.lineTo(vx, 15.5); ctx.stroke(); ctx.beginPath(); ctx.moveTo(vx, H - 15.5); ctx.lineTo(vx, H - 12.5); ctx.stroke(); }
-    const leftX = 16;
-    drawMiniRJ45(ctx, leftX, 28, 9.5, 7.5, false); ctx.fillStyle = '#5e667d'; ctx.font = '5px system-ui,monospace'; ctx.fillText('CON', leftX + 0.5, 43);
-    ctx.fillStyle = '#1a1f2c'; roundRect(ctx, leftX, 50, 9.5, 6, 1); ctx.fillStyle = '#0f131c'; ctx.fillRect(leftX + 1.5, 51.5, 6.5, 3); ctx.fillStyle = '#4a516a'; ctx.fillText('USB', leftX + 0.5, 62);
-    drawMiniRJ45(ctx, leftX, 70, 9.5, 7.5, true); ctx.fillStyle = '#5e667d'; ctx.fillText('MGMT', leftX - 1, 84);
-    const ledBaseY=100, ledColors=['#22c55e','#3b82f6','#eab308','#eab308'], ledLabels=['SYS','FAN','PS1','PS2'];
-    for (let i = 0; i < 4; i++) { const ly = ledBaseY + i * 8.5; ctx.fillStyle = ledColors[i]; ctx.beginPath(); ctx.arc(leftX + 4.5, ly, 1.6, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = '#5b637a'; ctx.font = '6.5px system-ui,sans-serif'; ctx.fillText('ARISTA', 28, 20);
-    ctx.fillStyle = '#b8c5ff'; ctx.font = 'bold 9px system-ui,sans-serif'; ctx.fillText('DCS-7050TX-48', 28, 31);
-    ctx.fillStyle = '#4a516a'; ctx.font = '5px system-ui,sans-serif'; ctx.fillText('48×10GBASE-T + 4×40GbE QSFP+', 28, 39);
-    ctx.fillStyle = '#3f475f'; ctx.font = '5px system-ui,sans-serif'; ctx.fillText('1-24', 52, 62); ctx.fillText('25-48', 52, 98);
-    const pm = portMapRef.current, sel = selectedRef.current, hov = hoveredRef.current;
-    for (const p of portGeoms) {
-      const pd = pm.get(p.name); const isUp = pd?.status === 'connected'; const isActive = !!pd?.active; const isH = sel === p.name || hov === p.name;
-      if (p.isQSFP) drawQSFP(ctx, p.x, p.y, p.w, p.h, isUp, isActive, isH, p.num, time);
-      else drawRJ45(ctx, p.x, p.y, p.w, p.h, isUp, isActive, isH, p.num, time);
-    }
-    drawScrew(ctx, 9, 9); drawScrew(ctx, 9, H - 9); drawScrew(ctx, W - 9, 9); drawScrew(ctx, W - 9, H - 9);
-    ctx.fillStyle = '#2f364a'; ctx.font = '5px system-ui,sans-serif'; ctx.textAlign = 'end'; ctx.fillText('RACK 47 • DCS-7050TX-48', W - 12, H - 5); ctx.textAlign = 'start';
-  }, [portGeoms]);
-
-  useEffect(() => {
-    let rafId = 0; const loop = () => { drawFaceplate(); rafId = requestAnimationFrame(loop); };
-    rafId = requestAnimationFrame(loop); return () => cancelAnimationFrame(rafId);
-  }, [drawFaceplate]);
-
-  const handleCanvasPointer = (e: React.MouseEvent<HTMLCanvasElement>, isClick: boolean) => {
-    const c = canvasRef.current; if (!c) return;
-    const rect = c.getBoundingClientRect(); const sx = LOGICAL_W / rect.width; const sy = LOGICAL_H / rect.height;
-    const cx = (e.clientX - rect.left) * sx; const cy = (e.clientY - rect.top) * sy;
-    let found: string | null = null;
-    for (const p of portGeoms) { if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) { found = p.name; break; } }
-    if (isClick && found) setSelected(found); else if (!isClick) setHovered(found);
-  };
-  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, true);
-  const onCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => handleCanvasPointer(e, false);
-  const onCanvasLeave = () => setHovered(null);
-
-  const renderFaceplate = () => (
-    <canvas
-      ref={canvasRef}
-      onClick={onCanvasClick}
-      onMouseMove={onCanvasMove}
-      onMouseLeave={onCanvasLeave}
-      className="w-full cursor-pointer"
-      style={{ maxHeight: 210, background: '#0a0c14' }}
-      aria-label="Arista DCS-7050TX-48 realistic canvas 1U faceplate"
-      role="img"
-    />
-  );
 
   const selectPort = (name: string) => { setSelected(name); };
 
