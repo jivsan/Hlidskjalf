@@ -1,0 +1,30 @@
+# Hlidskjalf via Docker Compose — the non-Nix deployment path.
+#
+#   cp hlidskjalf.env.example hlidskjalf.env   # then fill in the secrets
+#   docker compose up -d --build
+#
+# See docs/docker.md for the full quickstart.
+
+services:
+  hlidskjalf:
+    build: .
+    image: hlidskjalf:latest
+    container_name: hlidskjalf
+    env_file: ./hlidskjalf.env
+    ports:
+      # host:container — the app binds 0.0.0.0:8787 inside the container.
+      # Bind to a specific LAN interface if you don't want it on every host IP.
+      - "8787:8787"
+    volumes:
+      # Persists the sqlite state (bandwidth history, rescue boot-order stash).
+      - hlidskjalf-state:/var/lib/hlidskjalf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/api/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hlidskjalf-state:
