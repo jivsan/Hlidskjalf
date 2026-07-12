@@ -13,6 +13,7 @@ function getNavForRole(user: CurrentUser | null) {
       { to: "/new", label: "Provision" },
       { to: "/node", label: "Node" },
       { to: "/users", label: "Users" },
+      { to: "/debug", label: "Debug" },
     ];
   }
   // Regular user (VPS customer) — minimal nav focused on their VM

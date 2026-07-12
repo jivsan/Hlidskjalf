@@ -23,6 +23,25 @@ All prior switch faceplate / eAPI / LLDP work preserved and now available in bot
 
 See new `docs/screenshots/v0.3.2-alpha/README.md` and updated CHANGELOG + main README.
 
+## Debug / Logging & Error Handling (v0.3.2+ work)
+
+- **Deployed sub-agents**:
+  - Backend subagent: implemented enhanced logging, request middleware, global error handler, in-memory buffers, debug router.
+  - Frontend subagent: built full Debug.tsx admin page + api.ts helpers + nav integration.
+- Backend improvements:
+  - `log_level` (DEBUG/INFO/...) + `debug` flag from env/settings.
+  - HTTP request logging middleware (logs every call with timing).
+  - Global Exception handler: always logs full traceback at ERROR; in debug mode returns traceback snippet to client.
+  - New `routes/debug.py` with 5 admin-protected endpoints.
+  - In-memory recent_logs + recent_errors (100 cap) populated automatically.
+- Frontend Debug section (`/debug`, admin nav only):
+  - Live System Health, redacted Config, Accumulator, Recent Logs (color coded levels), Recent Errors (expandable tracebacks).
+  - usePoll auto-refresh + manual refresh buttons.
+  - Fully gated; graceful on 401/empty.
+- Usage: set `HLIDSKJALF_DEBUG=true HLIDSKJALF_LOG_LEVEL=DEBUG` then login as admin and visit /debug.
+- Fully documented in CHANGELOG.md + this handoff.md.
+- Verified: tsc build clean, dev stack works, imports OK, routes mounted (401 until authed as admin).
+
 ## Previous releases (archived)
 
 ### v0.3.1-alpha (React faceplate) and prior

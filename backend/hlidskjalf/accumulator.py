@@ -75,3 +75,21 @@ class Accumulator:
             self.prev[vmid] = (cur_in, cur_out)
             await self.db.save_counter(vmid, cur_in, cur_out)
         await self.db.commit()
+
+    def get_status(self) -> dict:
+        """Return lightweight status for /api/debug/accumulator."""
+        return {
+            "running": self._task is not None and not self._task.done(),
+            "prev_count": len(self.prev),
+            "task_name": getattr(self._task, "name", None) if self._task else None,
+        }
+
+    def get_status(self) -> dict:
+        """Return simple status for /api/debug/accumulator."""
+        task = self._task
+        running = bool(task and not task.done())
+        return {
+            "running": running,
+            "prev_count": len(self.prev),
+            "task_name": getattr(task, "get_name", lambda: None)() if task else None,
+        }

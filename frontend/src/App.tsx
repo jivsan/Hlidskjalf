@@ -11,6 +11,7 @@ import { Provision } from "./pages/Provision";
 import { SwitchPage } from "./pages/Switch";
 import { UsersPage } from "./pages/Users";
 import { VmDetailPage } from "./pages/VmDetail";
+import { Debug } from "./pages/Debug";
 
 export interface CurrentUser {
   username: string;
@@ -65,6 +66,7 @@ export function App() {
               {isAdmin && <Route path="/new" element={<Provision />} />}
               {isAdmin && <Route path="/node" element={<NodePage />} />}
               {isAdmin && <Route path="/users" element={<UsersPage />} />}
+              {isAdmin && <Route path="/debug" element={<Debug />} />}
               {/* Home: users go to their VM, admins go to fleet */}
               <Route path="/" element={
                 isAdmin

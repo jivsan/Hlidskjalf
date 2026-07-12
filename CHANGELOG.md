@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added / Changed (Debug section)
+- **Debug section** (admin-only, gated by `HLIDSKJALF_DEBUG=true`):
+  - New `/api/debug/*` endpoints: `/config` (redacted), `/health` (detailed), `/errors`, `/logs`, `/accumulator`.
+  - Request logging middleware (method/path/status/duration/client).
+  - Global exception handler with full tracebacks (ERROR level) + debug-mode traceback snippets in responses + in-memory error buffer.
+  - In-memory log buffer via custom logging.Handler for recent logs.
+  - Configurable `log_level` via settings.
+- New admin **Debug** page (`/debug`): System Health, redacted Config, Accumulator status, Recent Logs (color-coded), Recent Errors (with expandable tracebacks). Polling + manual refresh. Consistent cyberpunk styling.
+- Only visible in admin nav when role=admin.
+- Documented in handoff.md + this changelog.
+
 ## [v0.3.2-alpha] - 2026-07-12
 
 ### Added / Changed

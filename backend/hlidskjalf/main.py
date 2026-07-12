@@ -1,6 +1,7 @@
 """Hlidskjalf app assembly: lifespan, auth endpoints, static SPA serving."""
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,6 +14,10 @@ from pydantic import BaseModel
 from . import auth
 from .accumulator import Accumulator
 from .config import get_settings
+
+# Always import debug router (endpoints are admin-only protected via require_admin_user).
+# The debug features (buffers, verbose errors) activate when settings.debug or log_level=DEBUG.
+from .routes import debug as debug_module
 from .datasources.rrd import RRDSource
 from .db import Db
 from .pve import PveClient, PveError
@@ -24,7 +29,19 @@ log = logging.getLogger("hlidskjalf")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
+
+    # Configure stdlib logging from settings.log_level (supports DEBUG/INFO/etc)
+    level_name = (settings.log_level or "INFO").upper()
+    log_level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    )
+
+    # Attach in-memory log handler (for /api/debug/logs) when debug or DEBUG level
+    if settings.debug or log_level <= logging.DEBUG:
+        mem_handler = debug_module.InMemoryLogHandler()
+        logging.getLogger("hlidskjalf").addHandler(mem_handler)
 
     app.state.db = Db(settings.db_path)
     await app.state.db.open()
@@ -51,6 +68,84 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Hlidskjalf", lifespan=lifespan)
+
+
+# --- middleware: request logging (method, path, status, duration, client) ---
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration_ms = (time.perf_counter() - start) * 1000
+        client = request.client.host if request.client else "-"
+        log.info(
+            "request %s %s client=%s status=%s duration=%.1fms",
+            request.method,
+            request.url.path,
+            client,
+            status_code,
+            duration_ms,
+        )
+
+
+# --- global exception handler (full traceback logs, consistent JSON) ---
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Log full tracebacks at ERROR. Return consistent JSON errors.
+
+    When settings.debug, include traceback snippet (for admins).
+    """
+    settings = get_settings()
+    client = request.client.host if request.client else "-"
+
+    if isinstance(exc, HTTPException):
+        if exc.status_code >= 500:
+            log.error("HTTP %s error: %s %s -> %s", exc.status_code, request.method, request.url.path, exc.detail)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    # Unhandled: log with full traceback
+    import traceback
+
+    tb = traceback.format_exc()
+    log.error(
+        "Unhandled exception for %s %s (client=%s): %s",
+        request.method,
+        request.url.path,
+        client,
+        exc,
+        exc_info=True,
+    )
+
+    error_entry = {
+        "ts": time.time(),
+        "method": request.method,
+        "path": request.url.path,
+        "client": client,
+        "error": str(exc),
+        "error_type": type(exc).__name__,
+    }
+    if settings.debug:
+        # traceback snippet for admins in debug mode
+        lines = tb.strip().split("\n")
+        error_entry["traceback"] = "\n".join(lines[-20:])
+
+    debug_module._append_recent(debug_module.recent_errors, error_entry)
+
+    # consistent JSON error response
+    content = {"detail": "Internal server error"}
+    if settings.debug:
+        content = {
+            "detail": str(exc),
+            "error_type": type(exc).__name__,
+            "traceback": error_entry.get("traceback"),
+        }
+    return JSONResponse(status_code=500, content=content)
 
 
 @app.exception_handler(PveError)
@@ -130,6 +225,8 @@ app.include_router(rescue.router)
 app.include_router(console.router)
 app.include_router(switch.router)
 app.include_router(users_route.router)  # new user management (admin only)
+
+app.include_router(debug_module.router, prefix="/api/debug")  # /api/debug/* (admin protected)
 
 
 # --- static SPA -------------------------------------------------------------

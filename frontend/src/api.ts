@@ -105,3 +105,50 @@ export async function logout(): Promise<void> {
     setCsrf(null);
   }
 }
+
+// --- Debug (admin-only, only present when HLIDSKJALF_DEBUG=true) -----------
+
+export interface DebugLogEntry {
+  ts: number;
+  level: string;
+  logger: string;
+  message: string;
+}
+
+export interface DebugErrorEntry {
+  ts: number;
+  method: string;
+  path: string;
+  client?: string | null;
+  error: string;
+  traceback?: string;
+}
+
+export interface DebugConfig {
+  [key: string]: unknown;
+}
+
+export interface DebugAccumulator {
+  running: boolean;
+  prev_count: number;
+  task_name?: string | null;
+}
+
+export interface DebugHealth {
+  ok: boolean;
+  debug: boolean;
+  log_level: string;
+  pve_node?: string | null;
+  db_path?: string;
+  metrics_source?: string | null;
+  state_keys?: string[];
+  accumulator?: DebugAccumulator;
+}
+
+export const debug = {
+  getHealth: () => api.get<DebugHealth>("/api/debug/health"),
+  getConfig: () => api.get<DebugConfig>("/api/debug/config"),
+  getLogs: () => api.get<DebugLogEntry[]>("/api/debug/logs"),
+  getErrors: () => api.get<DebugErrorEntry[]>("/api/debug/errors"),
+  getAccumulator: () => api.get<DebugAccumulator>("/api/debug/accumulator"),
+};
