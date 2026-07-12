@@ -1,0 +1,34 @@
+# Keep the build context small and secrets out of it.
+
+# VCS / tooling / agent scratch
+.git
+.gitignore
+.github
+.claude
+
+# Dependencies & build outputs (reinstalled/rebuilt inside the image)
+**/node_modules
+**/.venv
+.venv
+frontend/dist
+
+# Secrets & local dev config (never bake these into an image)
+hlidskjalf.env
+dev/dev.env
+
+# Nix packaging — not used by the container path
+nix
+flake.nix
+flake.lock
+
+# Docs / project notes — not needed to build the app
+docs
+*.md
+
+# Python / DB / OS cruft
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.sqlite3
+**/*.sqlite3
+.DS_Store
