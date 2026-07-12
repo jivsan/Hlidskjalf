@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Switch faceplate upgraded to HTML5 `<canvas>`** (replaced SVG):
+- **Switch faceplate upgraded to HTML5 `<canvas>` for realistic non-cartoon 1U physical** (replaced SVG):
   - Realistic physical Arista DCS-7050TX-48 1U viz: 48×10GBASE-T RJ45 (two rows), 4×40G QSFP+ stacked right.
   - Left-side console (CON), USB, MGMT ports + status LEDs (SYS/FAN/PS1/PS2) drawn.
   - Multi-layer gradients, shadows, bevels, speculars for metal/plastic depth and 3D rack look (no blocky/cartoon).
@@ -23,7 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CSS: .faceplate-wrapper + .canvas-faceplate; minor bezel padding tweak.
   - Performance: tiny static+light anim canvas, no issue.
   - Build clean; no backend changes.
-- Suggest branch: `feat/switch-realistic-canvas-faceplate` (from prior SVG work).
+- **Branch**: `feat/switch-realistic-physical` (pushed; PR #11 created via API).
+- Full dev stack tested: mock_pve + backend (switch config to mock_switch https) + frontend (vite).
+
+### Decisions: why Canvas, alternatives considered
+User request: non-cartoon realistic 1U faceplate (and alternatives).
+- **Chosen: Canvas** (2D HTML5 Canvas + JS draw): full programmatic control over shading, custom shapes (precise RJ45 recess/clip/pins, QSFP slots), time-based live LED activity blink (no CSS keyframes), geometry hit-test for clicks/hover, high-DPI scaling, RAF for smooth without perf DOM cost. Matches hardware exactly, easy to maintain/extend.
+- **CSS (rejected)**: insufficient for non-rect complex recessed jack geometry + speculars + exact 1U spacing + dynamic per-port blink intensity based on live bps; hit areas require extra JS anyway; alignment fragile.
+- **pure DOM (many divs/absolute els + bg)**: 50+ elements per faceplate = bloat, z-index/zoom/resize issues, slow for anim, poor for bevel depth without many pseudo/grad hacks.
+- **image + overlays (PNG/SVG bg + pos LEDs + map areas)**: static image can't react to live rates (blinks stay cartoon), hard to sync descriptions/LEDs, imprecise hit on responsive, update burden for "physical" tweaks.
+- **Three.js / WebGL / react-three-fiber (rejected)**: gross overkill for flat 2D panel (no perspective needed); adds ~100k+ bundle, GPU deps, complexity; Canvas 2D is native, zero-dep, sufficient + faster for this use case.
+
+All documented; stack verified end-to-end before branch/PR. See handoff.md for git cmds, stack start, PR body.
 
 ## [0.3.0-alpha] - 2026-07-12
 
