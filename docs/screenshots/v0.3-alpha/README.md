@@ -6,7 +6,7 @@ This release includes the major switch visualizer enhancements (Arista 7050TX in
 
 All changes from the v0.2-alpha work + new switch section.
 
-**Before (v0.2-alpha) examples:**
+**Before (v0.2-alpha) examples (copied from previous version for direct comparison):**
 - Fleet: ![Fleet before](fleet.png)
 - VM Overview: ![VM overview before](vm-overview.png)
 - Node: ![Node before](node.png)
