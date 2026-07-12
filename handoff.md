@@ -270,3 +270,13 @@ See docs/screenshots/v0.3-alpha/README.md for the comparison including the new s
 - Branch: feat/switch-realistic-canvas-1u , PR #10 created.
 - Code more robust (DPR, hit detection, graceful).
 - New screenshots to be captured and added to v0.3-alpha.
+
+**Canvas faceplate update (user request for physical 1U non-cartoon):**
+- Replaced SVG with Canvas in Switch.tsx for realistic look.
+- Added 1U chassis with bevels, rack ears, detailed RJ45 (recess, clip), QSFP cages, vents, screws, exact labels.
+- Alternatives documented: Canvas (chosen for precision and anti-alias physical realism), CSS 3D (good bevels but harder precise ports), image+overlays (most exact with real photo + dynamic LEDs), Three.js (overkill for faceplate).
+- Updated to non-blocky physical look with metal gradients, detailed jacks/QSFP, vents, ears.
+- Subagents deployed for redesign, robustness, dev run + PR.
+- Branch: feat/switch-realistic-canvas-1u , PR #10 created via API.
+- Code more robust (DPR support, mouse hit detection, graceful no-data).
+- New screenshots added to v0.3-alpha (v03-physical-faceplate.png etc) using puppeteer on dev stack.
