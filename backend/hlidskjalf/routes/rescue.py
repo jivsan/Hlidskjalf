@@ -8,10 +8,11 @@ banner for any vmid present in the stash.
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import require_csrf
+from ..auth import require_csrf, require_session
 from ..db import Db
-from ..deps import get_db, get_pve, settings
+from ..deps import get_db, get_pve, guard_protected, settings
 from ..pve import PveClient
+from .vms import _ensure_vm_access
 
 router = APIRouter()
 
@@ -44,8 +45,15 @@ async def enter_rescue(
     vmid: int,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
+    username: str = Depends(require_session),
     _=Depends(require_csrf),
 ):
+    # Authorize: owner or admin only. Rescue power-cycles the VM into an ISO, so
+    # an unscoped endpoint let any logged-in user reboot any tenant's machine.
+    await _ensure_vm_access(username, vmid, db, pve)
+    # Refuse protected VMIDs for EVERYONE (admins included): rescuing protected
+    # infrastructure — heimdall hosts this very panel, PBS, etc. — is catastrophic.
+    guard_protected(vmid, "rescue")
     iso = settings().rescue_iso
     if not iso:
         raise HTTPException(500, "HLIDSKJALF_RESCUE_ISO not configured")
@@ -78,8 +86,12 @@ async def exit_rescue(
     vmid: int,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
+    username: str = Depends(require_session),
     _=Depends(require_csrf),
 ):
+    # Authorize exit too (owner or admin). No guard_protected here: a protected
+    # VM can never have entered rescue, and you never want to block recovery.
+    await _ensure_vm_access(username, vmid, db, pve)
     stash = await db.rescue_get(vmid)
     if not stash:
         raise HTTPException(409, f"VMID {vmid} is not in rescue mode")

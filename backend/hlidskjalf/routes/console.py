@@ -24,8 +24,10 @@ from fastapi import (
 import websockets
 
 from ..auth import require_session, session_from_request
-from ..deps import get_pve
+from ..db import Db
+from ..deps import get_db, get_pve
 from ..pve import PveClient, PveError
+from .vms import _ensure_vm_access
 
 log = logging.getLogger("hlidskjalf.console")
 router = APIRouter()
@@ -44,8 +46,15 @@ def _reap() -> None:
 
 @router.get("/api/vms/{vmid}/console")
 async def console_ticket(
-    vmid: int, pve: PveClient = Depends(get_pve), _=Depends(require_session)
+    vmid: int,
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
 ):
+    # Per-user VM scoping: admins pass; a regular user is 403'd unless the
+    # requested vmid is the one VM assigned to them. Without this a tenant could
+    # mint a VNC ticket for another tenant's machine (IDOR).
+    await _ensure_vm_access(username, vmid, db, pve)
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -65,6 +74,10 @@ async def console_ticket(
 
 @router.websocket("/ws/console/{vmid}")
 async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
+    # No per-user VM scoping is repeated here: the one-time `key` this handler
+    # redeems is ONLY ever minted by console_ticket above, which is now
+    # ownership-scoped via _ensure_vm_access. A holder of a valid key therefore
+    # already passed that check for this exact vmid, so redeeming it is safe.
     # Accept the handshake *before* the auth/key checks so a rejection can send
     # a real WebSocket close code (4401/4403) to the browser. Closing before
     # accept makes uvicorn reject the handshake with a bare HTTP 403 and the
