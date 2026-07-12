@@ -31,6 +31,18 @@ CREATE TABLE IF NOT EXISTS switch_port_notes (
     note       TEXT    NOT NULL,
     updated_at TEXT    NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY,
+    username      TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user',   -- 'admin' | 'user'
+    vmid          INTEGER,                        -- assigned VM for regular users (unique)
+    created_at    TEXT NOT NULL
+);
+
+-- ensure at most one user per vmid (for non-admin users)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_vmid ON users(vmid) WHERE vmid IS NOT NULL;
 """
 
 
@@ -152,6 +164,71 @@ class Db:
     async def get_port_notes(self) -> dict[str, str]:
         cur = await self.conn.execute("SELECT name, note FROM switch_port_notes")
         return {r["name"]: r["note"] for r in await cur.fetchall()}
+
+    # --- users (multi-user + roles) -------------------------------------------
+
+    async def create_user(self, username: str, password_hash: str, role: str = "user", vmid: int | None = None) -> int:
+        if role not in ("admin", "user"):
+            role = "user"
+        now = datetime.now(timezone.utc).isoformat()
+        cur = await self.conn.execute(
+            "INSERT INTO users (username, password_hash, role, vmid, created_at) VALUES (?, ?, ?, ?, ?)",
+            (username, password_hash, role, vmid, now),
+        )
+        await self.conn.commit()
+        return cur.lastrowid  # type: ignore
+
+    async def get_user_by_username(self, username: str) -> dict | None:
+        cur = await self.conn.execute(
+            "SELECT id, username, password_hash, role, vmid, created_at FROM users WHERE username = ?",
+            (username,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def get_user_by_id(self, uid: int) -> dict | None:
+        cur = await self.conn.execute(
+            "SELECT id, username, password_hash, role, vmid, created_at FROM users WHERE id = ?",
+            (uid,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def list_users(self) -> list[dict]:
+        cur = await self.conn.execute(
+            "SELECT id, username, role, vmid, created_at FROM users ORDER BY role DESC, username"
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def update_user_password(self, username: str, new_hash: str) -> None:
+        await self.conn.execute(
+            "UPDATE users SET password_hash = ? WHERE username = ?",
+            (new_hash, username),
+        )
+        await self.conn.commit()
+
+    async def update_user_vmid(self, username: str, vmid: int | None) -> None:
+        await self.conn.execute(
+            "UPDATE users SET vmid = ? WHERE username = ?",
+            (vmid, username),
+        )
+        await self.conn.commit()
+
+    async def delete_user(self, username: str) -> None:
+        await self.conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        await self.conn.commit()
+
+    async def ensure_bootstrap_admin(self, username: str, password_hash: str) -> None:
+        """If no users at all, create the initial admin from env (dev / first-run convenience)."""
+        cur = await self.conn.execute("SELECT COUNT(*) as c FROM users")
+        row = await cur.fetchone()
+        if row and row["c"] == 0 and username and password_hash:
+            now = datetime.now(timezone.utc).isoformat()
+            await self.conn.execute(
+                "INSERT INTO users (username, password_hash, role, vmid, created_at) VALUES (?, ?, 'admin', NULL, ?)",
+                (username, password_hash, now),
+            )
+            await self.conn.commit()
 
 
 def today_utc() -> str:

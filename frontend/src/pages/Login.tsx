@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api";
 
-export function Login({ onLogin }: { onLogin: () => void }) {
+export function Login({ onLogin }: { onLogin: (s?: any) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,8 +14,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await login(username, password);
-      onLogin();
+      const s = await login(username, password);
+      onLogin(s);
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");

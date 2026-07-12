@@ -27,8 +27,9 @@ const TAB_LABELS: Record<Tab, string> = {
   tasks: "Tasks & Logs",
 };
 
-export function VmDetailPage() {
-  const { vmid } = useParams<{ vmid: string }>();
+export function VmDetailPage({ currentRole: _role, myVmid: _myVmid }: { currentRole?: string; myVmid?: number | null }) {
+  const { vmid: vmidParam } = useParams<{ vmid: string }>();
+  const vmid = vmidParam;
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
   const [busyAction, setBusyAction] = useState<PowerAction | null>(null);

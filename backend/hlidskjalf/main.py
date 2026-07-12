@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+
+from .deps import get_db
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -14,7 +16,7 @@ from .config import get_settings
 from .datasources.rrd import RRDSource
 from .db import Db
 from .pve import PveClient, PveError
-from .routes import bandwidth, console, metrics, provision, rescue, switch, vms
+from .routes import bandwidth, console, metrics, provision, rescue, switch, users as users_route, vms
 
 log = logging.getLogger("hlidskjalf")
 
@@ -26,6 +28,10 @@ async def lifespan(app: FastAPI):
 
     app.state.db = Db(settings.db_path)
     await app.state.db.open()
+
+    # Bootstrap initial admin user from env if this is a fresh DB (dev + first remote deploy)
+    await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)
+
     app.state.pve = PveClient(settings)
     if settings.metrics_source != "rrd":
         from .datasources.prometheus import PrometheusSource
@@ -61,12 +67,30 @@ class LoginBody(BaseModel):
 
 
 @app.post("/api/login")
-async def login(body: LoginBody, response: Response):
+async def login(body: LoginBody, response: Response, db: Db = Depends(get_db)):
     auth.check_login_rate()
-    if not auth.verify_password(body.username, body.password):
-        raise HTTPException(401, "Bad username or password")
-    csrf = auth.start_session(response)
-    return {"ok": True, "csrf": csrf}
+
+    # Try DB user first
+    user = await auth.verify_user(db, body.username, body.password)
+    if not user:
+        # Legacy fallback for the very first time before users table seed
+        if not auth._legacy_verify(body.username, body.password):
+            raise HTTPException(401, "Bad username or password")
+        # On legacy success, make sure the bootstrap user exists now
+        user = await db.get_user_by_username(body.username) or {
+            "username": body.username,
+            "role": "admin",
+            "vmid": None,
+        }
+
+    csrf = auth.start_session(response, body.username)
+    return {
+        "ok": True,
+        "csrf": csrf,
+        "user": user["username"],
+        "role": user.get("role", "admin"),
+        "vmid": user.get("vmid"),
+    }
 
 
 @app.post("/api/logout")
@@ -76,8 +100,19 @@ async def logout(response: Response, _=Depends(auth.require_session)):
 
 
 @app.get("/api/session")
-async def session(value: str = Depends(auth.require_session)):
-    return {"user": get_settings().admin_user, "csrf": auth.csrf_for(value)}
+async def session(value: str = Depends(auth.require_session), db: Db = Depends(get_db)):
+    user = await auth.get_current_user(value, db)
+    return {
+        "user": user["username"],
+        "role": user.get("role", "admin"),
+        "vmid": user.get("vmid"),
+        "csrf": auth.csrf_for(value),
+    }
+
+
+@app.get("/api/me")
+async def me(value: str = Depends(auth.require_session), db: Db = Depends(get_db)):
+    return await auth.get_current_user(value, db)
 
 
 @app.get("/api/health")
@@ -94,6 +129,7 @@ app.include_router(provision.router)
 app.include_router(rescue.router)
 app.include_router(console.router)
 app.include_router(switch.router)
+app.include_router(users_route.router)  # new user management (admin only)
 
 
 # --- static SPA -------------------------------------------------------------

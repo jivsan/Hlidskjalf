@@ -13,8 +13,9 @@ import urllib.parse
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..auth import require_csrf, require_session
-from ..deps import get_pve, guard_protected, settings
+from ..auth import get_current_user, is_admin, require_csrf, require_session
+from ..deps import get_db, get_pve, guard_protected, settings
+from ..db import Db
 from ..pve import PveClient
 
 router = APIRouter()
@@ -29,7 +30,14 @@ def _net0(vlan: str | int, mac: str | None = None) -> str:
 
 
 @router.get("/api/templates")
-async def list_templates(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
+async def list_templates(
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     resources = await pve.cluster_resources()
     return [
         {"vmid": r["vmid"], "name": r.get("name")}
@@ -39,7 +47,14 @@ async def list_templates(pve: PveClient = Depends(get_pve), _=Depends(require_se
 
 
 @router.get("/api/provision/defaults")
-async def provision_defaults(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
+async def provision_defaults(
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     s = settings()
     resources = await pve.cluster_resources()
     used = {r["vmid"] for r in resources if r.get("vmid")}
@@ -120,7 +135,16 @@ def _validate_create(body: CreateVm) -> None:
 
 
 @router.post("/api/vms", status_code=201)
-async def create_vm(body: CreateVm, pve: PveClient = Depends(get_pve), _=Depends(require_csrf)):
+async def create_vm(
+    body: CreateVm,
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+    _=Depends(require_csrf),
+):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Only admins can create VMs")
     _validate_create(body)
     resources = await pve.cluster_resources()
     if any(r.get("name") == body.name for r in resources):
@@ -155,8 +179,16 @@ class Reinstall(BaseModel):
 
 @router.post("/api/vms/{vmid}/reinstall")
 async def reinstall_vm(
-    vmid: int, body: Reinstall, pve: PveClient = Depends(get_pve), _=Depends(require_csrf)
+    vmid: int,
+    body: Reinstall,
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+    _=Depends(require_csrf),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Only admins can reinstall VMs")
     guard_protected(vmid, "reinstall")
     resource = await pve.find_resource(vmid)
     if not resource:
@@ -223,8 +255,13 @@ async def destroy_vm(
     vmid: int,
     confirm_name: str = Body(embed=True),
     pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
     _=Depends(require_csrf),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Only admins can destroy VMs")
     guard_protected(vmid, "destroy")
     resource = await pve.find_resource(vmid)
     if not resource:

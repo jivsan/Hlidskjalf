@@ -1,0 +1,125 @@
+"""User management (admin only) + ownership helpers.
+
+Regular users get exactly one VM (like a VPS customer).
+Admins can create users, assign VMs, reset passwords, etc.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+import secrets
+
+from .. import auth
+from ..auth import get_current_user, is_admin, require_csrf, require_session
+from ..db import Db
+from ..deps import get_db
+
+router = APIRouter()
+
+
+class CreateUserBody(BaseModel):
+    username: str = Field(min_length=2, max_length=64)
+    password: str = Field(min_length=6)
+    role: str = "user"  # "admin" or "user"
+    vmid: int | None = None
+
+
+class PasswordBody(BaseModel):
+    password: str = Field(min_length=6)
+
+
+class AssignVmidBody(BaseModel):
+    vmid: int | None
+
+
+@router.get("/api/users")
+async def list_users(
+    username: str = Depends(require_session),
+    db: Db = Depends(get_db),
+):
+    me = await get_current_user(username, db)
+    if not is_admin(me):
+        raise HTTPException(403, "Admin only")
+    return await db.list_users()
+
+
+@router.post("/api/users", status_code=201)
+async def create_user(
+    body: CreateUserBody,
+    db: Db = Depends(get_db),
+    _csrf=Depends(require_csrf),
+    username: str = Depends(require_session),
+):
+    me = await get_current_user(username, db)
+    if not is_admin(me):
+        raise HTTPException(403, "Admin only")
+
+    existing = await db.get_user_by_username(body.username)
+    if existing:
+        raise HTTPException(409, "Username already exists")
+
+    if body.vmid is not None:
+        # Prevent assigning same VM to two users
+        users = await db.list_users()
+        if any(u.get("vmid") == body.vmid for u in users):
+            raise HTTPException(409, f"VM {body.vmid} is already assigned to another user")
+
+    pw_hash = auth.hash_password(body.password)
+    role = body.role if body.role in ("admin", "user") else "user"
+    uid = await db.create_user(body.username, pw_hash, role, body.vmid)
+    return {"id": uid, "username": body.username, "role": role, "vmid": body.vmid}
+
+
+@router.post("/api/users/{target}/password")
+async def set_password(
+    target: str,
+    body: PasswordBody,
+    db: Db = Depends(get_db),
+    _csrf=Depends(require_csrf),
+    username: str = Depends(require_session),
+):
+    me = await get_current_user(username, db)
+    if not is_admin(me) and not secrets.compare_digest(target, username):
+        raise HTTPException(403, "Can only change your own password (or be admin)")
+
+    new_hash = auth.hash_password(body.password)
+    await db.update_user_password(target, new_hash)
+    return {"ok": True}
+
+
+@router.post("/api/users/{target}/assign")
+async def assign_vmid(
+    target: str,
+    body: AssignVmidBody,
+    db: Db = Depends(get_db),
+    _csrf=Depends(require_csrf),
+    username: str = Depends(require_session),
+):
+    me = await get_current_user(username, db)
+    if not is_admin(me):
+        raise HTTPException(403, "Admin only")
+
+    if body.vmid is not None:
+        users = await db.list_users()
+        if any(u.get("username") != target and u.get("vmid") == body.vmid for u in users):
+            raise HTTPException(409, f"VM {body.vmid} already assigned")
+
+    await db.update_user_vmid(target, body.vmid)
+    return {"ok": True, "username": target, "vmid": body.vmid}
+
+
+@router.delete("/api/users/{target}")
+async def delete_user(
+    target: str,
+    db: Db = Depends(get_db),
+    _csrf=Depends(require_csrf),
+    username: str = Depends(require_session),
+):
+    me = await get_current_user(username, db)
+    if not is_admin(me):
+        raise HTTPException(403, "Admin only")
+    if secrets.compare_digest(target, username):
+        raise HTTPException(400, "Cannot delete yourself")
+
+    await db.delete_user(target)
+    return {"ok": True}

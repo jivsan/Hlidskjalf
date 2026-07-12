@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import require_csrf, require_session
+from ..auth import get_current_user, is_admin, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..pve import PveClient, PveError
@@ -15,20 +15,39 @@ PowerAction = Literal["start", "shutdown", "reboot", "stop", "reset"]
 DESTRUCTIVE_POWER = {"stop", "reset"}
 
 
+async def _ensure_vm_access(username: str, vmid: int, db: Db, pve: PveClient) -> dict:
+    """For regular users, force that they can only touch their assigned VM."""
+    user = await get_current_user(username, db)
+    if is_admin(user):
+        return user
+    if user.get("vmid") != vmid:
+        raise HTTPException(403, "You do not have access to this VM")
+    # Also verify the VM still exists on PVE side (defensive)
+    res = await pve.find_resource(vmid)
+    if not res:
+        raise HTTPException(404, "Your VM no longer exists")
+    return user
+
+
 @router.get("/api/vms")
 async def list_vms(
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
     resources = await pve.cluster_resources()
     rescued = set(await db.rescue_all())
+
     out = []
     for r in resources:
         if r.get("template") == 1:
             continue
+        vmid = r.get("vmid")
+        if not is_admin(user) and user.get("vmid") != vmid:
+            continue
         out.append({
-            "vmid": r.get("vmid"),
+            "vmid": vmid,
             "name": r.get("name"),
             "kind": pve.guest_kind(r),
             "status": r.get("status"),
@@ -42,8 +61,8 @@ async def list_vms(
             "netin": r.get("netin"),
             "netout": r.get("netout"),
             "tags": r.get("tags"),
-            "protected": r.get("vmid") in settings().protected_vmids,
-            "rescue": r.get("vmid") in rescued,
+            "protected": vmid in settings().protected_vmids,
+            "rescue": vmid in rescued,
         })
     out.sort(key=lambda v: v["vmid"] or 0)
     return out
@@ -64,8 +83,9 @@ async def vm_detail(
     vmid: int,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    username: str = Depends(require_session),
 ):
+    await _ensure_vm_access(username, vmid, db, pve)
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -133,8 +153,11 @@ async def power_action(
     vmid: int,
     action: PowerAction,
     pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
     _=Depends(require_csrf),
 ):
+    await _ensure_vm_access(username, vmid, db, pve)
     if action in DESTRUCTIVE_POWER:
         guard_protected(vmid, action)
     resource = await pve.find_resource(vmid)
@@ -153,7 +176,14 @@ async def upid_status(upid: str, pve: PveClient = Depends(get_pve), _=Depends(re
 
 
 @router.get("/api/tasks/recent")
-async def recent_tasks(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
+async def recent_tasks(
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     raw_tasks = await pve.get(f"/nodes/{pve.node}/tasks", limit=50) or []
 
     # Normalize task shapes for consistency between mock and real PVE:

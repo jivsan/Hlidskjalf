@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.2-alpha] - 2026-07-12
+
+### Added / Changed
+- **Multi-user support with Admin + User panels (VPS model)**:
+  - Regular users each tied to **exactly one VM** (like a VPS customer).
+  - Scoped access: users can only see/control their assigned VM (power, graphs, bandwidth, console, rescue, tasks).
+  - Users can view Switch activity page (for LLDP/rates/top-talkers context) but cannot edit notes.
+  - Admins get full Fleet, Provision, Node, user management, and global views.
+- New **Users admin page** (`/users`): create users, assign existing VM, reset passwords. Enforces one-VM-per-user.
+- Role-aware frontend: dynamic nav, home redirect for users to their VM, role badge in sidebar.
+- Backend: users table in SQLite, bootstrap from legacy admin env on first run, `get_current_user`, strict ownership checks on all per-VM and admin-only routes.
+- New endpoints: `/api/me`, `/api/users` (list/create/assign/password), richer `/api/login` + `/api/session` responses with `role` + `vmid`.
+- All existing features (eAPI switch, LLDP, bandwidth accounting/quotas, noVNC, etc.) now respect roles.
+- Improved "out of the box" for remote shipping: minimal config, UI-driven user/VM assignment after initial PVE token + switch setup.
+- Version bumped to 0.3.2-alpha. New screenshot gallery in `docs/screenshots/v0.3.2-alpha/`.
+- Updated handoff.md, READMEs, and docs to reflect the new admin/user experience.
+
+### Technical
+- DB schema extension + user CRUD + unique vmid index (non-null).
+- Refactored auth + every route (vms, provision, bandwidth, metrics, switch notes, rescue, console) for admin guards + user VM scoping.
+- Frontend: App.tsx role routing, Layout dynamic nav, new Users.tsx page, updated types/api.
+- Dev stack continues to work (mocks auto-seed data).
+
+See `docs/screenshots/v0.3.2-alpha/README.md` for visual comparison (admin fleet/users vs user single-VM view).
+
 ## [v0.3.1-alpha] - 2026-07-12
 
 ### Added / Changed
@@ -18,31 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stack runs in dev (mocks + backend + vite) for viewing changes.
 - PRs/branches coordinated and changes merged into feat/switch-react-faceplate (local + prior API merges).
 
-## [Unreleased]
 
-### Added / Changed (release engineer task)
-- Full dev stack verification run (`run_terminal_command`): mock_pve, backend (with switch env pointing to mock https), frontend. Confirmed `/switch` renders realistic React+CSS faceplate with no errors (52 ports from mock eAPI, live rates/LLDP/activity).
-- Updated/ran puppeteer script: screenshots saved `/tmp/v03-realistic-*.png` (full switch, focused faceplate crop, context), copied to `docs/screenshots/v0.3-alpha/`.
-- Branch `feat/switch-realistic-faceplate` created, relevant changes committed (detailed msg covering React/CSS impl, realism match to actual DCS-7050TX-48, alts considered), pushed.
-- GitHub API (token at `~/.hlidskjalf_gh_token`, python urllib) used to create PR titled exactly "feat(switch): realistic 1U physical faceplate for DCS-7050TX-48 using React+CSS". Result: existing PR #13 (https://github.com/jivsan/Hlidskjalf/pull/13) — body includes changes desc, physical match, alternatives (Canvas/CSS/DOM/image/Three.js; React+CSS chosen).
-- `handoff.md` + `CHANGELOG.md` updated with all steps, subagent/release actions, screenshots, PR link.
-- Faceplate: 1U realistic via React DOM + rich CSS (bevel chassis, recessed RJ45 w/ latch+pins, QSFP cages, vents, LEDs, labels). Clickable, live status blink, integrates with sidebar/notes/top-talkers. Exact hardware layout.
-
-### Changed
-- **Switch faceplate fully refactored from Canvas to pure declarative React + Tailwind/CSS** (feat/switch-react-faceplate):
-  - New small components: `Rj45Port` and `QsfpPort` (or render* helpers) with explicit TS `PortProps` (name, num, isUp, isActive, isSel, isHov, onClick, title/LLDP).
-  - Realistic physical 1U look: dark metal chassis (gradients + inset box-shadow bevels), rack ears with screw dots, top+bottom vent slots (repeating-linear-gradient), exact labels "ARISTA" "DCS-7050TX-48" "48×10GBASE-T + 4×40GbE QSFP+", row 1-24/25-48, left static mgmt ports + status LEDs.
-  - RJ45 ports: recessed jack body, latch notch, 8 contact pins (array spans), LED above (glass highlight + CSS blink on active).
-  - QSFP: cage with gradient+border, 4 lane dividers, LED, 40G badge.
-  - Interactivity preserved + enhanced: hover/click select integrates with existing selected + details panel (LLDP, note editor, rates, top talkers).
-  - All live data from portMap, graceful fallback (no data = all down/red), aria-labels + titles with LLDP.
-  - ErrorBoundary `FaceplateErrorBoundary` wraps faceplate (TS class; shows graceful msg, doesn't crash page).
-  - Updated index.css: detailed rules for .rj45-port/.port-led/.jack/.recess/.contacts, .qsfp-port/.cage/.lanes, .arista-chassis etc. with realistic shadows/gradients/animations (no blocky).
-  - Removed all canvas/RAF/geoms/draw* code, unused refs, cleaned comments and footer/header texts.
-  - Perf good for 52 ports (React fine, CSS-driven blink).
-  - No backend changes. tsc + dev build clean.
-  - Branch suggestion: `feat/switch-react-faceplate`.
-- Coordinated with prior robustness (usePoll last-data, notes debounce, error states kept).
 
 ### Changed
 - **Switch faceplate refactored to declarative React components** (divs, buttons + Tailwind/CSS, no Canvas/SVG):
@@ -59,32 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Branch: `feat/switch-react-faceplate`.
 - Prior canvas work (feat/switch-realistic-physical) superseded by this React refactor per request.
   - Realistic physical Arista DCS-7050TX-48 1U viz: 48×10GBASE-T RJ45 (two rows), 4×40G QSFP+ stacked right.
-  - Left-side console (CON), USB, MGMT ports + status LEDs (SYS/FAN/PS1/PS2) drawn.
-  - Multi-layer gradients, shadows, bevels, speculars for metal/plastic depth and 3D rack look (no blocky/cartoon).
-  - Custom port drawing: RJ45 with latch notch + 8 contacts; QSFP cages with 4-lane slots.
-  - Per-port LEDs above jacks with accurate blink (time-sin based on .active from portMap).
-  - Selection rings (pink), hover feedback.
-  - Full hit-detection via mouse coord mapping to portGeoms.
-  - High-DPI (devicePixelRatio) support + RAF redraw loop.
-  - Aspect-ratio wrapper + rack ears/bezel preserved for framed physical rack aesthetic.
-  - Integrated with existing portMap/selected/data for status, activity, selection.
-  - Updated comments + UI labels (removed all SVG refs).
-  - CSS: .faceplate-wrapper + .canvas-faceplate; minor bezel padding tweak.
-  - Performance: tiny static+light anim canvas, no issue.
-  - Build clean; no backend changes.
-- **Branch**: `feat/switch-realistic-physical` (pushed; PR #11 created via API: https://github.com/jivsan/Hlidskjalf/pull/11 ).
-- Full dev stack tested: mock_pve + backend (switch config to mock_switch https) + frontend (vite).
-
-### Decisions: why Canvas, alternatives considered
-User request: non-cartoon realistic 1U faceplate (and alternatives).
-- **Chosen: Canvas** (2D HTML5 Canvas + JS draw): full programmatic control over shading, custom shapes (precise RJ45 recess/clip/pins, QSFP slots), time-based live LED activity blink (no CSS keyframes), geometry hit-test for clicks/hover, high-DPI scaling, RAF for smooth without perf DOM cost. Matches hardware exactly, easy to maintain/extend.
-- **CSS (rejected)**: insufficient for non-rect complex recessed jack geometry + speculars + exact 1U spacing + dynamic per-port blink intensity based on live bps; hit areas require extra JS anyway; alignment fragile.
-- **pure DOM (many divs/absolute els + bg)**: 50+ elements per faceplate = bloat, z-index/zoom/resize issues, slow for anim, poor for bevel depth without many pseudo/grad hacks.
-- **image + overlays (PNG/SVG bg + pos LEDs + map areas)**: static image can't react to live rates (blinks stay cartoon), hard to sync descriptions/LEDs, imprecise hit on responsive, update burden for "physical" tweaks.
-- **Three.js / WebGL / react-three-fiber (rejected)**: gross overkill for flat 2D panel (no perspective needed); adds ~100k+ bundle, GPU deps, complexity; Canvas 2D is native, zero-dep, sufficient + faster for this use case.
-
-All documented; stack verified end-to-end before branch/PR. See handoff.md for git cmds, stack start, PR body.
-
 ## [0.3.0-alpha] - 2026-07-12
 
 ### Added

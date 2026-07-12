@@ -6,9 +6,10 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import require_session
+from ..auth import get_current_user, is_admin, require_session
 from ..db import Db
-from ..deps import get_db, settings
+from ..deps import get_db, get_pve, settings
+from ..pve import PveClient
 
 router = APIRouter()
 
@@ -31,8 +32,12 @@ async def vm_bandwidth(
     from_: str | None = Query(None, alias="from"),
     to: str | None = None,
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    pve: PveClient = Depends(get_pve),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user) and user.get("vmid") != vmid:
+        raise HTTPException(403, "You do not have access to this VM's bandwidth")
     if from_ is None or to is None:
         from_, to = _current_month_bounds()
     if not DATE_RE.match(from_) or not DATE_RE.match(to):
@@ -57,8 +62,12 @@ async def vm_bandwidth_monthly(
     vmid: int,
     year: int | None = None,
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    pve: PveClient = Depends(get_pve),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user) and user.get("vmid") != vmid:
+        raise HTTPException(403, "You do not have access to this VM's bandwidth")
     year = year or datetime.now(timezone.utc).year
     rows = {r["month"]: r for r in await db.bandwidth_monthly(vmid, year)}
     months = []
@@ -77,8 +86,11 @@ async def vm_bandwidth_monthly(
 async def bandwidth_summary(
     month: str | None = None,
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    username: str = Depends(require_session),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Admin only")
     if month is None:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
     if not MONTH_RE.match(month):

@@ -1,10 +1,35 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (fourth update — PRs #1–#4 all merged; main is green:
-50 backend tests + frontend tsc/build). The design source of truth is `plan.md`;
-this file is only "what is done / what's next"._
+_Last updated: 2026-07-12 (v0.3.2-alpha release — multi-user admin/user panels, VPS model, scoped one-VM-per-user, full docs + screenshots). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## ⚡ Current state — all merged, main green
+## ⚡ Current state — v0.3.2-alpha (Multi-user Admin + User panels landed)
+
+**Major release**: Transformed from single-admin homelab panel into a flexible VPS-style control surface that can be shipped remotely with minimal config.
+
+- **Admin panel**: Full fleet, provision new VMs, Users management (create/assign/reset), node, complete switch activity + notes.
+- **User panel**: Each non-admin gets **exactly one VM**. Auto-redirect home, scoped views only for their VM (power, graphs, bandwidth/quotas, console, tasks, rescue). Can still see Switch for activity context.
+- Backend: users table, bootstrap from legacy admin hash, strict role + vmid scoping on every route.
+- Frontend: role-driven navigation, Layout shows user + role, dedicated Users.tsx admin page, updated App routing.
+- "Out of the box": first run seeds admin; everything else (add customers + assign VMs) is UI driven. Same PVE token + switch eAPI model.
+- Dev stack fully verified post-changes (mocks + backend + vite). Login flows tested for both roles.
+- Version bumped everywhere (pyproject 0.3.2-alpha, package.json, docs).
+- New gallery: `docs/screenshots/v0.3.2-alpha/` with live captures of admin fleet/users/provision + user "My VM" + switch.
+
+**Screenshots captured** via puppeteer against live 5173 (admin + demo user):
+- admin-fleet.png, admin-users.png, admin-provision.png, admin-switch.png
+- user-my-vm.png, user-switch.png
+
+All prior switch faceplate / eAPI / LLDP work preserved and now available in both panels.
+
+See new `docs/screenshots/v0.3.2-alpha/README.md` and updated CHANGELOG + main README.
+
+## Previous releases (archived)
+
+### v0.3.1-alpha (React faceplate) and prior
+
+(History from PRs #1–#4 and earlier faceplate work follows; design source of truth remains `plan.md`.)
+
+## ⚡ Archived PR history (v0.3.1 and prior)
 
 `main` now contains PRs #1–#4 (all merged, branches deleted). Verified on the
 merged tree: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.

@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import require_session
+from ..auth import get_current_user, is_admin, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db, get_switch
 from ..switch import AristaClient, PortInfo
@@ -66,8 +66,12 @@ async def set_port_note(
     name: str,
     payload: dict,
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    username: str = Depends(require_session),
+    _=Depends(require_csrf),
 ):
+    user = await get_current_user(username, db)
+    if not is_admin(user):
+        raise HTTPException(403, "Only admins can edit port notes")
     note = payload.get("note", "")
     if not isinstance(note, str):
         raise HTTPException(400, "note must be a string")
