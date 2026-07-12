@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security (hardening batch — PRs #16–#19)
+- **Fixed CSRF login token that broke every mutation** (PR #16): `start_session`
+  handed out `csrf_for(signed_cookie)` while `require_csrf`/`/api/session` expect
+  `csrf_for(username)`, so all authenticated POST/PUT/DELETE got 403. Also greened
+  16 failing tests that had been merged red.
+- **Console IDOR + rescue broken-access-control** (PR #17): `GET /api/vms/{vmid}/console`
+  was unscoped (any user could open any tenant's VNC console); rescue enter/exit had
+  no ownership/admin check and no protected-VMID guard (any user could reboot any VM
+  into the rescue ISO, incl. heimdall which hosts the panel). Both now enforce
+  `_ensure_vm_access`; rescue-enter also refuses protected VMIDs for everyone.
+- **Hardening** (PR #18): exception handler no longer leaks tracebacks/`error_type`
+  to clients (kept in logs + admin `/api/debug/errors`); session cookie `Secure`
+  now configurable (`HLIDSKJALF_COOKIE_SECURE`, default true); switch eAPI TLS is
+  verified/pinnable (`switch_fingerprint`/`switch_verify`) instead of `verify=False`;
+  env admin-hash login only works during fresh bootstrap (no permanent backdoor);
+  login rate limit is now per-client-IP (was one global bucket → trivial lockout DoS).
+- **Authz test coverage + robustness** (PR #19): first real tests of the multi-user
+  model (per-VM scoping + admin-only guards); `users` endpoints 404 on missing target
+  and refuse deleting the last admin; removed a duplicated `get_status`.
+- Full backend suite: **98 passing**.
+
 ### Added / Changed (Debug section)
 - **Debug section** (admin-only, gated by `HLIDSKJALF_DEBUG=true`):
   - New `/api/debug/*` endpoints: `/config` (redacted), `/health` (detailed), `/errors`, `/logs`, `/accumulator`.

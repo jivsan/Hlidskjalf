@@ -1,6 +1,23 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (v0.3.2-alpha release — multi-user admin/user panels, VPS model, scoped one-VM-per-user, full docs + screenshots). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-12 (security/robustness batch merged — PRs #16–#19; main green, 98 backend tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+
+## ⚡ Current state — security hardening batch landed
+
+`main` (post-merge) is GREEN: **98 backend tests pass**, `tsc`/`build` clean. Merged this batch:
+- **PR #16** — fixed a CSRF bug that made every authenticated mutation 403 (and had been merged RED, 16 failing tests). One-line fix; suite restored.
+- **PR #17** — closed console IDOR + rescue broken-access-control (+ protected-VMID guard on rescue). The rescue hole let any user reboot any VM incl. heimdall (hosts the panel).
+- **PR #18** — hardening: no traceback leak to clients; `Secure` cookie (`HLIDSKJALF_COOKIE_SECURE`, default true); switch eAPI TLS verify/pin; legacy env-admin login only during bootstrap; per-IP login rate limit.
+- **PR #19** — first authz test coverage + users 404/last-admin fixes + removed dup `get_status`.
+- Post-merge test-only fix on main: `test_authz_scoping` used vmid 105 which `test_access_control` already assigns in the session-scoped DB → moved it to vmid 120 (they collided only when run together).
+
+### Still TODO (next session)
+1. **Screenshots gallery `docs/screenshots/v0.3.3.3-alpha/`** — the screenshots agent (branch `docs/screenshots-v0.3.3.3`) died in the VPS crash with NOTHING captured; re-run it. It must bring up the full stack (mock_pve on a spare port + mock_switch + backend serving built frontend), log in as admin AND a demo user, and shoot: admin fleet/provision/users/switch/node/**debug** (run backend with `HLIDSKJALF_DEBUG=true`) + user my-vm/switch. Mirror `docs/screenshots/v0.3.2-alpha/` (has a `capture.js` template). Chromium at `/usr/bin/chromium`.
+2. **Branch protection is NOT available** on this private repo without GitHub Pro — both the classic branch-protection API and the Rulesets API return "Upgrade to GitHub Pro or make this repository public." Options: pay for Pro, make the repo public (NOT recommended — plan.md exposes homelab IPs/hostnames), or keep the current discipline (I verify local pytest green + scope before every merge). Nothing was applied.
+3. Stale remote branches to prune (all merged/abandoned): `feat/switch-*` (many), `feat/debug-section`, `feat/normalize-pve-shapes`, `feat/v0.3.2-alpha-multi-user`.
+4. Optional follow-ups: `/api/tasks/{upid}/status` is unscoped (low-sensitivity IDOR); frontend robustness pass (error boundary + defensive rendering on Users/Debug/Switch) was never done.
+
+## Previous state (v0.3.2-alpha)
 
 ## ⚡ Current state — v0.3.2-alpha (Multi-user Admin + User panels landed)
 

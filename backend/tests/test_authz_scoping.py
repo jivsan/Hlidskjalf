@@ -13,7 +13,8 @@ from conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_headers
 
 SCOPED_USER = "scope-cust"
 SCOPED_PW = "scopepw123"
-VMID_A = 105  # normal mock vmid, owned by the scoped user
+VMID_A = 120  # normal mock vmid, owned by the scoped user (120 avoids the
+              # session-DB collision with test_access_control, which assigns 105)
 VMID_B = 115  # normal mock vmid, NOT owned by the scoped user
 
 
