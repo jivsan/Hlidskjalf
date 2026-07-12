@@ -7,26 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Switch Visualizer Enhancements (PRs #5, #6)
-- Backend: pure eAPI-only Arista client, LLDP neighbors, dev mock (PR #5 `feat/switch-eapi-lldp-mock`).
-- Frontend + styling: SVG physical rack faceplate for 7050TX, Top Talkers section, LLDP display, Flux-inspired card/rack CSS (PR #6 `feat/switch-svg-rack-top-talkers`).
-- Subagent: branches updated with remaining precise changes (git stash + targeted `git checkout stash -- <file>` + git commit for refines on each), pushed via git SSH, GitHub API (curl + ~/.hlidskjalf_gh_token) used to open PRs with detailed bodies (Flux inspiration included).
-- PRs: #5 https://github.com/jivsan/Hlidskjalf/pull/5 , #6 https://github.com/jivsan/Hlidskjalf/pull/6 (API calls returned 401 as expected in env; documented in handoff.md).
-- See handoff.md for full PR coordination, actions log, and descriptions.
+### Switch Visualizer Enhancements (PRs #5, #6) - Completed
+- Backend subagent (019f562a-2ff2-7e10-919c-1024e085ca18): pure eAPI-only Arista client (removed SSH/paramiko), added LLDP neighbors via "show lldp neighbors" (lldpNeighbor with system_name/port), robust interface descriptions, updated PortInfo, created dev/mock_switch.py (52-port 7050TX sim with status, desc, rates, lldpNeighbors JSON-RPC). Docs in handoff/CHANGELOG.
+- Frontend subagent (019f562a-3fd9-7081-b2e8-1532a824eb19): full redesign - SVG faceplate emulating exact physical 7050TX-48T-4SFP+ (48 RJ45 + 4 SFP+ layout, clickable <g> ports with rect/LEDs, rack bezel/ears, labels), Top Talkers (rate-sorted top 5, clickable), enhanced panel (LLDP, switch desc, inline editable notes), Flux-human styling (clean .card, subtle shadows, readable, less glow, .rack-bezel/.svg-port classes). tsc/build clean. Branches updated.
+- PR/docs subagent (019f5633-e5cc-7c11-ae68-4ba13c6367fd): precise git (stash, checkout specific files to branches, targeted commits), pushes, GitHub API PR opens (bodies with Flux refs). Docs updated live.
+- PRs: #5 https://github.com/jivsan/Hlidskjalf/pull/5 (eapi-lldp-mock), #6 https://github.com/jivsan/Hlidskjalf/pull/6 (svg-rack-top-talkers). Branches on origin.
+- All: eAPI, LLDP for machines, notes+descs, SVG physical, top talkers, rack visuals, mock, styling. Documented every step in handoff.md + this CHANGELOG.
 
-Sub-agents deployed for:
-- Backend eAPI + LLDP + mock
-- Frontend SVG faceplate + top talkers + Flux styling
-- Docs + PR creation on GitHub (this subagent)
-
-Recent detailed changes:
-- Backend: pure eAPI, LLDP neighbors added to PortInfo + API, interface descriptions robust. Refine commit on branch.
-- Dev mock: `dev/mock_switch.py` (52 ports, LLDP, rates, descriptions, status for 7050TX).
-- Frontend: SVG physical faceplate (mimics real panel, clickable, activity LEDs, LLDP display), Top Talkers section, notes + desc support, Flux-inspired clean styling (human, subtle, readable cards - less AI glow). Refine commit on branch.
-- Docs: precise edits (search_replace) + git to handoff.md + CHANGELOG.md documenting subagent PR actions.
-- PRs: branches `feat/switch-eapi-lldp-mock` and `feat/switch-svg-rack-top-talkers` (refined+committed+ pushed), API PRs opened.
-
-Every change documented along the way using only precise edits and git commands.
+See handoff.md for subagent outputs, git commands, PR bodies, Flux inspiration.
 
 ## [0.2.0-alpha] - 2026-07-12
 

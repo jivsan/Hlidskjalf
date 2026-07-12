@@ -1,15 +1,17 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (subagent: created/updated feat/switch-eapi-lldp-mock + feat/switch-svg-rack-top-talkers with remaining precise changes via stash+git checkout+commit; pushed via git; GitHub API PR creation via curl + ~/.hlidskjalf_gh_token (401 expected); PRs #5/#6 documented. Flux inspiration included.).
+_Last updated: 2026-07-12 (subagents completed: backend 019f562a-2ff2... pure eAPI+LLDP+mock; frontend 019f562a-3fd9... SVG faceplate+top talkers+Flux styling; PRs via subagent). PRs #5/#6 on GitHub. All changes documented.
 The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-**Recent session work:** Backend pure-eAPI + LLDP + mock_switch on `feat/switch-eapi-lldp-mock`; frontend SVG rack + top talkers + styling on `feat/switch-svg-rack-top-talkers`. Subagent deployed: branches updated (existing + precise remaining via git stash + checkout specific files from stash + commit refines), pushed (git), PRs opened via GitHub API (curl + token). Docs updated here + CHANGELOG with actions.
+**Recent session work:** 
+- Backend subagent 019f562a-2ff2-7e10-919c-1024e085ca18 completed: pure eAPI (no SSH), LLDP via eAPI, dev/mock_switch.py (52-port 7050TX with LLDP/rates/desc/status), PortInfo updates, docs.
+- Frontend subagent 019f562a-3fd9-7081-b2e8-1532a824eb19 completed: SVG physical faceplate (exact 7050TX-48T-4SFP+ layout with bezel/rack ears, clickable ports/LEDs for status/activity/LLDP, rack-like), Top Talkers (rate-sorted), enhanced panel with LLDP+descriptions+inline notes, Flux-human styling (clean cards, subtle depth, readable, less glow).
+- PR subagent completed branch/PR actions.
+Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (pushed). PRs #5/#6 via API (Flux refs in bodies). All documented live in handoff + CHANGELOG.
 
-- Integrated LLDP into routes + frontend cards (shows connected machines).
-- SVG faceplate now in UI (physical 7050TX layout, clickable ports, activity LEDs, rack bezel).
-- Top talkers section added.
-- Styling refined for Flux-like human feel (cleaner cards, subtle, readable).
-- Subagent 019f562a-2ff2-7e10-919c-1024e085ca18 completed backend/mocks. Frontend updates done. All changes documented.
+- LLDP for "what machine where" + notes + descriptions.
+- SVG faceplate + top talkers + rack visuals.
+- Dev mock + styling tweaks (Flux-like human).
 
 **Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
 
