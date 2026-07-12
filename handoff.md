@@ -261,3 +261,12 @@ v0.3-alpha screenshots section created for comparison including switch.
 - Pushed to main. Now visible on GitHub.
 
 See docs/screenshots/v0.3-alpha/README.md for the comparison including the new switch UI.
+
+**Canvas faceplate update (user request for physical 1U non-cartoon):**
+- Replaced SVG with Canvas in Switch.tsx for realistic look.
+- Added 1U chassis with bevels, rack ears, detailed RJ45 (recess, clip), QSFP cages, vents, screws, exact labels.
+- Alternatives documented: Canvas (chosen), CSS 3D, image+overlays, Three.js.
+- Subagents deployed for redesign, robustness, dev/PR.
+- Branch: feat/switch-realistic-canvas-1u , PR #10 created.
+- Code more robust (DPR, hit detection, graceful).
+- New screenshots to be captured and added to v0.3-alpha.
