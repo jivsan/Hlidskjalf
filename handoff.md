@@ -30,10 +30,10 @@ merged tree: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.
   `## Screenshots`.
 
 **Flagged backend follow-ups (from PR #4, worked around in the frontend, not yet
-fixed):** `/api/node` returns raw PVE shape (nested `memory`/`rootfs`, cores in
-`cpuinfo.cpus`, no flat `maxcpu`) and `/api/tasks/recent` passes tasks verbatim
-(`status` vs `exitstatus`). The frontend now tolerates both mock and real PVE;
-the backend *could* normalize these. Non-blocking — worth a small PR later.
+fixed):** resolved by this PR (see below). Previously: `/api/node` returned raw
+PVE shape (nested `memory`/`rootfs`, cores in `cpuinfo.cpus`, no flat `maxcpu`)
+and `/api/tasks/recent` passed tasks verbatim (`status` vs `exitstatus`).
+The frontend tolerated both; backend now normalizes for consistency.
 
 **GitHub API access:** a fine-grained PAT (repo `jivsan/Hlidskjalf`, push/PR,
 expires 2026-08-11, but pasted in chat once → rotate it) is stored at
@@ -113,10 +113,7 @@ cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
 
 ## Immediate next steps (in order)
 
-1. Optional small PR: normalize the two backend responses flagged by PR #4
-   (`/api/node` nested memory/rootfs + `cpuinfo.cpus`; `/api/tasks/recent`
-   `status` vs `exitstatus`) so the mock and real PVE agree. Frontend already
-   tolerates both, so non-blocking.
+1. ~~Optional small PR: normalize...~~ **DONE in this PR** (`feat/normalize-pve-shapes`).
 2. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
    `nix flake check`.
 4. Real deployment (Christina, manual). Two paths now:

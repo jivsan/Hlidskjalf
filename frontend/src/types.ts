@@ -73,8 +73,9 @@ export interface RecentTask {
   user: string;
   starttime: number;
   endtime?: number;
-  // PVE reports the run state in `status` and the result in `exitstatus`; some
-  // list endpoints instead put "OK"/error directly in `status`. Handle both.
+  // Backend normalizes /api/tasks/recent so "status" is the run state
+  // ("running"|"stopped") and "exitstatus" holds the result. We remain tolerant
+  // of raw PVE shapes from other endpoints.
   status?: string;
   exitstatus?: string;
 }
@@ -106,8 +107,8 @@ export interface NodeStorage {
 
 export interface NodeInfo {
   name: string;
-  // PVE /nodes/{node}/status shape (passed through verbatim by the backend):
-  // memory/rootfs are nested objects; core count lives in cpuinfo on real PVE.
+  // Normalized by backend (see routes/metrics.py): flat maxcpu/mem/maxmem are
+  // guaranteed in addition to any nested PVE originals.
   status: {
     cpu: number;
     maxcpu?: number;

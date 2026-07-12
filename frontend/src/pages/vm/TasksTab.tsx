@@ -9,8 +9,7 @@ function exitChip(task: RecentTask) {
   if (task.endtime == null) {
     return <span className="text-amber">running</span>;
   }
-  // Prefer the explicit exit result; fall back to `status` for PVE variants
-  // that report "OK"/error directly there.
+  // Backend normalizes recent tasks; fall back for raw shapes from /tasks/{upid}/status etc.
   const result = task.exitstatus ?? task.status;
   if (result === "OK") {
     return <span className="text-cyan">OK</span>;

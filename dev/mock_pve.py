@@ -255,8 +255,11 @@ async def node_rrd(node: str, timeframe: str = "hour", cf: str = "AVERAGE"):
 @app.get("/api2/json/nodes/{node}/status")
 async def node_status(node: str):
     return {"data": {
-        "cpu": 0.18, "maxcpu": 16, "uptime": int(time.time() - BOOT + 86400 * 30),
+        "cpu": 0.18, "uptime": int(time.time() - BOOT + 86400 * 30),
         "loadavg": ["0.42", "0.51", "0.48"],
+        # Simulate real PVE shape: no flat maxcpu/mem/maxmem at top level.
+        # Cores live in cpuinfo; memory in nested object.
+        "cpuinfo": {"cpus": 16, "cores": 8},
         "memory": {"used": 26 << 30, "total": 64 << 30, "free": 38 << 30},
         "rootfs": {"used": 30 << 30, "total": 100 << 30},
         "pveversion": "pve-manager/8.3.0 (mock)",
