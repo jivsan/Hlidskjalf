@@ -16,7 +16,7 @@ async def list_ports(
     db: Db = Depends(get_db),
     _=Depends(require_session),
 ) -> list[dict]:
-    """Return current port status with activity + merged notes."""
+    """Return current port status with activity + merged notes + LLDP."""
     raw_ports: list[PortInfo] = await client.get_ports()
     notes = await db.get_port_notes()
 
@@ -35,6 +35,7 @@ async def list_ports(
                 "inputRate": p.input_rate,
                 "outputRate": p.output_rate,
                 "active": p.active,
+                "lldpNeighbor": p.lldp_neighbor,
             }
         )
     return result
