@@ -1,6 +1,7 @@
 # Hlidskjalf
 
-> *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.
+> *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
+> **CYBERPUNK SERVER ROOM EDITION** — cyan & pink neon in the rack. v0.2-alpha
 
 A self-hosted, single-admin VPS control panel for the **hella** Proxmox host:
 fleet overview, live graphs, per-VM bandwidth accounting with monthly charts and
@@ -14,14 +15,19 @@ setup on hella.
 
 ## Screenshots
 
-The screenshot gallery is maintained in its own versioned folder for easy tracking across releases:
+```
+  [ CYAN / PINK SERVER ROOM FEEDS ]
+  ╔════════════════════════════════════════════════════╗
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.2-alpha ║
+  ╚════════════════════════════════════════════════════╝
+```
 
-**📁 [docs/screenshots/](docs/screenshots/)**
+Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
+Live v0.2-alpha feeds: [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 
-- **Current:** [v0.2-alpha](docs/screenshots/v0.2-alpha/README.md)
-- Images are taken against the mock PVE (`dev/mock_pve.py`).
+All shots captured against the development mock PVE (`dev/mock_pve.py`).
 
-See the versioned directory for the full gallery with descriptions.
+> The control surface glows in the dark. Welcome to the server room.
 
 ## Layout
 

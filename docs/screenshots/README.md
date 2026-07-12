@@ -1,14 +1,30 @@
-# Screenshots
+# 🖥️  SERVER ROOM ARCHIVE
 
-This directory contains versioned screenshots of the Hlidskjalf control panel.
+```
+  ╔══════════════════════════════════════════════════════════╗
+  ║   H L I D S K J A L F   //   C O N T R O L   R O O M     ║
+  ║   NEON: #2DE2E6 (CYAN)  +  #FF4FA3 (PINK)                ║
+  ║   RACK: 47  |  SUBLEVEL: TOKYO NIGHT  |  v0.2-alpha      ║
+  ╚══════════════════════════════════════════════════════════╝
+```
 
-## Versioning
+**ACCESS GRANTED** — You are inside the cyan-pink server room.
 
-Screenshots are organized by release version to track UI evolution.
+Live telemetry feeds from the Hlidskjalf panel are archived here by version.
 
-- [v0.2-alpha](v0.2-alpha/README.md) — Current (Tokyo Night, v0.2-alpha)
-- Older versions will be archived here as the project evolves.
+## RACK FEEDS BY VERSION
 
-All images are captured against the development mock PVE server (`dev/mock_pve.py`).
+| VERSION     | STATUS     | DESCRIPTION                              | ACCESS |
+|-------------|------------|------------------------------------------|--------|
+| **v0.2-alpha** | ACTIVE     | Futuristic Tokyo Night control surface. Blinking network LEDs. Dashboard fleet. | [ENTER →](v0.2-alpha/README.md) |
+| (future)    | PENDING    | Next rack calibration                    | — |
 
-See the main [README.md](../README.md#Screenshots) for the embedded gallery.
+All captures are taken against the development mock PVE (`dev/mock_pve.py`) running inside the rack.
+
+> "The high seat overlooks hella. The lights never sleep."
+
+Back to main control: [../README.md](../README.md)
+
+---
+
+**END OF LOG** — NEON STABLE
