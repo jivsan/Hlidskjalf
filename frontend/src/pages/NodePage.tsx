@@ -25,10 +25,10 @@ export function NodePage() {
   const points = metrics.data ?? [];
   const st = info?.status;
   const loadavg = Array.isArray(st?.loadavg) ? st.loadavg.join(" ") : null;
-  // PVE nests memory under status.memory (used/total); real PVE has no flat
-  // maxcpu — the core count lives in cpuinfo.cpus. Tolerate both shapes.
-  const memUsed = st?.memory?.used ?? st?.mem ?? null;
-  const memTotal = st?.memory?.total ?? st?.maxmem ?? null;
+  // Backend now normalizes /api/node so flat mem/maxmem/maxcpu are always present,
+  // but we keep fallback for older deploys or direct PVE shapes.
+  const memUsed = st?.mem ?? st?.memory?.used ?? null;
+  const memTotal = st?.maxmem ?? st?.memory?.total ?? null;
   const cores = st?.maxcpu ?? st?.cpuinfo?.cpus ?? null;
 
   const pct0 = (v: number) => formatPercent(v, 0);

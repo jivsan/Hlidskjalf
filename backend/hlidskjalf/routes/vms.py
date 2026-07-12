@@ -154,5 +154,24 @@ async def upid_status(upid: str, pve: PveClient = Depends(get_pve), _=Depends(re
 
 @router.get("/api/tasks/recent")
 async def recent_tasks(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
-    tasks = await pve.get(f"/nodes/{pve.node}/tasks", limit=50)
-    return tasks or []
+    raw_tasks = await pve.get(f"/nodes/{pve.node}/tasks", limit=50) or []
+
+    # Normalize task shapes for consistency between mock and real PVE:
+    # - "status" should be the run state ("running" | "stopped")
+    # - "exitstatus" should hold the result ("OK" or error string)
+    # Some PVE task list responses put the final result directly in "status".
+    normalized = []
+    for t in raw_tasks:
+        t = dict(t)  # shallow copy
+        status = t.get("status")
+        exitstatus = t.get("exitstatus")
+        if exitstatus is None and status not in (None, "running", "stopped"):
+            # PVE variant put result in status field
+            exitstatus = status
+            status = "stopped"
+        t["status"] = status
+        if exitstatus is not None:
+            t["exitstatus"] = exitstatus
+        normalized.append(t)
+
+    return normalized

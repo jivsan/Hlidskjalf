@@ -40,11 +40,25 @@ async def node_metrics(
 
 @router.get("/api/node")
 async def node_info(pve: PveClient = Depends(get_pve), _=Depends(require_session)):
-    status = await pve.get(f"/nodes/{pve.node}/status")
+    raw = await pve.get(f"/nodes/{pve.node}/status") or {}
     storage = await pve.get(f"/nodes/{pve.node}/storage")
+
+    # Normalize PVE shape variations:
+    # - Some responses have flat maxcpu/mem/maxmem
+    # - Real PVE often nests memory under .memory and cpu cores under cpuinfo.cpus
+    # Always provide flat fields the frontend prefers, while keeping raw nested data.
+    mem_info = raw.get("memory") or {}
+    cpuinfo = raw.get("cpuinfo") or {}
+    normalized_status = {
+        **raw,
+        "maxcpu": raw.get("maxcpu") or cpuinfo.get("cpus"),
+        "mem": raw.get("mem") or mem_info.get("used"),
+        "maxmem": raw.get("maxmem") or mem_info.get("total"),
+    }
+
     return {
         "name": pve.node,
-        "status": status,
+        "status": normalized_status,
         "storage": [
             {
                 "storage": s.get("storage"),
