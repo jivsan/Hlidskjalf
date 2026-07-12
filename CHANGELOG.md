@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CSS: .faceplate-wrapper + .canvas-faceplate; minor bezel padding tweak.
   - Performance: tiny static+light anim canvas, no issue.
   - Build clean; no backend changes.
-- **Branch**: `feat/switch-realistic-physical` (pushed; PR #11 created via API).
+- **Branch**: `feat/switch-realistic-physical` (pushed; PR #11 created via API: https://github.com/jivsan/Hlidskjalf/pull/11 ).
 - Full dev stack tested: mock_pve + backend (switch config to mock_switch https) + frontend (vite).
 
 ### Decisions: why Canvas, alternatives considered

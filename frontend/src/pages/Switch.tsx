@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { api } from "../api";
 import { useToast } from "../components/Toast";
 import { ErrorState, LoadingState } from "../components/ui";
@@ -13,11 +13,13 @@ export function SwitchPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
 
+  // Poll returns the new {ports, error?} shape. usePoll preserves .data on errors (last-known).
   const portsPoll = usePoll(
     () => api.get<SwitchPortsResponse>("/api/switch/ports"),
     4000
   );
 
+  // Debounced auto-save for notes (robustness requirement).
   const saveTimerRef = useRef<number | null>(null);
   const scheduleDebouncedSave = useCallback((name: string, note: string) => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -25,15 +27,22 @@ export function SwitchPage() {
       try {
         await api.post(`/api/switch/ports/${encodeURIComponent(name)}/note`, { note: note.trim() });
         portsPoll.refresh();
-      } catch {}
+      } catch (e) {
+        /* debounce auto-save is best-effort */
+      }
     }, 650);
   }, [portsPoll]);
 
   const saveNote = async (name: string) => {
-    if (saveTimerRef.current) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     const noteVal = noteDraft.trim();
     try {
-      await api.post(`/api/switch/ports/${encodeURIComponent(name)}/note`, { note: noteVal });
+      await api.post(`/api/switch/ports/${encodeURIComponent(name)}/note`, {
+        note: noteVal,
+      });
       toast.success(`note saved for ${name}`);
       setEditing(null);
       portsPoll.refresh();
@@ -42,11 +51,22 @@ export function SwitchPage() {
     }
   };
 
-  useEffect(() => () => { if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); }, []);
+  // ensure timer cleared
+  useEffect(() => () => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+  }, []);
 
+  // data handling: support both old array shape (compat) and new {ports, error}
   const response = portsPoll.data as SwitchPortsResponse | Port[] | null;
-  const data: Port[] = Array.isArray(response) ? response : (response && "ports" in response ? response.ports : []);
-  const serverError: string | null = !Array.isArray(response) && response && "error" in response ? (response.error as string) || null : portsPoll.error;
+  const data: Port[] = Array.isArray(response)
+    ? response
+    : response && "ports" in response
+      ? response.ports
+      : [];
+  const serverError: string | null =
+    !Array.isArray(response) && response && "error" in response
+      ? (response.error as string) || null
+      : portsPoll.error;
   const hasData = data.length > 0;
 
   if (portsPoll.loading && !hasData) {
@@ -57,64 +77,164 @@ export function SwitchPage() {
   const portMap = new Map(data.map((p) => [p.name, p] as const));
 
   const topTalkers = [...data]
-    .sort((a, b) => (b.inputRate + b.outputRate) - (a.inputRate + b.outputRate))
+    .sort((a, b) => (b.inputRate + b.outputRate) - (a.inputRate + a.outputRate))
     .slice(0, 5);
 
   const selectedPort = selected ? portMap.get(selected) : null;
 
-  // Canvas refs and consts (top level hooks before useCallback)
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
+  // hovered state for React ports (handlers + tooltips; visual hover/LEDs are CSS)
+  const [_hovered, setHovered] = useState<string | null>(null);
 
-  const LOGICAL_W = 720;
-  const LOGICAL_H = 175;
-
-
-
-
-
-  // helpers
-
-  const drawRJ45 = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isUp: boolean, isActive: boolean, isHighlight: boolean, num: number, time: number) => {
-    const body = isUp ? '#1a2232' : '#0e121e';
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 2.5; ctx.shadowOffsetX = 0.3; ctx.shadowOffsetY = 0.8;
-    ctx.fillStyle = body; roundRect(ctx, x, y, w, h, 1.4); ctx.fill(); ctx.restore();
-    ctx.fillStyle = 'rgba(255,255,255,0.09)'; roundRect(ctx, x + 0.4, y + 0.4, w - 0.8, 1.8, 0.9); ctx.fill();
-    ctx.fillStyle = '#07090f'; roundRect(ctx, x + 1.6, y + 2.2, w - 3.2, h - 4, 0.7); ctx.fill();
-    ctx.fillStyle = '#0c0f17'; ctx.fillRect(x + 3.2, y + 1.1, w - 6.4, 1.1);
-    ctx.strokeStyle = '#252c3b'; ctx.lineWidth = 0.35;
-    for (let k = 0; k < 8; k++) { const lx = x + 2.6 + (k * (w - 5.2) / 7.5); ctx.beginPath(); ctx.moveTo(lx, y + 3.6); ctx.lineTo(lx, y + h - 2); ctx.stroke(); }
-    if (isHighlight) { ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 1.1; roundRect(ctx, x - 1, y - 1, w + 2, h + 2, 1.8); ctx.stroke(); }
-    const ledCx = x + w / 2, ledCy = y - 4.2; let ledCol = isUp ? '#22c55e' : '#f7768e'; ctx.save();
-    let blinkBoost = 0; if (isActive) { const phase = Math.sin(time * 6.2) * 0.5 + 0.5; if (phase > 0.5) { ledCol = '#4ade80'; blinkBoost = 1; } }
-    ctx.fillStyle = ledCol; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.95, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.95, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.arc(ledCx - 0.65, ledCy - 0.65, 0.65, 0, Math.PI * 2); ctx.fill();
-    if (blinkBoost) { ctx.fillStyle = 'rgba(74, 222, 128, 0.35)'; ctx.beginPath(); ctx.arc(ledCx, ledCy, 3.2, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
-    ctx.fillStyle = isHighlight ? '#c8d0e8' : '#5f677f'; ctx.font = '5px system-ui, monospace'; ctx.textAlign = 'center';
-    ctx.fillText(String(num), x + w / 2, y + h + 7.2); ctx.textAlign = 'start';
-  };
-  const drawQSFP = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isUp: boolean, isActive: boolean, isHighlight: boolean, num: number, time: number) => {
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 0.6;
-    const cageGrad = ctx.createLinearGradient(x, y, x + w, y); cageGrad.addColorStop(0, '#181d29'); cageGrad.addColorStop(0.5, '#12161f'); cageGrad.addColorStop(1, '#0d1019');
-    ctx.fillStyle = cageGrad; roundRect(ctx, x, y, w, h, 1.2); ctx.fill(); ctx.restore();
-    ctx.strokeStyle = isHighlight ? '#ff4fa3' : '#2c3344'; ctx.lineWidth = isHighlight ? 1.3 : 0.7; roundRect(ctx, x, y, w, h, 1.2); ctx.stroke();
-    ctx.fillStyle = '#080a10'; roundRect(ctx, x + 2, y + 2.5, w - 4, h - 5.5, 0.6); ctx.fill();
-    ctx.strokeStyle = '#1f2533'; ctx.lineWidth = 0.5;
-    for (let l = 0; l < 4; l++) { const lx = x + 3.5 + l * ((w - 7) / 3); ctx.beginPath(); ctx.moveTo(lx, y + 3.5); ctx.lineTo(lx, y + h - 3.5); ctx.stroke(); }
-    if (isHighlight) { ctx.strokeStyle = '#ff4fa3'; ctx.lineWidth = 1.2; roundRect(ctx, x - 1.5, y - 1.5, w + 3, h + 3, 1.5); ctx.stroke(); }
-    const ledCx = x + w / 2, ledCy = y - 3.8; let ledCol = isUp ? '#22c55e' : '#f7768e';
-    if (isActive && (Math.floor(time * 5.5) % 2) === 0) ledCol = '#4ade80';
-    ctx.fillStyle = ledCol; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.75, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(ledCx, ledCy, 1.75, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = isHighlight ? '#d0d8ee' : '#4a516a'; ctx.font = '5px system-ui, monospace'; ctx.textAlign = 'center';
-    ctx.fillText(String(num), x + w / 2, y + h + 6.5);
-    ctx.fillStyle = '#3a4158'; ctx.font = '3.8px system-ui, monospace'; ctx.fillText('40G', x + w / 2, y + h + 10.2); ctx.textAlign = 'start';
+  const selectPort = (name: string) => {
+    setSelected(name);
   };
 
+  // Small declarative React port components (DOM + Tailwind/CSS). No Canvas/SVG.
+  // Matches real Arista DCS-7050TX-48 1U: dark metal, recessed RJ45 (latch notch + contacts), LED above, QSFP cages w/ 4 lanes, rack ears, vents, labels.
+  // Props support full functionality: onClick for selected+details panel, active blink, LLDP in title, hover.
+  // Robust: defaults + graceful no-data (ports render "down").
 
-  const selectPort = (name: string) => { setSelected(name); };
+  interface PortProps {
+    name: string;
+    status?: string;
+    active?: boolean;
+    selected?: boolean;
+    lldpNeighbor?: { system_name?: string; port?: string } | null;
+    onClick: (name: string) => void;
+    onHover: (name: string | null) => void;
+  }
+
+  const Rj45Port: React.FC<PortProps> = ({ name, status = "disconnected", active = false, selected = false, lldpNeighbor, onClick, onHover }) => {
+    const isUp = status === "connected";
+    const num = parseInt(name.replace("Ethernet", ""), 10) || 0;
+    const lldpText = lldpNeighbor?.system_name ? ` (LLDP: ${lldpNeighbor.system_name}${lldpNeighbor.port ? " " + lldpNeighbor.port : ""})` : "";
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(name)}
+        onMouseEnter={() => onHover(name)}
+        onMouseLeave={() => onHover(null)}
+        className={`rj45-port ${isUp ? "up" : "down"} ${active ? "active" : ""} ${selected ? "selected" : ""}`}
+        aria-label={`RJ45 port ${num} ${isUp ? "up" : "down"}${active ? ", active traffic" : ""}${lldpText}`}
+        title={`${name} — ${isUp ? "connected" : "not connected"}${lldpText}`}
+      >
+        <div className="port-led" />
+        <div className="jack">
+          <div className="recess">
+            <div className="contacts">{Array.from({ length: 8 }).map((_, i) => <span key={i} />)}</div>
+          </div>
+        </div>
+        <span className="port-num">{num}</span>
+      </button>
+    );
+  };
+
+  const QsfpPort: React.FC<PortProps> = ({ name, status = "disconnected", active = false, selected = false, lldpNeighbor, onClick, onHover }) => {
+    const isUp = status === "connected";
+    const num = parseInt(name.replace("Ethernet", ""), 10) || 0;
+    const lldpText = lldpNeighbor?.system_name ? ` (LLDP: ${lldpNeighbor.system_name}${lldpNeighbor.port ? " " + lldpNeighbor.port : ""})` : "";
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(name)}
+        onMouseEnter={() => onHover(name)}
+        onMouseLeave={() => onHover(null)}
+        className={`qsfp-port ${isUp ? "up" : "down"} ${active ? "active" : ""} ${selected ? "selected" : ""}`}
+        aria-label={`QSFP port ${num} ${isUp ? "up" : "down"}${active ? ", active" : ""}${lldpText}`}
+        title={`${name} — ${isUp ? "connected" : "not connected"}${lldpText} (40G)`}
+      >
+        <div className="port-led" />
+        <div className="cage">
+          <div className="slot">
+            <div className="lanes">{Array.from({ length: 4 }).map((_, i) => <span key={i} />)}</div>
+          </div>
+        </div>
+        <span className="port-num">{num}</span>
+        <span className="qsfp-speed">40G</span>
+      </button>
+    );
+  };
+
+  // The physical faceplate: exact 2 rows of 24 RJ45 + 4 QSFP stacked right. Left mgmt + labels + vents + ears via outer CSS.
+  const renderReactFaceplate = () => {
+    const copperPorts: React.ReactNode[] = [];
+    for (let i = 1; i <= 48; i++) {
+      const name = `Ethernet${i}`;
+      const pd = portMap.get(name);
+      const isSel = selected === name;
+      copperPorts.push(
+        <Rj45Port
+          key={name}
+          name={name}
+          status={pd?.status}
+          active={pd?.active}
+          selected={isSel}
+          lldpNeighbor={pd?.lldpNeighbor}
+          onClick={selectPort}
+          onHover={setHovered}
+        />
+      );
+    }
+    const qsfpPorts = [49, 50, 51, 52].map((num) => {
+      const name = `Ethernet${num}`;
+      const pd = portMap.get(name);
+      const isSel = selected === name;
+      return (
+        <QsfpPort
+          key={name}
+          name={name}
+          status={pd?.status}
+          active={pd?.active}
+          selected={isSel}
+          lldpNeighbor={pd?.lldpNeighbor}
+          onClick={selectPort}
+          onHover={setHovered}
+        />
+      );
+    });
+
+    return (
+      <div className="arista-chassis" role="img" aria-label="Arista DCS-7050TX-48 front panel - realistic physical 1U using React components and CSS">
+        <div className="arista-inner">
+          <div className="vents top" />
+          <div className="vents bottom" />
+
+          <div className="mgmt-area">
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+              <div className="mgmt-port" title="Console" /><span className="mgmt-label">CON</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+              <div className="mgmt-port usb" title="USB" /><span className="mgmt-label">USB</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+              <div className="mgmt-port" title="Management" /><span className="mgmt-label">MGMT</span>
+            </div>
+          </div>
+          <div className="status-leds">
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led sys" title="SYS" /><span className="status-label">SYS</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led fan" title="FAN" /><span className="status-label">FAN</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led ps" title="PS1" /><span className="status-label">PS1</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led ps" title="PS2" /><span className="status-label">PS2</span></div>
+          </div>
+
+          <div className="model-label">
+            ARISTA
+            <span className="model">DCS-7050TX-48</span>
+            <span className="spec">48×10GBASE-T + 4×40GbE QSFP+</span>
+          </div>
+          <div className="row-label top">1-24</div>
+          <div className="row-label bottom">25-48</div>
+
+          <div className="ports-area">
+            <div className="ports-grid-copper">{copperPorts}</div>
+            <div className="ports-grid-qsfp">{qsfpPorts}</div>
+          </div>
+
+          <div className="chassis-footer">RACK 47 • DCS-7050TX-48</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -124,7 +244,7 @@ export function SwitchPage() {
             SWITCH <span className="text-cyan">DCS-7050TX-48</span>
           </h1>
           <div className="text-xs text-muted metric">
-            10.0.20.2 • {connected} up • {data.length} reported • canvas physical faceplate
+            10.0.20.2 • {connected} up • {data.length} reported • React physical faceplate
           </div>
         </div>
         <div className="text-[10px] text-muted tracking-[2px] border border-border-token px-2 py-0.5 rounded">
@@ -132,6 +252,7 @@ export function SwitchPage() {
         </div>
       </div>
 
+      {/* Robust error/offline state: shows with last-known data if available (from usePoll) */}
       {(serverError || portsPoll.error) && (
         <div className="card border-red/40 p-4 text-red text-sm" role="alert">
           Switch offline or error: {serverError || portsPoll.error}
@@ -144,23 +265,26 @@ export function SwitchPage() {
       )}
 
       <div className="flex flex-col lg:flex-row gap-6">
+        {/* Realistic physical 1U Arista faceplate - React declarative (divs/buttons) + Tailwind/CSS. Non-SVG. */}
         <div className="flex-1 min-w-0">
           <div className="relative mx-[22px]">
-            <div className="rack-ear rack-ear-left" />
-            <div className="rack-ear rack-ear-right" />
+            <div className="rack-ear rack-ear-left"><div className="screw" /><div className="screw" /></div>
+            <div className="rack-ear rack-ear-right"><div className="screw" /><div className="screw" /></div>
             <div className="rack-bezel">
-              <div className="faceplate-wrapper">
-                {renderFaceplate()}
+              <div className={`faceplate-wrapper ${!hasData ? "opacity-60" : ""} ${portsPoll.loading ? "loading" : ""}`}>
+                {renderReactFaceplate()}
               </div>
             </div>
           </div>
           <div className="mt-1.5 px-1 flex items-center justify-between text-[10px] text-muted tracking-widest">
             <span>click ports • green=up / red=down • blink=activity (&gt;1 kbps)</span>
-            <span>48×10G-T RJ45 + 4×40G QSFP+</span>
+            <span>48×10G-T RJ45 (2 rows of 24) + 4×40G QSFP+ on right</span>
           </div>
         </div>
 
+        {/* Sidebar: Top Talkers + Enhanced Port Details */}
         <div className="w-full lg:w-80 flex-shrink-0 space-y-4">
+          {/* Top Talkers */}
           <div className="card p-3">
             <div className="flex items-baseline justify-between mb-1.5">
               <div className="text-xs uppercase tracking-[1px] text-muted">TOP TALKERS</div>
@@ -193,21 +317,35 @@ export function SwitchPage() {
             )}
           </div>
 
+          {/* Port Details (with desc + LLDP + inline editable notes) */}
           <div className="card p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-xs uppercase tracking-[1px] text-muted">PORT DETAILS</div>
               {selected && (
-                <button className="btn-plain text-[10px] px-1.5 py-px" onClick={() => { setSelected(null); setEditing(null); }}>× close</button>
+                <button
+                  className="btn-plain text-[10px] px-1.5 py-px"
+                  onClick={() => {
+                    setSelected(null);
+                    setEditing(null);
+                  }}
+                >
+                  × close
+                </button>
               )}
             </div>
 
             {!selectedPort ? (
-              <div className="py-6 text-center text-xs text-muted italic">select a port from the faceplate or top talkers list</div>
+              <div className="py-6 text-center text-xs text-muted italic">
+                select a port from the faceplate or top talkers list
+              </div>
             ) : (
               <>
                 <div className="flex items-center justify-between">
                   <div className="font-mono text-[15px] tracking-wider text-fg">{selectedPort.name}</div>
-                  <div className={`w-2.5 h-2.5 rounded-full ${selectedPort.status === "connected" ? "bg-[#22c55e]" : "bg-red"} ${selectedPort.active ? "led-active" : ""}`} title={selectedPort.status} />
+                  <div
+                    className={`w-2.5 h-2.5 rounded-full ${selectedPort.status === "connected" ? "bg-[#22c55e]" : "bg-red"} ${selectedPort.active ? "led-active" : ""}`}
+                    title={selectedPort.status}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-4 gap-y-[1px] text-[10px]">
@@ -217,6 +355,7 @@ export function SwitchPage() {
                   <div className="text-muted">state <span className="text-fg">{selectedPort.status}</span></div>
                 </div>
 
+                {/* live rates + integrated LEDs (using shared styles) */}
                 <div className="flex gap-4 pt-0.5 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className={`led led-cyan ${selectedPort.active ? "led-active" : "led-muted"}`} />
@@ -230,6 +369,7 @@ export function SwitchPage() {
                   </div>
                 </div>
 
+                {/* desc / LLDP / notes integrated */}
                 <div className="pt-2 space-y-2 border-t border-border-token text-xs">
                   <div>
                     <div className="uppercase tracking-wider text-[10px] text-muted mb-px">SWITCH DESCRIPTION</div>
@@ -246,30 +386,53 @@ export function SwitchPage() {
                     </div>
                   )}
 
+                  {/* editable notes — inline, integrated */}
                   <div>
-                    <div className="uppercase tracking-wider text-[10px] text-muted mb-px">NOTES <span className="normal-case text-pink/60">(local to panel)</span></div>
+                    <div className="uppercase tracking-wider text-[10px] text-muted mb-px">
+                      NOTES <span className="normal-case text-pink/60">(local to panel)</span>
+                    </div>
                     {editing === selectedPort.name ? (
                       <div className="space-y-1">
                         <input
                           className="input text-xs py-1"
                           value={noteDraft}
                           onChange={(e) => {
-                            const v = e.target.value; setNoteDraft(v);
+                            const v = e.target.value;
+                            setNoteDraft(v);
                             if (editing === selectedPort.name) scheduleDebouncedSave(selectedPort.name, v);
                           }}
                           placeholder="your note…"
-                          onKeyDown={(e) => { if (e.key === "Enter") void saveNote(selectedPort.name); if (e.key === "Escape") setEditing(null); }}
-                          onBlur={() => { if (editing === selectedPort.name && noteDraft.trim() !== (selectedPort.note || "")) void saveNote(selectedPort.name); }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void saveNote(selectedPort.name);
+                            if (e.key === "Escape") setEditing(null);
+                          }}
+                          onBlur={() => {
+                            if (editing === selectedPort.name && noteDraft.trim() !== (selectedPort.note || "")) {
+                              void saveNote(selectedPort.name);
+                            }
+                          }}
                           autoFocus
                         />
                         <div className="flex gap-1.5">
-                          <button className="btn-plain text-[10px] px-2 py-px" onClick={() => setEditing(null)}>cancel</button>
-                          <button className="btn-cyan text-[10px] px-2 py-px" onClick={() => void saveNote(selectedPort.name)}>save</button>
+                          <button className="btn-plain text-[10px] px-2 py-px" onClick={() => setEditing(null)}>
+                            cancel
+                          </button>
+                          <button className="btn-cyan text-[10px] px-2 py-px" onClick={() => void saveNote(selectedPort.name)}>
+                            save
+                          </button>
                         </div>
                       </div>
                     ) : (
-                      <div className="group flex justify-between items-start gap-2 cursor-pointer py-0.5 rounded hover:bg-border-token/20 -mx-1 px-1" onClick={() => { setEditing(selectedPort.name); setNoteDraft(selectedPort.note || ""); }}>
-                        <span className={selectedPort.note ? "text-fg" : "text-muted italic group-hover:text-pink"}>{selectedPort.note || "click to add note"}</span>
+                      <div
+                        className="group flex justify-between items-start gap-2 cursor-pointer py-0.5 rounded hover:bg-border-token/20 -mx-1 px-1"
+                        onClick={() => {
+                          setEditing(selectedPort.name);
+                          setNoteDraft(selectedPort.note || "");
+                        }}
+                      >
+                        <span className={selectedPort.note ? "text-fg" : "text-muted italic group-hover:text-pink"}>
+                          {selectedPort.note || "click to add note"}
+                        </span>
                         <span className="text-pink opacity-0 group-hover:opacity-100 text-[10px] mt-px">✎</span>
                       </div>
                     )}
@@ -282,7 +445,7 @@ export function SwitchPage() {
       </div>
 
       <div className="text-[10px] text-muted tracking-widest px-1">
-        faceplate emulates physical Arista DCS-7050TX-48 (canvas) • 48×10GBASE-T RJ45 (2 rows) + 4×40G QSFP+ • left mgmt/console/USB + LEDs • high-DPI • clickable + LLDP + notes
+        React faceplate • physical Arista DCS-7050TX-48 (metal bevels, recessed RJ45 w/ LED, QSFP cages, rack ears, vents) • exact 48+4 layout • clickable + LLDP + notes + live blink
       </div>
     </div>
   );
