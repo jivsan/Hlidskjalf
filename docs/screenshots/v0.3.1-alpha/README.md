@@ -4,7 +4,7 @@
 
 This release finalizes the realistic switch faceplate for the Arista DCS-7050TX-48 using **React + CSS** (non-SVG, non-Canvas) for a physical 1U hardware look. Includes all prior eAPI/LLDP, notes, top talkers, and robustness work.
 
-All screenshots captured live from the dev stack (mocks + backend + frontend on 5173).
+All screenshots captured live from the dev stack (mocks + backend + frontend on 5173) after final React faceplate work and PR merges. Latest refresh: 2026-07-12.
 
 **Before (v0.3-alpha / earlier):**
 - Fleet: ![Fleet before](fleet.png)
