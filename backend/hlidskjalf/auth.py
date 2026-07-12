@@ -25,7 +25,9 @@ COOKIE_NAME = "hlidskjalf_session"
 CSRF_HEADER = "X-Hlidskjalf-CSRF"
 
 _hasher = PasswordHasher()
-_login_attempts: deque[float] = deque(maxlen=64)
+# Per-client-IP login attempt buckets. Keyed by client IP so one attacker cannot
+# lock out every other client (a single global counter was a trivial DoS).
+_login_attempts: dict[str, deque[float]] = {}
 
 LOGIN_RATE = 5          # attempts
 LOGIN_WINDOW = 60.0     # seconds
@@ -43,13 +45,30 @@ def csrf_for(session_value: str) -> str:
     return hmac.new(key, f"csrf:{session_value}".encode(), hashlib.sha256).hexdigest()
 
 
-def check_login_rate() -> None:
+def check_login_rate(client_ip: str) -> None:
+    """Per-IP login rate limit: LOGIN_RATE attempts / LOGIN_WINDOW seconds.
+
+    Keyed by client IP so a single abusive source cannot lock everyone else out.
+    Empty (fully-expired) buckets are pruned each call to bound memory.
+    """
     now = time.monotonic()
-    while _login_attempts and now - _login_attempts[0] > LOGIN_WINDOW:
-        _login_attempts.popleft()
-    if len(_login_attempts) >= LOGIN_RATE:
+    # Prune expired timestamps everywhere and drop empty buckets (cleanup).
+    for ip in list(_login_attempts.keys()):
+        dq = _login_attempts[ip]
+        while dq and now - dq[0] > LOGIN_WINDOW:
+            dq.popleft()
+        if not dq:
+            del _login_attempts[ip]
+
+    dq = _login_attempts.setdefault(client_ip, deque())
+    if len(dq) >= LOGIN_RATE:
         raise HTTPException(429, "Too many login attempts, wait a minute")
-    _login_attempts.append(now)
+    dq.append(now)
+
+
+def reset_login_rate() -> None:
+    """Clear all per-IP login buckets (test/ops helper)."""
+    _login_attempts.clear()
 
 
 def hash_password(password: str) -> str:
@@ -93,7 +112,7 @@ def start_session(response: Response, username: str) -> str:
         max_age=get_settings().session_max_age,
         httponly=True,
         samesite="strict",
-        secure=False,
+        secure=get_settings().cookie_secure,
         path="/",
     )
     # CSRF must be derived from the same value require_csrf / /api/session use,

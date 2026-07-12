@@ -29,15 +29,46 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import ssl
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import httpx
 
-from .config import get_settings
+from .config import Settings, get_settings
+from .pve import make_pinned_ssl_context
 
 log = logging.getLogger(__name__)
+
+_warned_switch_unverified = False
+
+
+def _warn_switch_unverified_once() -> None:
+    global _warned_switch_unverified
+    if not _warned_switch_unverified:
+        log.warning(
+            "switch eAPI TLS verification is DISABLED (HLIDSKJALF_SWITCH_VERIFY=false): "
+            "the switch admin credentials are sent over an UNVERIFIED connection and can "
+            "be captured by a MITM. Set HLIDSKJALF_SWITCH_FINGERPRINT to pin the cert."
+        )
+        _warned_switch_unverified = True
+
+
+def select_switch_verify(settings: Settings) -> Union[ssl.SSLContext, bool]:
+    """Choose the httpx ``verify`` argument for the switch eAPI connection.
+
+    - ``switch_fingerprint`` set   -> a pinned SSL context (same mechanism as PVE);
+      the eAPI cert is accepted only if its SHA-256 digest matches.
+    - else ``switch_verify`` False -> ``False`` (no verification) + one-time WARNING.
+    - else                          -> ``True`` (verify against system CAs).
+    """
+    if settings.switch_fingerprint:
+        return make_pinned_ssl_context(settings.switch_fingerprint)
+    if not settings.switch_verify:
+        _warn_switch_unverified_once()
+        return False
+    return True
 
 
 @dataclass
@@ -65,6 +96,8 @@ class AristaClient:
         self.port = s.switch_port
         self.username = s.switch_username
         self.password = s.switch_password
+        # httpx `verify` arg for eAPI TLS: pinned SSL context, True, or False.
+        self._verify: Union[ssl.SSLContext, bool] = select_switch_verify(s)
 
         # Simple in-memory TTL cache + rate limiting (2-3s as specified)
         self._cache: list[PortInfo] = []
@@ -227,8 +260,9 @@ class AristaClient:
         last_exc: Exception | None = None
         for attempt in range(max_retries + 1):
             try:
-                # per-call client keeps things simple; short connect/read timeouts
-                async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(8.0, connect=4.0)) as client:
+                # per-call client keeps things simple; short connect/read timeouts.
+                # TLS verification per config (pinned fingerprint / system CAs / off).
+                async with httpx.AsyncClient(verify=self._verify, timeout=httpx.Timeout(8.0, connect=4.0)) as client:
                     resp = await client.post(f"{base}/command", json=payload, auth=auth)
                     # explicit auth fail detection
                     if resp.status_code in (401, 403):

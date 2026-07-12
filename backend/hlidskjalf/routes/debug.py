@@ -57,7 +57,7 @@ async def debug_config(_: dict = Depends(require_admin_user)):
     # Redact secrets
     for k in list(data.keys()):
         kl = k.lower()
-        if any(x in kl for x in ("token", "secret", "password", "hash", "fingerprint", "key")):
+        if any(x in kl for x in ("token", "secret", "password", "hash", "fingerprint", "key", "username")):
             data[k] = "***REDACTED***"
     data["pve_base_url"] = getattr(s, "pve_base_url", None)
     data["db_path"] = str(getattr(s, "db_path", ""))

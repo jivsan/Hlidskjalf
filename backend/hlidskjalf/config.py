@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     admin_password_hash: str = ""  # argon2id hash
     session_secret: str = ""
     session_max_age: int = 12 * 3600
+    # Set the `Secure` flag on the session cookie (cookie only sent over HTTPS).
+    # Default True — safe for an internet-facing deploy. Set to False ONLY for
+    # local plain-http dev/tests (Starlette's TestClient runs over http and will
+    # not resend a Secure cookie).
+    cookie_secure: bool = True
 
     # Behaviour
     # comma-separated in the env var, e.g. "101,151"
@@ -54,6 +59,15 @@ class Settings(BaseSettings):
     switch_port: int = 443
     switch_username: str = ""
     switch_password: str = ""
+    # Switch eAPI TLS: the eAPI carries the switch admin credentials, so the
+    # connection must be verified. Pin the switch cert by SHA-256 fingerprint
+    # (colon-separated hex, like pve_fingerprint) — preferred for a self-signed
+    # eAPI cert. If no fingerprint is set, verify against system CAs
+    # (switch_verify=True). Set switch_verify=False only to knowingly disable
+    # verification (logs a one-time warning; credentials go over an unverified
+    # link — avoid for anything internet-facing).
+    switch_fingerprint: str = ""
+    switch_verify: bool = True
 
     # Paths
     static_dir: str = ""  # built frontend dist; empty = API only

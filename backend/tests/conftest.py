@@ -60,6 +60,9 @@ os.environ.update(
         "HLIDSKJALF_BANDWIDTH_QUOTAS": '{"115": 500}',
         "HLIDSKJALF_STATE_DIR": STATE_DIR,
         "HLIDSKJALF_STATIC_DIR": "",
+        # cookie_secure defaults to True (production). Starlette's TestClient runs
+        # over http and will NOT resend a Secure cookie, so disable it for tests.
+        "HLIDSKJALF_COOKIE_SECURE": "false",
     }
 )
 
@@ -132,12 +135,15 @@ def client(mock_pve_server):
 
 @pytest.fixture(autouse=True)
 def _reset_login_rate_limit():
-    """The login rate limiter is module-global state; isolate tests from it."""
+    """The login rate limiter is module-global state; isolate tests from it.
+
+    It is now a per-IP dict of deques; reset_login_rate() clears every bucket.
+    """
     from hlidskjalf import auth
 
-    auth._login_attempts.clear()
+    auth.reset_login_rate()
     yield
-    auth._login_attempts.clear()
+    auth.reset_login_rate()
 
 
 @pytest.fixture()
