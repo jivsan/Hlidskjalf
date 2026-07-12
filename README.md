@@ -18,15 +18,15 @@ setup on hella.
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.1-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
 
-**Current (v0.3-alpha - new switch faceplate, LLDP, Top Talkers):**  
-[v0.3-alpha/README.md](docs/screenshots/v0.3-alpha/README.md)  
-(Contains before images from v0.2 + description of the new SVG switch section)
+**Current (v0.3.1-alpha - realistic React+CSS physical faceplate for DCS-7050TX-48, LLDP, Top Talkers):**  
+[v0.3.1-alpha/README.md](docs/screenshots/v0.3.1-alpha/README.md)  
+(Real captured screenshots after merges)
 
 **Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 

@@ -560,3 +560,57 @@
 /* Legacy canvas class kept for compat but unused */
 .canvas-faceplate { display: none; }
 .svg-led { transition: fill 80ms ease; }
+
+/* --- Enhanced realistic port styling for <Rj45Port> / <QsfpPort> (or inline render) --- */
+/* RJ45: dark metal body, deep recess jack, latch notch, 8 pin contacts, LED above with glass effect */
+.port-rj45, .rj45-port {
+  width: 11px; height: 9px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
+  background: linear-gradient(180deg, #1f2636 0%, #12171f 100%);
+  border: 1px solid #2c3344; border-radius: 1px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 1px rgba(0,0,0,0.6);
+  cursor: pointer; transition: transform 60ms ease, box-shadow 60ms ease, border-color 60ms;
+  margin: 0 0.5px; vertical-align: top;
+}
+.port-rj45:hover, .rj45-port:hover { transform: translateY(-0.5px); border-color: #4a5168; }
+.port-rj45.selected, .rj45-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3, inset 0 1px 0 rgba(255,255,255,0.06); }
+.port-rj45.up { background: linear-gradient(180deg, #21293a 0%, #141a24 100%); }
+.port-rj45 .port-body, .rj45-port .jack { position: relative; width: 9px; height: 7px; background: #0a0c14; border: 1px solid #181d28; border-radius: 0.5px; margin-top: 0.5px; }
+.port-rj45 .jack-hole, .rj45-port .recess { position: absolute; inset: 1px 1.5px 1px 1.5px; background: #05070d; border-radius: 0.5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.9); }
+.port-rj45 .contacts, .rj45-port .contacts { position: absolute; inset: 0.5px 1px; display: flex; justify-content: space-between; }
+.port-rj45 .contacts span, .rj45-port .contacts span { width: 0.6px; background: #252c3b; margin-top: 0.5px; }
+.port-rj45 .port-led, .rj45-port .port-led {
+  position: absolute; top: -2.5px; left: 50%; transform: translateX(-50%);
+  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.5);
+  box-shadow: 0 0 1px rgba(255,255,255,0.4) inset;
+  z-index: 2;
+}
+.port-rj45.up .port-led, .rj45-port.up .port-led { background: #22c55e; }
+.port-rj45.active .port-led, .rj45-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
+.port-rj45 .port-num, .rj45-port .port-num { font-size: 4.5px; color: #5f677f; margin-top: 0.5px; line-height: 1; }
+
+/* QSFP cage: metal gradient, slotted interior, deeper recess */
+.port-qsfp, .qsfp-port {
+  width: 14px; height: 12px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
+  background: linear-gradient(180deg, #1a1f2b 0%, #10141d 100%);
+  border: 1px solid #2a3040; border-radius: 1px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.5);
+  cursor: pointer; margin: 1px 0; transition: border-color 60ms, transform 60ms;
+}
+.port-qsfp:hover, .qsfp-port:hover { border-color: #4a5168; }
+.port-qsfp.selected, .qsfp-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3; }
+.port-qsfp .port-led, .qsfp-port .port-led {
+  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.4);
+  z-index: 2;
+}
+.port-qsfp.up .port-led, .qsfp-port.up .port-led { background: #22c55e; }
+.port-qsfp.active .port-led, .qsfp-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
+.port-qsfp .cage, .qsfp-port .cage { width: 12px; height: 9px; background: #07090f; border: 1px solid #1f2533; margin-top: 1px; position: relative; }
+.port-qsfp .lanes, .qsfp-port .lanes { position: absolute; inset: 1px; display: flex; justify-content: space-between; }
+.port-qsfp .lanes span, .qsfp-port .lanes span { width: 1px; background: #1f2533; }
+.port-qsfp .port-num, .qsfp-port .port-num { font-size: 4px; color: #4a516a; line-height: 1; }
+.port-qsfp .qsfp-speed, .qsfp-port .qsfp-speed { font-size: 3px; color: #3a4158; margin-top: -1px; }
+
+/* Row grid layout for ports in chassis */
+.ports-grid, .ports-grid-copper, .ports-grid-qsfp { display: flex; flex-wrap: nowrap; gap: 1px; }
+.ports-grid-qsfp { flex-direction: column; margin-left: 4px; }

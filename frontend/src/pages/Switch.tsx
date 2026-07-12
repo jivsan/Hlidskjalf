@@ -1,17 +1,32 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
 import { api } from "../api";
 import { useToast } from "../components/Toast";
 import { ErrorState, LoadingState } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 import type { SwitchPort, SwitchPortsResponse } from "../types";
 
+// Port alias for brevity (matches backend PortInfo serialized).
 type Port = SwitchPort;
+
+// Simple ErrorBoundary for faceplate (TS class component)
+class FaceplateErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error) { console.error("Faceplate render error:", error); }
+  render() {
+    if (this.state.hasError) {
+      return <div className="p-3 text-xs text-red border border-red/40 rounded">Faceplate error — showing last known port data in sidebar if available.</div>;
+    }
+    return this.props.children;
+  }
+}
 
 export function SwitchPage() {
   const toast = useToast();
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [hovered, setHovered] = useState<string | null>(null);
 
   // Poll returns the new {ports, error?} shape. usePoll preserves .data on errors (last-known).
   const portsPoll = usePoll(
@@ -20,6 +35,8 @@ export function SwitchPage() {
   );
 
   // Debounced auto-save for notes (robustness requirement).
+  // 650ms after typing stops while editing; explicit save also available via Enter.
+  // Never blocks UI; errors non-fatal on auto path.
   const saveTimerRef = useRef<number | null>(null);
   const scheduleDebouncedSave = useCallback((name: string, note: string) => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -82,152 +99,149 @@ export function SwitchPage() {
 
   const selectedPort = selected ? portMap.get(selected) : null;
 
-  // hovered state for React ports (handlers + tooltips; visual hover/LEDs are CSS)
-  const [_hovered, setHovered] = useState<string | null>(null);
-
   const selectPort = (name: string) => {
     setSelected(name);
   };
 
-  // Small declarative React port components (DOM + Tailwind/CSS). No Canvas/SVG.
-  // Matches real Arista DCS-7050TX-48 1U: dark metal, recessed RJ45 (latch notch + contacts), LED above, QSFP cages w/ 4 lanes, rack ears, vents, labels.
-  // Props support full functionality: onClick for selected+details panel, active blink, LLDP in title, hover.
-  // Robust: defaults + graceful no-data (ports render "down").
-
-  interface PortProps {
-    name: string;
-    status?: string;
-    active?: boolean;
-    selected?: boolean;
-    lldpNeighbor?: { system_name?: string; port?: string } | null;
-    onClick: (name: string) => void;
-    onHover: (name: string | null) => void;
-  }
-
-  const Rj45Port: React.FC<PortProps> = ({ name, status = "disconnected", active = false, selected = false, lldpNeighbor, onClick, onHover }) => {
-    const isUp = status === "connected";
-    const num = parseInt(name.replace("Ethernet", ""), 10) || 0;
-    const lldpText = lldpNeighbor?.system_name ? ` (LLDP: ${lldpNeighbor.system_name}${lldpNeighbor.port ? " " + lldpNeighbor.port : ""})` : "";
-    return (
-      <button
-        type="button"
-        onClick={() => onClick(name)}
-        onMouseEnter={() => onHover(name)}
-        onMouseLeave={() => onHover(null)}
-        className={`rj45-port ${isUp ? "up" : "down"} ${active ? "active" : ""} ${selected ? "selected" : ""}`}
-        aria-label={`RJ45 port ${num} ${isUp ? "up" : "down"}${active ? ", active traffic" : ""}${lldpText}`}
-        title={`${name} — ${isUp ? "connected" : "not connected"}${lldpText}`}
-      >
-        <div className="port-led" />
-        <div className="jack">
-          <div className="recess">
-            <div className="contacts">{Array.from({ length: 8 }).map((_, i) => <span key={i} />)}</div>
-          </div>
-        </div>
-        <span className="port-num">{num}</span>
-      </button>
-    );
-  };
-
-  const QsfpPort: React.FC<PortProps> = ({ name, status = "disconnected", active = false, selected = false, lldpNeighbor, onClick, onHover }) => {
-    const isUp = status === "connected";
-    const num = parseInt(name.replace("Ethernet", ""), 10) || 0;
-    const lldpText = lldpNeighbor?.system_name ? ` (LLDP: ${lldpNeighbor.system_name}${lldpNeighbor.port ? " " + lldpNeighbor.port : ""})` : "";
-    return (
-      <button
-        type="button"
-        onClick={() => onClick(name)}
-        onMouseEnter={() => onHover(name)}
-        onMouseLeave={() => onHover(null)}
-        className={`qsfp-port ${isUp ? "up" : "down"} ${active ? "active" : ""} ${selected ? "selected" : ""}`}
-        aria-label={`QSFP port ${num} ${isUp ? "up" : "down"}${active ? ", active" : ""}${lldpText}`}
-        title={`${name} — ${isUp ? "connected" : "not connected"}${lldpText} (40G)`}
-      >
-        <div className="port-led" />
-        <div className="cage">
-          <div className="slot">
-            <div className="lanes">{Array.from({ length: 4 }).map((_, i) => <span key={i} />)}</div>
-          </div>
-        </div>
-        <span className="port-num">{num}</span>
-        <span className="qsfp-speed">40G</span>
-      </button>
-    );
-  };
-
-  // The physical faceplate: exact 2 rows of 24 RJ45 + 4 QSFP stacked right. Left mgmt + labels + vents + ears via outer CSS.
   const renderReactFaceplate = () => {
-    const copperPorts: React.ReactNode[] = [];
-    for (let i = 1; i <= 48; i++) {
-      const name = `Ethernet${i}`;
-      const pd = portMap.get(name);
-      const isSel = selected === name;
-      copperPorts.push(
-        <Rj45Port
-          key={name}
-          name={name}
-          status={pd?.status}
-          active={pd?.active}
-          selected={isSel}
-          lldpNeighbor={pd?.lldpNeighbor}
-          onClick={selectPort}
-          onHover={setHovered}
-        />
-      );
-    }
-    const qsfpPorts = [49, 50, 51, 52].map((num) => {
-      const name = `Ethernet${num}`;
-      const pd = portMap.get(name);
-      const isSel = selected === name;
+    const copperTop = Array.from({ length: 24 }, (_, i) => `Ethernet${i + 1}`);
+    const copperBottom = Array.from({ length: 24 }, (_, i) => `Ethernet${i + 25}`);
+    const qsfps = [49, 50, 51, 52].map((n) => `Ethernet${n}`);
+
+    const renderRJ45 = (name: string) => {
+      const p = portMap.get(name);
+      const isUp = p?.status === "connected";
+      const isActive = !!p?.active;
+      const isSelected = selected === name;
+      const num = name.replace("Ethernet", "");
+      const lldp = p?.lldpNeighbor;
+      const title = `${name} • ${isUp ? "UP" : "DOWN"} ${p?.speed || ""} ${p?.description ? "• " + p.description : ""}${lldp ? " • LLDP:" + (lldp.system_name || "") : ""}`.trim();
+
       return (
-        <QsfpPort
+        <div
           key={name}
-          name={name}
-          status={pd?.status}
-          active={pd?.active}
-          selected={isSel}
-          lldpNeighbor={pd?.lldpNeighbor}
-          onClick={selectPort}
-          onHover={setHovered}
-        />
+          className={`rj45-port ${isUp ? "up" : "down"} ${isActive ? "active" : ""} ${isSelected ? "selected" : ""} ${hovered === name ? "hovered" : ""}`}
+          onClick={() => selectPort(name)}
+          onMouseEnter={() => setHovered(name)}
+          onMouseLeave={() => setHovered(null)}
+          title={title}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectPort(name);
+            }
+          }}
+        >
+          <div className="port-led" />
+          <div className="jack">
+            <div className="recess">
+              <div className="contacts">
+                {Array.from({ length: 8 }).map((_, k) => (
+                  <span key={k} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="port-num">{num}</div>
+        </div>
       );
-    });
+    };
+
+    const renderQSFP = (name: string) => {
+      const p = portMap.get(name);
+      const isUp = p?.status === "connected";
+      const isActive = !!p?.active;
+      const isSelected = selected === name;
+      const num = name.replace("Ethernet", "");
+      const lldp = p?.lldpNeighbor;
+      const title = `${name} (QSFP+ 40G) • ${isUp ? "UP" : "DOWN"}${lldp ? " • " + (lldp.system_name || "") : ""}`;
+
+      return (
+        <div
+          key={name}
+          className={`qsfp-port ${isUp ? "up" : ""} ${isActive ? "active" : ""} ${isSelected ? "selected" : ""} ${hovered === name ? "hovered" : ""}`}
+          onClick={() => selectPort(name)}
+          onMouseEnter={() => setHovered(name)}
+          onMouseLeave={() => setHovered(null)}
+          title={title}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectPort(name);
+            }
+          }}
+        >
+          <div className="port-led" />
+          <div className="cage">
+            <div className="slot" />
+            <div className="lanes">
+              {Array.from({ length: 4 }).map((_, k) => (
+                <span key={k} />
+              ))}
+            </div>
+          </div>
+          <div className="port-num">{num}</div>
+          <div className="qsfp-speed">40G</div>
+        </div>
+      );
+    };
 
     return (
-      <div className="arista-chassis" role="img" aria-label="Arista DCS-7050TX-48 front panel - realistic physical 1U using React components and CSS">
-        <div className="arista-inner">
+      <div
+        className="faceplate-wrapper"
+        aria-label="Arista DCS-7050TX-48 realistic 1U physical faceplate (React + CSS)"
+        role="img"
+      >
+        <div className="arista-chassis">
+          <div className="arista-inner" />
+
+          {/* Ventilation grills */}
           <div className="vents top" />
           <div className="vents bottom" />
 
+          {/* Left management area: CON/USB/MGMT ports */}
           <div className="mgmt-area">
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-              <div className="mgmt-port" title="Console" /><span className="mgmt-label">CON</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-              <div className="mgmt-port usb" title="USB" /><span className="mgmt-label">USB</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-              <div className="mgmt-port" title="Management" /><span className="mgmt-label">MGMT</span>
-            </div>
-          </div>
-          <div className="status-leds">
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led sys" title="SYS" /><span className="status-label">SYS</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led fan" title="FAN" /><span className="status-label">FAN</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led ps" title="PS1" /><span className="status-label">PS1</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><div className="status-led ps" title="PS2" /><span className="status-label">PS2</span></div>
+            <div className="mgmt-port" title="Console (CON)" />
+            <div className="mgmt-label" style={{ top: "22px" }}>CON</div>
+            <div className="mgmt-port usb" title="USB" />
+            <div className="mgmt-label" style={{ top: "46px" }}>USB</div>
+            <div className="mgmt-port" title="MGMT Ethernet" />
+            <div className="mgmt-label" style={{ top: "70px" }}>MGMT</div>
           </div>
 
-          <div className="model-label">
-            ARISTA
-            <span className="model">DCS-7050TX-48</span>
-            <span className="spec">48×10GBASE-T + 4×40GbE QSFP+</span>
+          {/* Status LEDs (SYS/FAN/PS1/PS2) */}
+          <div className="status-leds">
+            <div className="status-led sys" title="System LED" />
+            <div className="status-label" style={{ top: "102px" }}>SYS</div>
+            <div className="status-led fan" title="Fan LED" />
+            <div className="status-label" style={{ top: "112px" }}>FAN</div>
+            <div className="status-led ps" title="PSU 1 LED" />
+            <div className="status-label" style={{ top: "122px" }}>PS1</div>
+            <div className="status-led ps" title="PSU 2 LED" />
+            <div className="status-label" style={{ top: "132px" }}>PS2</div>
           </div>
+
+          {/* Model + row labels */}
+          <div className="model-label">
+            <span className="model">ARISTA</span>
+            <span className="spec">DCS-7050TX-48</span>
+            <span className="spec" style={{ fontSize: "4.2px", marginTop: "-1px" }}>
+              48×10GBASE-T + 4×40GbE QSFP+
+            </span>
+          </div>
+
           <div className="row-label top">1-24</div>
           <div className="row-label bottom">25-48</div>
 
+          {/* Interactive ports area */}
           <div className="ports-area">
-            <div className="ports-grid-copper">{copperPorts}</div>
-            <div className="ports-grid-qsfp">{qsfpPorts}</div>
+            <div className="ports-grid-copper">{copperTop.map(renderRJ45)}</div>
+            <div className="ports-grid-copper">{copperBottom.map(renderRJ45)}</div>
+            <div className="ports-grid-qsfp">{qsfps.map(renderQSFP)}</div>
           </div>
 
           <div className="chassis-footer">RACK 47 • DCS-7050TX-48</div>
@@ -244,7 +258,7 @@ export function SwitchPage() {
             SWITCH <span className="text-cyan">DCS-7050TX-48</span>
           </h1>
           <div className="text-xs text-muted metric">
-            10.0.20.2 • {connected} up • {data.length} reported • React physical faceplate
+            10.0.20.2 • {connected} up • {data.length} reported • React+CSS physical faceplate
           </div>
         </div>
         <div className="text-[10px] text-muted tracking-[2px] border border-border-token px-2 py-0.5 rounded">
@@ -265,20 +279,22 @@ export function SwitchPage() {
       )}
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Realistic physical 1U Arista faceplate - React declarative (divs/buttons) + Tailwind/CSS. Non-SVG. */}
+        {/* Realistic React+CSS Physical Faceplate - 1U Arista DCS-7050TX-48 */}
         <div className="flex-1 min-w-0">
           <div className="relative mx-[22px]">
-            <div className="rack-ear rack-ear-left"><div className="screw" /><div className="screw" /></div>
-            <div className="rack-ear rack-ear-right"><div className="screw" /><div className="screw" /></div>
+            <div className="rack-ear rack-ear-left" />
+            <div className="rack-ear rack-ear-right" />
             <div className="rack-bezel">
-              <div className={`faceplate-wrapper ${!hasData ? "opacity-60" : ""} ${portsPoll.loading ? "loading" : ""}`}>
-                {renderReactFaceplate()}
+              <div className="faceplate-wrapper">
+                <FaceplateErrorBoundary>
+                  {renderReactFaceplate()}
+                </FaceplateErrorBoundary>
               </div>
             </div>
           </div>
           <div className="mt-1.5 px-1 flex items-center justify-between text-[10px] text-muted tracking-widest">
             <span>click ports • green=up / red=down • blink=activity (&gt;1 kbps)</span>
-            <span>48×10G-T RJ45 (2 rows of 24) + 4×40G QSFP+ on right</span>
+            <span>48×10G-T + 4×40G QSFP+ (exact layout)</span>
           </div>
         </div>
 
@@ -399,6 +415,7 @@ export function SwitchPage() {
                           onChange={(e) => {
                             const v = e.target.value;
                             setNoteDraft(v);
+                            // debounce auto-save while user is actively typing note
                             if (editing === selectedPort.name) scheduleDebouncedSave(selectedPort.name, v);
                           }}
                           placeholder="your note…"
@@ -407,6 +424,7 @@ export function SwitchPage() {
                             if (e.key === "Escape") setEditing(null);
                           }}
                           onBlur={() => {
+                            // immediate save on blur for good UX + robustness
                             if (editing === selectedPort.name && noteDraft.trim() !== (selectedPort.note || "")) {
                               void saveNote(selectedPort.name);
                             }
@@ -445,7 +463,7 @@ export function SwitchPage() {
       </div>
 
       <div className="text-[10px] text-muted tracking-widest px-1">
-        React faceplate • physical Arista DCS-7050TX-48 (metal bevels, recessed RJ45 w/ LED, QSFP cages, rack ears, vents) • exact 48+4 layout • clickable + LLDP + notes + live blink
+        faceplate emulates physical Arista DCS-7050TX-48 (React+CSS) • 48×10GBASE-T RJ45 (2 rows) + 4×40G QSFP+ • left mgmt/console/USB + LEDs • clickable + LLDP + notes
       </div>
     </div>
   );
