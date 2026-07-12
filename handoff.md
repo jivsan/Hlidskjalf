@@ -1,39 +1,53 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (fourth update — PRs #1–#4 all merged; main is green:
-50 backend tests + frontend tsc/build). The design source of truth is `plan.md`;
-this file is only "what is done / what's next"._
+_Last updated: 2026-07-12 (post v0.2-alpha work — see CHANGELOG.md for full details). 
+The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## ⚡ Current state — all merged, main green
+**Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
 
-`main` now contains PRs #1–#4 (all merged, branches deleted). Verified on the
-merged tree: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.
+## ⚡ Current state — v0.2-alpha (main green)
 
-- **PR #1 `feat/tests-ci`** — pytest suite (auth/CSRF/rate-limit, vms, safety
-  rails, provision, rescue, accumulator, bandwidth, TLS pinning) + `[test]` extra
-  + `.github/workflows/ci.yml` (backend pytest + frontend tsc/build).
-- **PR #2 `test/console-ws`** — mock `vncwebsocket` echo endpoint + 6 integration
-  tests for the noVNC WS proxy (the previously-untested flow). Fixed a real bug:
-  `routes/console.py` closed the socket *before* `accept()`, so noVNC never
-  received the 4401/4403 close codes — now accepts first, then closes with code.
-- **PR #3 `deploy/docker`** — multi-stage Dockerfile + compose + `hlidskjalf.env.example`
-  + `docs/docker.md` + build-only `.github/workflows/docker.yml`. ~225 MB image,
-  smoke-tested to `healthy` (health + login) without real Proxmox. Non-Nix path
-  for a plain Debian VM. Gotchas in docs: `CMD` not `ENTRYPOINT` (override
-  support); single-quote the argon2 hash in compose `env_file` (`$`-interp),
-  unquoted for `docker run --env-file`.
-- **PR #4 `fix/ui-visual-pass`** — real in-browser pass (system Chromium 150 via
-  puppeteer-core). Fixed 4 defects: console tab stuck loading (`VmDetail.tsx`),
-  node RAM "— / —" (`NodePage.tsx` — PVE nests `status.memory`), completed tasks
-  shown red (`TasksTab.tsx` — result is in `exitstatus`), 50/50 bandwidth bar on
-  zero-traffic VMs (`OverviewTab.tsx`). Added `docs/screenshots/*` + README
-  `## Screenshots`.
+`main` now contains PRs #1–#4 + subsequent v0.2-alpha development work. 
+Verified: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.
 
-**Flagged backend follow-ups (from PR #4, worked around in the frontend, not yet
-fixed):** `/api/node` returns raw PVE shape (nested `memory`/`rootfs`, cores in
-`cpuinfo.cpus`, no flat `maxcpu`) and `/api/tasks/recent` passes tasks verbatim
-(`status` vs `exitstatus`). The frontend now tolerates both mock and real PVE;
-the backend *could* normalize these. Non-blocking — worth a small PR later.
+See `CHANGELOG.md` for the complete list of changes in this release.
+
+### Core from PRs #1–#4 (previous)
+- **PR #1 `feat/tests-ci`** — pytest suite + CI.
+- **PR #2 `test/console-ws`** — console WS tests + bugfix.
+- **PR #3 `deploy/docker`** — Docker support.
+- **PR #4 `fix/ui-visual-pass`** — UI fixes + initial screenshots.
+
+### v0.2-alpha additions (this session)
+- **feat/normalize-pve-shapes** (merged) — Backend normalization for `/api/node` (flat maxcpu/mem/maxmem) and `/api/tasks/recent` (consistent status/exitstatus). Mock updated to match real PVE shapes. Frontend comments cleaned.
+- **Frontend cyberpunk / futuristic Tokyo Night upgrades**:
+  - Blinking activity LEDs (cyan/pink) for network sections.
+  - Enhanced Fleet dashboard with summary cards + live indicators.
+  - Improved VM headers, login, layout with neon glows, grid backgrounds.
+  - CSS for server-room aesthetic (matches plan.md design language + Flux inspiration).
+- **Screenshots restructuring**:
+  - Moved to versioned `docs/screenshots/v0.2-alpha/`.
+  - Themed READMEs with cyberpunk server room framing (ASCII HUDs, "RACK 47", neon labels).
+  - Main README now points to dedicated versioned gallery.
+- **New feature: Arista switch port visualizer** (`/switch`):
+  - Dedicated network section for visualizing switch ports (Arista 7050TX).
+  - Grid view with status, speeds, VLANs.
+  - Blinking cyan/pink activity lights based on live counters.
+  - Editable notes per port (stored in DB; can merge with switch descriptions).
+  - Backend: eAPI primary (httpx) + SSH fallback (paramiko). New routes, DB table, config.
+  - Cyberpunk-themed UI (rack labels, glowing LEDs).
+  - Added to nav. Requires new env vars (see `hlidskjalf.env.example`).
+- Declared version **v0.2-alpha**.
+- Created `CHANGELOG.md`.
+- Added `paramiko` dep.
+- Minor: updated env example, various polish.
+
+**Current version**: v0.2-alpha (see CHANGELOG.md and docs/screenshots for details).
+
+**Flagged items resolved**:
+- Backend shapes normalization (from PR #4) completed in `feat/normalize-pve-shapes`.
+
+**GitHub API access:** (unchanged from before)
 
 **GitHub API access:** a fine-grained PAT (repo `jivsan/Hlidskjalf`, push/PR,
 expires 2026-08-11, but pasted in chat once → rotate it) is stored at
@@ -113,19 +127,19 @@ cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
 
 ## Immediate next steps (in order)
 
-1. Optional small PR: normalize the two backend responses flagged by PR #4
-   (`/api/node` nested memory/rootfs + `cpuinfo.cpus`; `/api/tasks/recent`
-   `status` vs `exitstatus`) so the mock and real PVE agree. Frontend already
-   tolerates both, so non-blocking.
+1. ~~Optional small PR: normalize...~~ **DONE** (merged as part of v0.2-alpha).
 2. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
    `nix flake check`.
+3. Test new `/switch` feature on real Arista 7050TX (SSH or eAPI; see env.example).
 4. Real deployment (Christina, manual). Two paths now:
    - **Nix/heimdall (primary):** `docs/bootstrap.md` on hella → secrets env on
      heimdall → flake input + Traefik + DNS in dotfiles (plan §7).
-   - **Docker (any Debian VM):** `docs/docker.md` (after PR #3 merges).
-5. M2–M4 acceptance against real hella with **scratch VMIDs ≥ 900 only**;
-   confirm plan §10 open items (real storage IDs, real protected VMIDs —
-   heimdall/hermes-agent/HAOS VMIDs still unknown, VLAN 30 gateway).
+   - **Docker (any Debian VM):** `docs/docker.md`.
+5. M2–M4 acceptance + v0.2-alpha polish against real hella with **scratch VMIDs ≥ 900 only**;
+   confirm plan §10 open items.
+6. Tag/release v0.2-alpha and update handoff/CHANGELOG as needed.
+
+See `CHANGELOG.md` for detailed v0.2-alpha changes (cyberpunk UI, switch visualizer, screenshots versioning, normalization, etc.).
 
 ## Git / PR workflow
 
@@ -148,6 +162,15 @@ the branch actually has pushed commits). To enable real PR creation: install
 - rrddata seeding of first-month bandwidth: nice-to-have, skipped.
 - Prometheus datasource: Phase 2 stub in `datasources/prometheus.py`.
 - LXC: list/detail/power work; provisioning is qemu-only (per plan non-goals).
+- Switch integration: eAPI vs SSH creds, LLDP neighbor display, more port stats.
+
+## Recent development notes (v0.2-alpha session)
+
+- Major frontend work toward cyberpunk Tokyo Night / server room theme (blinking network LEDs, dashboard Fleet, etc.).
+- New `/switch` page for Arista port visualization (activity blinking, notes).
+- Screenshots moved to versioned `docs/screenshots/v0.2-alpha/` with themed docs.
+- Backend: PVE shape normalization merged.
+- Full details in `CHANGELOG.md`. All changes built/tested locally.
 
 ## Dev loop cheat-sheet
 
