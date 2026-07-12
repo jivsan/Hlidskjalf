@@ -1,31 +1,33 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (third update — tests/CI merged; three follow-up PRs
-opened and awaiting the user's merge). The design source of truth is `plan.md`;
+_Last updated: 2026-07-12 (fourth update — PRs #1–#4 all merged; main is green:
+50 backend tests + frontend tsc/build). The design source of truth is `plan.md`;
 this file is only "what is done / what's next"._
 
-## ⚡ Current state — PRs awaiting merge
+## ⚡ Current state — all merged, main green
 
-`main` is at the tests/CI merge (`feat/tests-ci` = PR #1, MERGED; 44 backend
-tests green; branch deleted). Three follow-up PRs are OPEN, each verified in
-scope + green, and share NO files so they merge cleanly in any order:
+`main` now contains PRs #1–#4 (all merged, branches deleted). Verified on the
+merged tree: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.
 
+- **PR #1 `feat/tests-ci`** — pytest suite (auth/CSRF/rate-limit, vms, safety
+  rails, provision, rescue, accumulator, bandwidth, TLS pinning) + `[test]` extra
+  + `.github/workflows/ci.yml` (backend pytest + frontend tsc/build).
 - **PR #2 `test/console-ws`** — mock `vncwebsocket` echo endpoint + 6 integration
-  tests for the noVNC WS proxy (the one previously-untested flow). Suite now
-  **50 passing**. Also fixes a real bug: `routes/console.py` closed the socket
-  *before* `accept()`, so noVNC never received the 4401/4403 close codes.
+  tests for the noVNC WS proxy (the previously-untested flow). Fixed a real bug:
+  `routes/console.py` closed the socket *before* `accept()`, so noVNC never
+  received the 4401/4403 close codes — now accepts first, then closes with code.
 - **PR #3 `deploy/docker`** — multi-stage Dockerfile + compose + `hlidskjalf.env.example`
   + `docs/docker.md` + build-only `.github/workflows/docker.yml`. ~225 MB image,
   smoke-tested to `healthy` (health + login) without real Proxmox. Non-Nix path
-  for a plain Debian VM. Gotchas baked into docs: use `CMD` not `ENTRYPOINT`
-  (override support); single-quote the argon2 hash in compose `env_file`
-  (`$`-interpolation), unquoted for `docker run --env-file`.
+  for a plain Debian VM. Gotchas in docs: `CMD` not `ENTRYPOINT` (override
+  support); single-quote the argon2 hash in compose `env_file` (`$`-interp),
+  unquoted for `docker run --env-file`.
 - **PR #4 `fix/ui-visual-pass`** — real in-browser pass (system Chromium 150 via
   puppeteer-core). Fixed 4 defects: console tab stuck loading (`VmDetail.tsx`),
   node RAM "— / —" (`NodePage.tsx` — PVE nests `status.memory`), completed tasks
   shown red (`TasksTab.tsx` — result is in `exitstatus`), 50/50 bandwidth bar on
   zero-traffic VMs (`OverviewTab.tsx`). Added `docs/screenshots/*` + README
-  `## Screenshots`. `tsc`/`build` clean.
+  `## Screenshots`.
 
 **Flagged backend follow-ups (from PR #4, worked around in the frontend, not yet
 fixed):** `/api/node` returns raw PVE shape (nested `memory`/`rootfs`, cores in
@@ -111,11 +113,11 @@ cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
 
 ## Immediate next steps (in order)
 
-1. **Merge PRs #2, #3, #4** (user does this on GitHub; any order — no shared
-   files). Then delete their branches (GitHub offers it on merge).
-2. Optional small PR: normalize the two backend responses flagged above
-   (`/api/node`, `/api/tasks/recent`) so the mock and real PVE agree.
-3. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
+1. Optional small PR: normalize the two backend responses flagged by PR #4
+   (`/api/node` nested memory/rootfs + `cpuinfo.cpus`; `/api/tasks/recent`
+   `status` vs `exitstatus`) so the mock and real PVE agree. Frontend already
+   tolerates both, so non-blocking.
+2. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
    `nix flake check`.
 4. Real deployment (Christina, manual). Two paths now:
    - **Nix/heimdall (primary):** `docs/bootstrap.md` on hella → secrets env on
