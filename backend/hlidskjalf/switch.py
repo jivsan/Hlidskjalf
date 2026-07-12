@@ -6,21 +6,45 @@ Enable eAPI on switch:
     no shutdown
 
 Fetches ports, LLDP neighbors, descriptions, counters for visualization.
+
+Robustness:
+- 2.5s TTL cache (rate limit against switch eAPI)
+- retry with exponential backoff on transient errors
+- handles timeouts, auth failures (401/ eapi err), json/malformed, partial data
+- normalizes port names across Arista output variations (EthernetN, EtN, etN, ethN)
+- validation + safe defaults for every field
+- on any failure: fallback to [] (or stale cache if available) for graceful UI
+
+Edge cases handled (see comments):
+- no switch configured (no user/pass/host) -> []
+- auth fail / bad creds -> []
+- partial LLDP (only some ports have neighbors)
+- high port counts (52+), non-physical interfaces filtered
+- missing keys / null rates / non-numeric -> safe 0 / ""
+- empty results list from eAPI
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
+import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 
 from .config import get_settings
 
+log = logging.getLogger(__name__)
+
 
 @dataclass
 class PortInfo:
+    """Typed port info returned to routes + frontend.
+    All fields have safe defaults; never None where UI expects string/number.
+    """
     name: str
     status: str          # "connected", "notconnect", "disabled", etc.
     speed: str
@@ -42,14 +66,48 @@ class AristaClient:
         self.username = s.switch_username
         self.password = s.switch_password
 
+        # Simple in-memory TTL cache + rate limiting (2-3s as specified)
+        self._cache: list[PortInfo] = []
+        self._cache_ts: float = 0.0
+        self._cache_ttl: float = 2.5
+        self._lock = asyncio.Lock()
+
     async def get_ports(self) -> list[PortInfo]:
-        """Return list of ports with status, rates, descriptions, LLDP (pure eAPI, no SSH fallback)."""
-        if not (self.username and self.password):
+        """Return list of ports with status, rates, descriptions, LLDP (pure eAPI, no SSH fallback).
+
+        Caching: serves from cache if <2.5s old. On eAPI failure, serves stale cache
+        if present (last-known for UI) else empty list (graceful degradation).
+        Never crashes caller.
+        """
+        if not (self.host and self.username and self.password):
+            # no switch configured (common dev/prod case)
             return []
-        return await self._get_ports_eapi()
+
+        now = time.monotonic()
+        if self._cache and (now - self._cache_ts) < self._cache_ttl:
+            return list(self._cache)
+
+        async with self._lock:
+            now = time.monotonic()  # recheck under lock
+            if self._cache and (now - self._cache_ts) < self._cache_ttl:
+                return list(self._cache)
+
+            try:
+                ports = await self._get_ports_eapi()
+                self._cache = ports
+                self._cache_ts = time.monotonic()
+                return list(ports)
+            except Exception as exc:
+                log.warning("switch eAPI failure (serving fallback): %s", exc)
+                # fallback: stale last-known if we have it, else empty
+                # frontend will show "offline" banner but can keep rendering last data
+                return list(self._cache) if self._cache else []
 
     async def _get_ports_eapi(self) -> list[PortInfo]:
-        """Use Arista eAPI (JSON-RPC over HTTPS)."""
+        """Use Arista eAPI (JSON-RPC over HTTPS). With retry + validation."""
+        if not self.host:
+            return []
+
         base = f"https://{self.host}:{self.port}"
         auth = (self.username, self.password)
 
@@ -60,7 +118,7 @@ class AristaClient:
             "show lldp neighbors",
         ]
 
-        payload = {
+        payload: dict[str, Any] = {
             "jsonrpc": "2.0",
             "method": "runCmds",
             "params": {
@@ -71,64 +129,83 @@ class AristaClient:
             "id": "hlidskjalf-switch",
         }
 
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-            resp = await client.post(f"{base}/command", json=payload, auth=auth)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await self._eapi_request_with_retry(base, auth, payload)
+
+        if not isinstance(data, dict):
+            raise RuntimeError("malformed eAPI response (not object)")
 
         if "error" in data:
-            raise RuntimeError(data["error"])
+            err = data["error"]
+            msg = str(err) if not isinstance(err, dict) else err.get("message", str(err))
+            # auth failures surface here or as 401 from httpx
+            raise RuntimeError(f"eAPI error: {msg}")
 
-        results = data.get("result", [])
-        if len(results) < 4:
+        results = data.get("result")
+        if not isinstance(results, list) or len(results) < 4:
+            # partial or bad batch response
             return []
 
-        status_data = results[0]
-        desc_data = results[1]
-        counters_data = results[2]
-        lldp_data = results[3]
+        status_data = results[0] or {}
+        desc_data = results[1] or {}
+        counters_data = results[2] or {}
+        lldp_data = results[3] or {}
 
-        # Build description map
+        # Build maps with normalized port names (handles Et1 / Ethernet1 / et1 variations)
         desc_map: dict[str, str] = {}
-        for iface in desc_data.get("interfaceDescriptions", []):
-            name = iface.get("interface", "")
-            desc = iface.get("description", "") or ""
-            desc_map[name] = desc
+        for iface in desc_data.get("interfaceDescriptions", []) or []:
+            if not isinstance(iface, dict):
+                continue
+            name = self._normalize_port_name(iface.get("interface", ""))
+            desc = str(iface.get("description", "") or "")
+            if name:
+                desc_map[name] = desc
 
-        # Build counters
         rate_map: dict[str, tuple[int, int]] = {}
-        for iface, stats in counters_data.get("interfaces", {}).items():
-            in_rate = int(stats.get("inBitsRate", 0) or 0)
-            out_rate = int(stats.get("outBitsRate", 0) or 0)
-            rate_map[iface] = (in_rate, out_rate)
+        for iface, stats in (counters_data.get("interfaces", {}) or {}).items():
+            if not isinstance(stats, dict):
+                continue
+            iname = self._normalize_port_name(iface)
+            try:
+                in_rate = int(float(stats.get("inBitsRate", 0) or 0))
+                out_rate = int(float(stats.get("outBitsRate", 0) or 0))
+            except (ValueError, TypeError):
+                in_rate = out_rate = 0
+            if iname:
+                rate_map[iname] = (in_rate, out_rate)
 
-        # Build LLDP map (simple: last neighbor per local port)
         lldp_map: dict[str, dict] = {}
-        for neigh in lldp_data.get("lldpNeighbors", []):
-            local_if = neigh.get("port", "")
-            system = neigh.get("neighborDevice", "") or neigh.get("systemName", "")
-            neigh_port = neigh.get("neighborPort", "") or ""
+        for neigh in lldp_data.get("lldpNeighbors", []) or []:
+            if not isinstance(neigh, dict):
+                continue
+            local_if = self._normalize_port_name(neigh.get("port", ""))
+            # Arista variations: neighborDevice or systemName
+            system = str(neigh.get("neighborDevice", "") or neigh.get("systemName", "") or "")
+            neigh_port = str(neigh.get("neighborPort", "") or "")
             if local_if and system:
                 lldp_map[local_if] = {"system_name": system, "port": neigh_port}
 
         ports: list[PortInfo] = []
-        for name, info in status_data.get("interfaceStatuses", {}).items():
-            if not name.lower().startswith(("ethernet", "et")):
-                continue  # only physical ports for now
+        for raw_name, info in (status_data.get("interfaceStatuses", {}) or {}).items():
+            if not isinstance(info, dict):
+                continue
+            name = self._normalize_port_name(raw_name)
+            if not name.lower().startswith("ethernet"):
+                continue  # only physical Ethernet* (handles EtN, eth etc after norm)
 
-            status = info.get("linkStatus", "notconnect")
-            speed = info.get("bandwidth", "auto") or ""
-            duplex = info.get("duplex", "")
-            vlan = str(info.get("vlanInformation", {}).get("vlanId", "")) or None
+            status = str(info.get("linkStatus", "notconnect") or "notconnect")
+            speed = str(info.get("bandwidth", "auto") or "")
+            duplex = str(info.get("duplex", "") or "")
+            vlan_info = info.get("vlanInformation") or {}
+            vlan = str(vlan_info.get("vlanId", "")) or None if vlan_info.get("vlanId") is not None else None
 
             in_r, out_r = rate_map.get(name, (0, 0))
-            active = (in_r > 1000) or (out_r > 1000)  # >1kbps = active
+            active = (in_r > 1000) or (out_r > 1000)
 
             ports.append(
                 PortInfo(
                     name=name,
                     status=status,
-                    speed=str(speed),
+                    speed=speed,
                     duplex=duplex,
                     vlan=vlan,
                     description=desc_map.get(name, ""),
@@ -139,12 +216,67 @@ class AristaClient:
                 )
             )
 
-        # Sort nicely (Ethernet1, Ethernet2, ...)
         ports.sort(key=lambda p: self._port_sort_key(p.name))
         return ports
 
+    async def _eapi_request_with_retry(
+        self, base: str, auth: tuple[str, str], payload: dict[str, Any], max_retries: int = 2
+    ) -> dict:
+        """POST to eAPI /command with timeout, auth, retry+backoff for transient issues."""
+        delay = 0.12
+        last_exc: Exception | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                # per-call client keeps things simple; short connect/read timeouts
+                async with httpx.AsyncClient(verify=False, timeout=httpx.Timeout(8.0, connect=4.0)) as client:
+                    resp = await client.post(f"{base}/command", json=payload, auth=auth)
+                    # explicit auth fail detection
+                    if resp.status_code in (401, 403):
+                        raise RuntimeError(f"auth failed (HTTP {resp.status_code})")
+                    resp.raise_for_status()
+                    return resp.json()
+            except httpx.TimeoutException as e:
+                last_exc = e
+                log.info("eAPI timeout (attempt %d)", attempt + 1)
+            except httpx.HTTPStatusError as e:
+                last_exc = e
+                if e.response.status_code in (401, 403):
+                    raise RuntimeError(f"auth failed (HTTP {e.response.status_code})") from e
+            except (httpx.RequestError, ValueError, KeyError, TypeError) as e:
+                # network, json decode, malformed
+                last_exc = e
+            if attempt < max_retries:
+                await asyncio.sleep(delay)
+                delay *= 1.7  # backoff
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("eAPI request failed after retries")
+
+    def _normalize_port_name(self, name: str) -> str:
+        """Canonicalize Arista port names to 'EthernetN' (or 'EthernetN/M').
+
+        Handles: "Ethernet1", "Et1", "et1", "Eth1", "ethernet1", "Et1/1", "Management1" (filtered later).
+        """
+        if not isinstance(name, str):
+            return ""
+        n = name.strip()
+        if not n:
+            return ""
+        # extract leading letters + number suffix (support slashed subports)
+        m = re.match(r"^([A-Za-z]+)(\d+(?:/\d+)*)$", n)
+        if m:
+            prefix = m.group(1).lower()
+            num = m.group(2)
+            if prefix.startswith(("eth", "et")):
+                return f"Ethernet{num}"
+        # fallback: try to find any number sequence
+        m2 = re.search(r"(\d+(?:/\d+)*)", n)
+        if m2 and re.search(r"et|ethernet", n, re.I):
+            return f"Ethernet{m2.group(1)}"
+        return n
+
     def _port_sort_key(self, name: str) -> tuple:
-        # Sort Ethernet1, Ethernet2, etc.
+        """Sort Ethernet1, Ethernet2, Ethernet1/1 etc. numerically."""
         m = re.search(r"(\d+)(?:/(\d+))?", name)
         if m:
             return (int(m.group(1)), int(m.group(2) or 0))

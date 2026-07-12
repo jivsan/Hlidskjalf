@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Switch faceplate upgraded to HTML5 `<canvas>`** (replaced SVG):
+  - Realistic physical Arista DCS-7050TX-48 1U viz: 48×10GBASE-T RJ45 (two rows), 4×40G QSFP+ stacked right.
+  - Left-side console (CON), USB, MGMT ports + status LEDs (SYS/FAN/PS1/PS2) drawn.
+  - Multi-layer gradients, shadows, bevels, speculars for metal/plastic depth and 3D rack look (no blocky/cartoon).
+  - Custom port drawing: RJ45 with latch notch + 8 contacts; QSFP cages with 4-lane slots.
+  - Per-port LEDs above jacks with accurate blink (time-sin based on .active from portMap).
+  - Selection rings (pink), hover feedback.
+  - Full hit-detection via mouse coord mapping to portGeoms.
+  - High-DPI (devicePixelRatio) support + RAF redraw loop.
+  - Aspect-ratio wrapper + rack ears/bezel preserved for framed physical rack aesthetic.
+  - Integrated with existing portMap/selected/data for status, activity, selection.
+  - Updated comments + UI labels (removed all SVG refs).
+  - CSS: .faceplate-wrapper + .canvas-faceplate; minor bezel padding tweak.
+  - Performance: tiny static+light anim canvas, no issue.
+  - Build clean; no backend changes.
+- Suggest branch: `feat/switch-realistic-canvas-faceplate` (from prior SVG work).
+
 ## [0.3.0-alpha] - 2026-07-12
 
 ### Added

@@ -190,3 +190,24 @@ export interface ConsoleInfo {
   ws_path: string;
   password: string;
 }
+
+// --- Switch (Arista eAPI) types (match backend contract) --------------------
+
+export interface SwitchPort {
+  name: string;
+  status: string;
+  speed: string;
+  duplex: string;
+  vlan: string | null;
+  description: string;
+  note: string;
+  inputRate: number;
+  outputRate: number;
+  active: boolean;
+  lldpNeighbor?: { system_name?: string; port?: string } | null;
+}
+
+export interface SwitchPortsResponse {
+  ports: SwitchPort[];
+  error?: string; // present on graceful degradation (offline/unreachable/misconfig)
+}

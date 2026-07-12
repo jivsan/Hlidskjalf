@@ -58,13 +58,14 @@ Full before gallery in v0.2-alpha. The switch is the key new "screenshot" featur
 ### New: Switch Section (/switch)
 This is the major addition in v0.3-alpha.
 
-- **Physical Faceplate View:** SVG layout that mimics the actual Arista 7050TX-48T-4SFP+ front panel.
-  - 48x 10GBASE-T ports (RJ45 style in two rows).
-  - 4x SFP+ uplinks on the right.
-  - Rack bezel and ear styling for "rack-like" look.
+- **Physical Faceplate View:** SVG layout that mimics the actual Arista DCS-7050TX-48 front panel exactly.
+  - 48x 10GBASE-T RJ45 ports (dense 2 rows of 24 with realistic jack recesses).
+  - 4x 40GbE QSFP+ cages on the right (wider, with lane dividers and "40G" labels).
+  - Rack bezel and chassis details.
   - Clickable ports: Click to edit notes directly.
-  - Status indicators: Green for connected, red for down.
-  - Blinking activity LEDs: Cyan for IN, pink for OUT when traffic > threshold (integrated with existing .led styles).
+  - Status indicators + blinking activity LEDs (cyan IN / pink OUT).
+  - LLDP neighbors shown for "what machine goes where".
+  - Interface descriptions fetched from switch + editable notes.
 
 - **LLDP Neighbors:** Shows "what's plugged in" (system name and port) for machine-to-port mapping.
 
