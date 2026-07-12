@@ -15,7 +15,7 @@ import random
 import time
 from itertools import count
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 app = FastAPI(title="mock-pve")
 NODE = "hella"
@@ -278,3 +278,28 @@ async def node_storage(node: str):
 async def vncproxy(node: str, kind: str, vmid: int):
     return {"data": {"port": "5900", "ticket": "MOCK-TICKET-" + str(vmid),
                      "user": "mock@pve", "cert": ""}}
+
+
+@app.websocket("/api2/json/nodes/{node}/{kind}/{vmid}/vncwebsocket")
+async def vncwebsocket(
+    websocket: WebSocket,
+    node: str,
+    kind: str,
+    vmid: int,
+    port: str = "",
+    vncticket: str = "",
+):
+    """Echo VNC websocket.
+
+    The real PVE endpoint bridges to the guest's VNC server; the mock just
+    accepts the `binary` subprotocol (tolerating the port/vncticket query
+    params and the PVEAPIToken Authorization header the panel sends) and echoes
+    every binary frame straight back, so an integration test can prove the
+    panel's bidirectional byte pump moves data in both directions.
+    """
+    await websocket.accept(subprotocol="binary")
+    try:
+        while True:
+            await websocket.send_bytes(await websocket.receive_bytes())
+    except WebSocketDisconnect:
+        pass

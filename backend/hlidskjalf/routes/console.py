@@ -65,6 +65,12 @@ async def console_ticket(
 
 @router.websocket("/ws/console/{vmid}")
 async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
+    # Accept the handshake *before* the auth/key checks so a rejection can send
+    # a real WebSocket close code (4401/4403) to the browser. Closing before
+    # accept makes uvicorn reject the handshake with a bare HTTP 403 and the
+    # code never reaches the client (noVNC would only see a generic 1006).
+    # noVNC always offers the "binary" subprotocol.
+    await websocket.accept(subprotocol="binary")
     try:
         session_from_request(websocket)  # cookie check; raises HTTPException
     except HTTPException:
@@ -88,7 +94,6 @@ async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
     )
     headers = {"Authorization": f"PVEAPIToken={settings.pve_token_id}={settings.pve_token_secret}"}
 
-    await websocket.accept(subprotocol="binary")
     try:
         async with websockets.connect(
             upstream_url,
