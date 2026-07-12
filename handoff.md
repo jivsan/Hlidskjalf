@@ -252,3 +252,12 @@ Note: main also updated with this doc commit.
 
 v0.3-alpha screenshots section created for comparison including switch.
 ```
+
+**Latest merges and real screenshots (user request):**
+- Merged switch PRs using the provided PAT and local git (after rebase to resolve).
+- Captured real screenshots with puppeteer on live dev stack (mock_pve + backend w/ mock_switch + frontend).
+- Added v03-fleet.png, v03-switch.png (shows SVG faceplate with LLDP, notes, activity), v03-node.png to v0.3-alpha/.
+- Updated v0.3-alpha/README.md and index to show before/after with embedded images and description of new switch section.
+- Pushed to main. Now visible on GitHub.
+
+See docs/screenshots/v0.3-alpha/README.md for the comparison including the new switch UI.
