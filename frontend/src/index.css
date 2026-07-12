@@ -17,7 +17,13 @@
 
 @layer components {
   .card {
-    @apply bg-surface border border-border-token rounded-card shadow-sm;
+    @apply bg-surface border border-border-token rounded-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: box-shadow 0.1s ease, border-color 0.1s ease;
+  }
+  .card:hover {
+    border-color: #3a415a;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
   }
   .metric {
     font-variant-numeric: tabular-nums;
@@ -56,86 +62,14 @@
   scrollbar-color: #2f3549 transparent;
 }
 
-/* Flux-panel inspired: cleaner modern cards, subtle depth, professional cyberpunk (less neon/glow) */
-.rack-bezel {
-  background: linear-gradient(160deg, #2c3146 0%, #1f2436 100%);
-  border: 6px solid #3a4058;
-  border-radius: 4px;
-  box-shadow:
-    inset 0 3px 6px rgba(0, 0, 0, 0.65),
-    inset 0 -2px 3px rgba(255, 255, 255, 0.04),
-    0 6px 16px rgba(0, 0, 0, 0.55);
-  padding: 10px;
-  position: relative;
+/* Switch faceplate / rack like - Flux human feel (clean, readable, not over-glow) */
+.svg-faceplate {
+  filter: contrast(1.05) saturate(0.95);
 }
-
-.rack-bezel::before {
-  content: "";
-  position: absolute;
-  top: 6px; left: 6px; right: 6px; bottom: 6px;
-  border: 1px solid #4a5068;
-  border-radius: 2px;
-  pointer-events: none;
+.switch-port {
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
-
-/* Rack mount ear hints */
-.rack-ear {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 14px;
-  height: 42px;
-  background: #2a2f44;
-  border: 1px solid #3a4058;
-  border-radius: 2px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
-}
-
-.rack-ear-left { left: -18px; }
-.rack-ear-right { right: -18px; }
-
-/* LED styles (for both DOM and SVG integration) */
-.led {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 9999px;
-  border: 1px solid rgba(0,0,0,0.35);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.1) inset;
-  vertical-align: middle;
-}
-.led-cyan { background: #2de2e6; }
-.led-pink { background: #ff4fa3; }
-.led-green { background: #22c55e; }
-.led-red { background: #f7768e; }
-.led-muted { background: #3a4058; opacity: 0.55; }
-
-.led-active {
-  animation: led-blink 900ms steps(2, end) infinite;
-}
-
-@keyframes led-blink {
-  50% { opacity: 0.15; }
-}
-
-/* SVG port/led integration - subtle, no heavy neon */
-.svg-port {
-  cursor: pointer;
-  transition: filter 120ms ease;
-}
-.svg-port:hover {
-  filter: brightness(1.15);
-}
-.svg-port.selected {
-  filter: brightness(1.1) saturate(1.1);
-}
-.svg-port-label {
-  font-family: inherit;
-  font-size: 5.5px;
-  fill: #8a90a8;
-  pointer-events: none;
-  user-select: none;
-}
-.svg-led {
-  transition: fill 80ms ease;
+.switch-port:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
