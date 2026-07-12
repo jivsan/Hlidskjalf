@@ -55,6 +55,8 @@ See `CHANGELOG.md` for the complete list of changes in this release.
 
 **Current version**: v0.2-alpha (see CHANGELOG.md and docs/screenshots for details).
 
+**Switch redesign (this task)**: Landed on `feat/switch-svg-faceplate-top-talkers`. Full details in CHANGELOG [Unreleased] and the branch. Ready for review / merge. (frontend/src/pages/Switch.tsx + index.css + docs).
+
 **Flagged items resolved**:
 - Backend shapes normalization (from PR #4) completed in `feat/normalize-pve-shapes`.
 
