@@ -14,56 +14,14 @@ setup on hella.
 
 ## Screenshots
 
-Tokyo Night, all-mono. Shots below are the panel running against the bundled
-mock PVE (`dev/mock_pve.py`), so every page renders with live-looking data.
+The screenshot gallery is maintained in its own versioned folder for easy tracking across releases:
 
-### Fleet
+**📁 [docs/screenshots/](docs/screenshots/)**
 
-Every VM/LXC at a glance — status dot, CPU, RAM, uptime and month-to-date
-traffic, all sortable; quick start/shutdown per row.
+- **Current:** [v0.2-alpha](docs/screenshots/v0.2-alpha/README.md)
+- Images are taken against the mock PVE (`dev/mock_pve.py`).
 
-![Fleet](docs/screenshots/fleet.png)
-
-### VM overview
-
-systemd-unit-style status chip (copy-on-click IP), disk usage, since-boot
-bandwidth split, CPU/network sparklines, config, and a name-confirmed danger
-zone.
-
-![VM overview](docs/screenshots/vm-overview.png)
-
-### System statistics
-
-Current-utilization gauges plus timeframe-pilled CPU / RAM / disk / disk-I/O /
-network charts with humanized units.
-
-![System statistics](docs/screenshots/graphs-system.png)
-
-### Bandwidth statistics
-
-Per-VM accounting with an optional monthly quota card (limit / utilized /
-utilization %) and daily + Jan–Dec monthly traffic charts.
-
-![Bandwidth statistics](docs/screenshots/graphs-bandwidth.png)
-
-### Provision
-
-Clone a cloud-init template onto a VLAN with a static IP and SSH keys, then
-watch the live task log.
-
-![Provision](docs/screenshots/provision.png)
-
-### Node
-
-hella's own CPU / RAM / storage and host rrd graphs.
-
-![Node](docs/screenshots/node.png)
-
-### Mobile
-
-The fleet table stays usable on a phone.
-
-<img src="docs/screenshots/mobile-fleet.png" alt="Mobile fleet" width="390" />
+See the versioned directory for the full gallery with descriptions.
 
 ## Layout
 
