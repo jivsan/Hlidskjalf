@@ -12,15 +12,19 @@ Branches: feat/switch-eapi-lldp-mock, feat/switch-svg-rack-top-talkers (rebased 
 - LLDP for "what machine where" + notes + descriptions.
 - SVG faceplate + top talkers + rack visuals.
 - Dev mock + styling tweaks (Flux-like human).
+- **v0.3-alpha docs**: New `docs/screenshots/v0.3-alpha/README.md` with comparison (before from v0.2, after for switch SVG, LLDP, top talkers, notes, descriptions, Flux styling). Updated `docs/screenshots/README.md` and main README. Local merge of PR branches. All documented.
 
 **Note:** A proper `CHANGELOG.md` has been added to document all changes. See it for detailed history.
 
-## ⚡ Current state — v0.2-alpha (main green)
+## ⚡ Current state — v0.3-alpha (main green, switch PRs merged locally)
 
-`main` now contains PRs #1–#4 + subsequent v0.2-alpha development work. 
+`main` now contains PRs #1–#4 + v0.2 + v0.3-alpha work (local merges of feat/switch-* branches simulating GitHub PR merge).
+
 Verified: **50 pytest pass**, `tsc --noEmit` + `npm run build` clean.
 
-See `CHANGELOG.md` for the complete list of changes in this release.
+See `CHANGELOG.md` for the complete list of changes in this release (v0.3-alpha is the switch faceplate + styling release).
+
+**v0.3-alpha screenshots section created** in `docs/screenshots/v0.3-alpha/` for before/after comparison (includes new switch section). Updated index and main README.
 
 ### Core from PRs #1–#4 (previous)
 - **PR #1 `feat/tests-ci`** — pytest suite + CI.

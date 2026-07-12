@@ -4,7 +4,7 @@
   ╔══════════════════════════════════════════════════════════╗
   ║   H L I D S K J A L F   //   C O N T R O L   R O O M     ║
   ║   NEON: #2DE2E6 (CYAN)  +  #FF4FA3 (PINK)                ║
-  ║   RACK: 47  |  SUBLEVEL: TOKYO NIGHT  |  v0.2-alpha      ║
+  ║   RACK: 47  |  SUBLEVEL: TOKYO NIGHT  |  v0.3-alpha      ║
   ╚══════════════════════════════════════════════════════════╝
 ```
 
@@ -16,7 +16,8 @@ Live telemetry feeds from the Hlidskjalf panel are archived here by version.
 
 | VERSION     | STATUS     | DESCRIPTION                              | ACCESS |
 |-------------|------------|------------------------------------------|--------|
-| **v0.2-alpha** | ACTIVE     | Futuristic Tokyo Night control surface. Blinking network LEDs. Dashboard fleet. | [ENTER →](v0.2-alpha/README.md) |
+| **v0.3-alpha** | ACTIVE     | Arista switch faceplate (SVG), LLDP neighbors, top talkers, notes. Flux-inspired human cyberpunk styling. | [ENTER →](v0.3-alpha/README.md) |
+| **v0.2-alpha** | ARCHIVED   | Previous baseline (grid ports, basic network). | [ENTER →](v0.2-alpha/README.md) |
 | (future)    | PENDING    | Next rack calibration                    | — |
 
 All captures are taken against the development mock PVE (`dev/mock_pve.py`) running inside the rack.
