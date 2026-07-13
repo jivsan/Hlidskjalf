@@ -102,8 +102,23 @@ async def _probe(conn: PveConn) -> dict:
                 f"Found: {', '.join(names) or 'none'}.",
             )
         resources = await client.cluster_resources() or []
-        guests = sum(1 for r in resources if r.get("type") in ("qemu", "lxc"))
-        return {"ok": True, "node": conn.node, "guests": guests, "nodes": names}
+        # Hand back the actual guests, so the wizard can offer a picker for the
+        # first user's VM instead of asking someone to type a VMID from memory.
+        guest_list = sorted(
+            (
+                {"vmid": r["vmid"], "name": r.get("name") or f"vm {r['vmid']}"}
+                for r in resources
+                if r.get("type") in ("qemu", "lxc") and r.get("vmid") is not None
+            ),
+            key=lambda g: g["vmid"],
+        )
+        return {
+            "ok": True,
+            "node": conn.node,
+            "guests": len(guest_list),
+            "guest_list": guest_list,
+            "nodes": names,
+        }
     except HTTPException:
         raise
     except PveError as e:

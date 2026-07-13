@@ -539,24 +539,46 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
                   </Field>
                   <Field
                     id="s-user-vmid"
-                    label="VMID"
+                    label="their VM"
                     error={
                       userVmid !== "" && !userVmidOk ? `VMIDs start at ${MIN_VMID}` : null
                     }
-                    hint="the guest they get"
+                    hint="the one guest they can see"
                   >
-                    <input
-                      id="s-user-vmid"
-                      type="number"
-                      className="input metric"
-                      min={MIN_VMID}
-                      value={userVmid}
-                      onChange={(e) =>
-                        setUserVmid(e.target.value === "" ? "" : Number(e.target.value))
-                      }
-                      placeholder="105"
-                      required
-                    />
+                    {/* The connection test already told us what's on the node, so
+                        pick from the real guests rather than typing a VMID from
+                        memory. (Fall back to a number field if the list is empty.) */}
+                    {testResult && testResult.guest_list?.length > 0 ? (
+                      <select
+                        id="s-user-vmid"
+                        className="input metric"
+                        value={userVmid}
+                        onChange={(e) =>
+                          setUserVmid(e.target.value === "" ? "" : Number(e.target.value))
+                        }
+                        required
+                      >
+                        <option value="">choose a guest…</option>
+                        {testResult.guest_list.map((g) => (
+                          <option key={g.vmid} value={g.vmid}>
+                            {g.vmid} — {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id="s-user-vmid"
+                        type="number"
+                        className="input metric"
+                        min={MIN_VMID}
+                        value={userVmid}
+                        onChange={(e) =>
+                          setUserVmid(e.target.value === "" ? "" : Number(e.target.value))
+                        }
+                        placeholder="105"
+                        required
+                      />
+                    )}
                   </Field>
                 </div>
                 <Field

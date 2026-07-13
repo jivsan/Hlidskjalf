@@ -213,10 +213,17 @@ export interface SetupStatus {
   needed: boolean;
 }
 
+export interface SetupGuest {
+  vmid: number;
+  name: string;
+}
+
 export interface SetupTestResult {
   ok: boolean;
   node: string;
   guests: number;
+  /** The guests found on the node — lets the wizard offer a VM picker. */
+  guest_list: SetupGuest[];
   nodes: string[];
 }
 

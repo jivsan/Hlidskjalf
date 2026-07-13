@@ -148,6 +148,17 @@ def test_setup_test_accepts_a_good_connection(fresh_app):
     assert body["guests"] > 0
 
 
+def test_setup_test_returns_the_guests_for_the_vm_picker(fresh_app):
+    """The wizard offers a picker for the first user's VM, so the probe must say
+    what actually exists rather than making someone recall a VMID."""
+    body = fresh_app.post("/api/setup/test", json=_pve_conn()).json()
+    guests = body["guest_list"]
+    assert len(guests) == body["guests"]
+    assert all("vmid" in g and "name" in g for g in guests)
+    assert guests == sorted(guests, key=lambda g: g["vmid"])
+    assert any(g["name"] for g in guests)  # names, not just ids
+
+
 def test_setup_persists_nothing_when_the_connection_fails(fresh_app):
     r = fresh_app.post(
         "/api/setup",
