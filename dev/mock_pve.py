@@ -311,6 +311,27 @@ async def node_storage(node: str):
          "avail": 590 << 30, "content": "images,rootdir", "active": 1},
         {"storage": "local", "type": "dir", "used": 40 << 30, "total": 100 << 30,
          "avail": 60 << 30, "content": "iso,vztmpl,backup", "active": 1},
+        # Real hosts rarely have exactly one image-capable storage (the first
+        # real one had four); a second entry keeps the Settings select honest.
+        {"storage": "vm-drives", "type": "zfspool", "used": 300 << 30, "total": 1800 << 30,
+         "avail": 1500 << 30, "content": "images,rootdir", "active": 1},
+    ]}
+
+
+@app.get("/api2/json/nodes/{node}/network")
+async def node_network(node: str):
+    # Real PVE shape (9.2.3): a list of interface dicts with `iface` + `type`;
+    # bridges carry type == "bridge". More than one bridge is the norm — the
+    # first real host runs its guests on vmbr1, not vmbr0.
+    return {"data": [
+        {"iface": "eno1", "type": "eth", "active": 1, "exists": 1, "method": "manual"},
+        {"iface": "vmbr0", "type": "bridge", "active": 1, "autostart": 1,
+         "method": "static", "cidr": "10.0.10.2/24", "address": "10.0.10.2",
+         "netmask": "24", "gateway": "10.0.10.1", "bridge_ports": "eno1",
+         "bridge_stp": "off", "bridge_fd": "0"},
+        {"iface": "vmbr1", "type": "bridge", "active": 1, "autostart": 1,
+         "method": "manual", "bridge_ports": "eno1.20", "bridge_stp": "off",
+         "bridge_fd": "0", "bridge_vlan_aware": 1},
     ]}
 
 

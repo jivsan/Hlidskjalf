@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # offered in the provision form.
     vlan_gateways: dict[str, str] = {}
     clone_storage: str = "local-lvm"  # Proxmox's usual default storage
+    # The bridge every panel-written net0 attaches to. "vmbr0" is Proxmox's
+    # stock bridge name; real deployments often keep guests on another one
+    # (verified 2026-07-13: the first real host runs its guests on vmbr1).
+    pve_bridge: str = "vmbr0"
 
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
@@ -207,6 +211,17 @@ SETUP_WRITABLE = frozenset(
     }
 )
 
+# Settings an authenticated admin may edit at runtime (routes/settings.py).
+# Deliberately a SEPARATE allowlist: SETUP_WRITABLE is reachable without
+# credentials (first run only) and must never grow to cover these.
+ADMIN_WRITABLE = frozenset(
+    {
+        "vlan_gateways",
+        "clone_storage",
+        "pve_bridge",
+    }
+)
+
 
 def encryption_key(settings: Settings) -> str:
     """The key used for secrets at rest. Generates a local one on first call."""
@@ -230,16 +245,20 @@ def unseal(values: dict[str, str], settings: Settings) -> dict[str, str]:
 
 
 def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
-    """Overlay config persisted by the setup wizard onto `settings`, in place.
+    """Overlay config persisted by the setup wizard / admin settings onto
+    `settings`, in place.
 
     **Environment always wins.** A field explicitly provided via env lands in
     ``model_fields_set``, and we skip those — so an operator keeping secrets in
     agenix / sops / systemd-creds is never overridden by whatever is in the DB.
     """
+    from typing import get_origin
+
     for key, raw in stored.items():
-        if key not in SETUP_WRITABLE:
-            continue  # ignore anything not on the allowlist
-        if key in settings.model_fields_set and getattr(settings, key, None) not in ("", None):
+        if key not in SETUP_WRITABLE | ADMIN_WRITABLE:
+            continue  # ignore anything not on the allowlists
+        current = getattr(settings, key, None)
+        if key in settings.model_fields_set and current not in ("", None) and current != {}:
             # Set to a real value in the environment — leave it alone. An env var
             # defined but EMPTY (common in .env / compose files) is not a
             # configuration choice, so we let the stored value through instead of
@@ -256,4 +275,10 @@ def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
                 continue
         elif field.annotation is bool:
             value = raw.strip().lower() in ("1", "true", "yes", "on")
+        elif get_origin(field.annotation) is dict:
+            # Dict fields (vlan_gateways) are stored as JSON, same as their env form.
+            try:
+                value = json.loads(raw) if raw.strip() else {}
+            except ValueError:
+                continue
         object.__setattr__(settings, key, value)

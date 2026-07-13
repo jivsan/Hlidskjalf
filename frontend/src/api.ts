@@ -308,3 +308,40 @@ export const debug = {
   getErrors: () => api.get<DebugErrorEntry[]>("/api/debug/errors"),
   getAccumulator: () => api.get<DebugAccumulator>("/api/debug/accumulator"),
 };
+
+// --- Provisioning settings (admin only) -------------------------------------
+
+export interface ProvisionSettingsOptions {
+  /** Image-capable storages on the node (content includes "images"). */
+  storages: string[];
+  /** Linux bridges on the node (type == "bridge"). */
+  bridges: string[];
+}
+
+export interface ProvisionSettings {
+  /** VLAN tag -> gateway IP ("" for gateway-less VLANs). */
+  vlan_gateways: Record<string, string>;
+  clone_storage: string;
+  bridge: string;
+  /** Keys supplied via HLIDSKJALF_* env vars — the panel refuses to change them. */
+  env_locked: string[];
+  options: ProvisionSettingsOptions;
+  /** Set when the live PVE lookup failed; options may be empty then. */
+  warning?: string | null;
+}
+
+export interface ProvisionSettingsUpdate {
+  vlan_gateways: Record<string, string>;
+  clone_storage: string;
+  bridge: string;
+}
+
+export function getProvisionSettings(): Promise<ProvisionSettings> {
+  return api.get<ProvisionSettings>("/api/settings/provision");
+}
+
+export function putProvisionSettings(
+  body: ProvisionSettingsUpdate,
+): Promise<ProvisionSettings> {
+  return api.put<ProvisionSettings>("/api/settings/provision", body);
+}
