@@ -533,21 +533,21 @@ async def check_cluster_resources(pve: Pve, rep: Report, nodes: list[str]) -> li
                 f"{len(stopped_with_counters)} stopped guest(s) report non-zero netin — "
                 "accumulator.py assumes counters reset to 0 on stop/start")
 
-    # The mock fabricates disk usage for QEMU. Real PVE does not.
+    # Real PVE reports disk=0 for QEMU guests (in-guest usage is invisible
+    # without asking the agent, and this figure never does). Confirmed on a
+    # 9.2.3 host 2026-07-13; dev/mock_pve.py matches since PR #34, and the UI
+    # explains it ("usage inside the guest requires the QEMU agent").
     qemu_running = [r for r in running if r.get("type") == "qemu"]
     if qemu_running:
         zero_disk = [r for r in qemu_running if not r.get("disk")]
         if zero_disk:
-            rep.add(
-                WARN, "resources/qemu-disk",
-                f"{len(zero_disk)}/{len(qemu_running)} running QEMU guests report disk=0",
-                "EXPECTED against real PVE — it does not know a VM's in-guest disk usage.\n"
-                "dev/mock_pve.py:93 fabricates disk = 45% of maxdisk, so the UI's disk bar\n"
-                "looks plausible in dev and will read 0% / empty on real hardware.\n"
-                "Cosmetic, but the mock is lying. (LXC does report real disk usage.)",
-            )
+            rep.add(PASS, "resources/qemu-disk",
+                    f"{len(zero_disk)}/{len(qemu_running)} running QEMU guests report disk=0, "
+                    "as real PVE does (LXC reports real usage; the UI notes the agent caveat)")
         else:
-            rep.add(PASS, "resources/qemu-disk", "QEMU guests report a non-zero disk figure")
+            rep.add(INFO, "resources/qemu-disk",
+                    "running QEMU guests report a non-zero disk figure — unusual; real PVE "
+                    "reports 0 without agent-derived data")
 
     # Guests living on a node other than the configured one.
     if len(nodes) > 1:
