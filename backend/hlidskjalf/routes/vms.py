@@ -2,9 +2,10 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..auth import get_current_user, is_admin, require_csrf, require_session
+from .. import journal
+from ..auth import get_current_user, is_admin, rate_limited, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..pve import PveClient, PveError
@@ -152,14 +153,22 @@ async def vm_detail(
 async def power_action(
     vmid: int,
     action: PowerAction,
+    request: Request,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.power", 30, 60.0)),
     _=Depends(require_csrf),
 ):
-    await _ensure_vm_access(username, vmid, db, pve)
-    if action in DESTRUCTIVE_POWER:
-        guard_protected(vmid, action)
+    try:
+        await _ensure_vm_access(username, vmid, db, pve)
+        if action in DESTRUCTIVE_POWER:
+            guard_protected(vmid, action)
+    except HTTPException as e:
+        # A refused power action is exactly the thing you want to find later.
+        await journal.record(
+            db, request, username, journal.VM_POWER, vmid, f"{action}: {e.detail}", ok=False
+        )
+        raise
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -167,6 +176,7 @@ async def power_action(
     if kind == "lxc" and action == "reset":
         raise HTTPException(400, "LXC containers do not support reset")
     upid = await pve.post(f"/nodes/{pve.node}/{kind}/{vmid}/status/{action}")
+    await journal.record(db, request, username, journal.VM_POWER, vmid, action)
     return {"upid": upid}
 
 
