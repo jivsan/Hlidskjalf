@@ -2,7 +2,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useToast } from "../components/Toast";
-import { EmptyState, ErrorState, KindBadge, LoadingState, StatusDot } from "../components/ui";
+import { EmptyState, ErrorState, KindBadge, LoadingState, PageHeader, StatusDot } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 import { formatBytes, formatPercent, formatUptime } from "../lib/format";
 import { taskResultMessage, watchTask } from "../lib/tasks";
@@ -111,7 +111,7 @@ export function Fleet() {
 
   const Th = ({ k, children, className = "" }: { k: SortKey; children: string; className?: string }) => (
     <th
-      className={`px-3 py-2 text-left text-xs text-muted uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-fg ${className}`}
+      className={`px-3 py-2 text-left text-[11px] font-medium text-muted uppercase tracking-eyebrow cursor-pointer select-none whitespace-nowrap hover:text-fg ${className}`}
       onClick={() => setSort(k)}
       aria-sort={sortKey === k ? (sortAsc ? "ascending" : "descending") : "none"}
     >
@@ -122,18 +122,24 @@ export function Fleet() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-lg">Fleet</h1>
-        <div className="text-xs text-muted metric">
-          <span className="text-cyan">{running}</span>/{list.length} running
-          {aggTraffic != null && (
-            <>
-              {" · "}
-              <span className="text-fg">{formatBytes(aggTraffic)}</span> this month
-            </>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="guests on hella"
+        title="Fleet"
+        sub={
+          <>
+            <span className="metric">
+              <span className="text-cyan">{running}</span>/{list.length}
+            </span>{" "}
+            running
+            {aggTraffic != null && (
+              <>
+                {" · "}
+                <span className="metric text-fg">{formatBytes(aggTraffic)}</span> this month
+              </>
+            )}
+          </>
+        }
+      />
 
       {vms.error && <ErrorState message={vms.error} />}
 
@@ -141,7 +147,7 @@ export function Fleet() {
         <EmptyState message="no guests found on hella" />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm metric">
+          <table className="w-full text-sm">
             <thead className="border-b border-border-token">
               <tr>
                 <Th k="status">St</Th>
@@ -162,7 +168,7 @@ export function Fleet() {
                 return (
                   <tr
                     key={vm.vmid}
-                    className="border-b border-border-token/50 last:border-0 cursor-pointer hover:bg-border-token/20"
+                    className="border-b border-border-token/60 last:border-0 cursor-pointer transition-colors hover:bg-surface-2"
                     onClick={() => navigate(`/vm/${vm.vmid}`)}
                   >
                     <td className="px-3 py-2">
@@ -178,11 +184,11 @@ export function Fleet() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-muted">{vm.vmid}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 metric text-muted">{vm.vmid}</td>
+                    <td className="px-3 py-2 whitespace-nowrap metric">
                       {runningVm && vm.maxcpu > 0 ? formatPercent(vm.cpu / vm.maxcpu) : "—"}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap metric">
                       {runningVm ? (
                         <>
                           {formatBytes(vm.mem)}{" "}
@@ -192,10 +198,10 @@ export function Fleet() {
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap metric">
                       {runningVm ? formatUptime(vm.uptime) : "—"}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap metric">
                       {tr != null ? formatBytes(tr) : "—"}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">

@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useToast } from "../components/Toast";
-import { ErrorState, LoadingState } from "../components/ui";
+import { ErrorState, LoadingState, PageHeader } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 import { formatUptime } from "../lib/format";
 import { taskResultMessage, watchTask } from "../lib/tasks";
@@ -90,13 +90,24 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        eyebrow="guest"
+        title={vm.name}
+        actions={
+          <span className="metric text-xs text-muted flex items-center gap-3">
+            <span>vmid {vm.vmid}</span>
+            {vm.protected && (
+              <span title="protected">⛨ protected</span>
+            )}
+          </span>
+        }
+      />
+
       {/* systemd-unit-style status chip */}
       <div className="card px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm metric">
         <span className={running ? "text-cyan" : vm.status === "stopped" ? "text-muted" : "text-red"}>
           ●
         </span>
-        <span className="text-fg">{vm.name}</span>
-        <span className="text-muted">—</span>
         <span className={running ? "text-cyan" : "text-red"}>
           {running ? "active (running)" : `inactive (${vm.status})`}
         </span>
@@ -118,10 +129,6 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
             <span className="text-muted">up {formatUptime(vm.uptime)}</span>
           </>
         )}
-        <span className="text-muted text-xs ml-auto">
-          vmid {vm.vmid}
-          {vm.protected && <span className="ml-2" title="protected">⛨ protected</span>}
-        </span>
       </div>
 
       {vm.rescue && (

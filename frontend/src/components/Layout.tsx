@@ -25,18 +25,36 @@ function getNavForRole(user: CurrentUser | null) {
 }
 
 function navClass(isActive: boolean): string {
-  return `block px-3 py-2 rounded-card text-sm border-l-2 transition-colors ${
+  // Active links carry a left aurora bar + a raised surface; the seat marks
+  // where you're looking. Inactive links stay quiet.
+  return [
+    "group relative flex items-center rounded-card px-3 py-2 text-sm transition-colors",
+    "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-0.5 before:rounded-full before:transition-all",
     isActive
-      ? "text-pink bg-pink/10 border-pink"
-      : "text-muted border-transparent hover:text-fg hover:bg-border-token/30"
-  }`;
+      ? "text-fg bg-surface-2 before:bg-cyan"
+      : "text-muted hover:text-fg hover:bg-surface/60 before:bg-transparent",
+  ].join(" ");
 }
 
-export function Wordmark() {
+export function Wordmark({ className = "" }: { className?: string }) {
   return (
-    <span className="font-medium tracking-wide">
+    <span className={`wordmark ${className}`}>
       <span className="text-pink">hlid</span>
       <span className="text-cyan">skjalf</span>
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span
+      className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+        role === "admin"
+          ? "text-pink border-pink/40 bg-pink/5"
+          : "text-cyan border-cyan/30 bg-cyan/5"
+      }`}
+    >
+      {role}
     </span>
   );
 }
@@ -72,46 +90,53 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
       </NavLink>
     ));
 
-  const userChip = (
-    <div className="px-3 pt-3 mt-2 border-t border-border-token text-xs text-muted">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-fg truncate max-w-[7rem]" title={currentUser.username}>
-          {currentUser.username}
-        </span>
-        <span
-          className={`text-[10px] uppercase tracking-wider px-1 py-px rounded border ${
-            currentUser.role === "admin"
-              ? "text-pink border-pink/40 bg-pink/5"
-              : "text-cyan border-cyan/30 bg-cyan/5"
-          }`}
-        >
-          {currentUser.role}
-        </span>
-      </div>
-      {currentUser.role === "user" && currentUser.vmid != null && (
-        <div className="mt-0.5 metric">vm {currentUser.vmid}</div>
-      )}
-    </div>
-  );
-
   return (
     <div className="min-h-screen md:flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-44 shrink-0 border-r border-border-token min-h-screen p-3 sticky top-0 h-screen bg-surface/30">
-        <div className="px-3 py-2 mb-4">
-          <Wordmark />
-          <div className="text-[10px] text-muted tracking-widest mt-0.5">HIGH SEAT · HELLA</div>
+      {/* Desktop rail — the high seat's instrument panel */}
+      <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-border-token min-h-screen p-3 sticky top-0 h-screen bg-surface/25">
+        {/* Identity */}
+        <div className="reveal px-2 pt-2 pb-4" style={{ ["--step" as string]: 0 }}>
+          <Wordmark className="text-[22px]" />
+          <div className="hairline my-3" />
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">high seat</span>
+            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted">
+              <span className="relative inline-flex">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan" />
+                <span className="absolute inset-0 rounded-full bg-cyan/60 animate-ping" aria-hidden="true" />
+              </span>
+              hella
+            </span>
+          </div>
         </div>
-        <nav className="space-y-1 flex-1">{links()}</nav>
-        {userChip}
-        <button className="text-left px-3 py-2 text-sm text-muted hover:text-red transition-colors" onClick={doLogout}>
-          logout
-        </button>
+
+        <nav className="reveal space-y-0.5 flex-1" style={{ ["--step" as string]: 1 }}>
+          {links()}
+        </nav>
+
+        {/* Watcher */}
+        <div className="reveal pt-3 mt-2 border-t border-border-token" style={{ ["--step" as string]: 2 }}>
+          <div className="flex items-center gap-2 px-2 mb-2">
+            <span className="text-sm text-fg truncate" title={currentUser.username}>
+              {currentUser.username}
+            </span>
+            <RoleBadge role={currentUser.role} />
+          </div>
+          {currentUser.role === "user" && currentUser.vmid != null && (
+            <div className="px-2 mb-2 text-[11px] text-muted metric">vm {currentUser.vmid}</div>
+          )}
+          <button
+            className="w-full text-left px-2 py-1.5 text-sm text-muted hover:text-red transition-colors"
+            onClick={doLogout}
+          >
+            leave the seat
+          </button>
+        </div>
       </aside>
 
       {/* Mobile top bar */}
       <header className="md:hidden flex items-center justify-between border-b border-border-token px-4 py-3 sticky top-0 bg-bg z-30">
-        <Wordmark />
+        <Wordmark className="text-lg" />
         <button
           className="btn-plain px-2 py-1"
           aria-label="menu"
@@ -122,16 +147,16 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
         </button>
       </header>
       {menuOpen && (
-        <nav className="md:hidden border-b border-border-token px-4 py-2 space-y-1 bg-bg sticky top-12 z-30">
+        <nav className="md:hidden border-b border-border-token px-4 py-2 space-y-0.5 bg-bg sticky top-12 z-30">
           {links(() => setMenuOpen(false))}
           <button
             className="block w-full text-left px-3 py-2 text-sm text-muted hover:text-red"
             onClick={doLogout}
           >
-            logout
+            leave the seat
           </button>
-          <div className="px-3 py-1 text-[10px] text-muted">
-            {currentUser.username} · {currentUser.role}
+          <div className="px-3 py-1 flex items-center gap-2 text-[11px] text-muted">
+            {currentUser.username} <RoleBadge role={currentUser.role} />
           </div>
         </nav>
       )}

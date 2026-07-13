@@ -1,8 +1,37 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-13 (v0.3.4-alpha frontend robustness + design pass). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-13 (v0.3.5-alpha design-system pass). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## ⚡ Current state — v0.3.4-alpha (frontend-only pass)
+## ⚡ Current state — v0.3.5-alpha (frontend design system)
+
+Branch `feat/frontend-design-v0.3.5-alpha` (PR pending/merged). **Frontend only.**
+A deliberate design-system pass using the `frontend-design` skill, grounded in the
+subject (Hlidskjalf = the high seat watching every guest on host "hella").
+
+- **Type concept**: added **Archivo Variable** (`@fontsource-variable/archivo`,
+  weight + width axes) as `font-sans`/`font-display` for the human interface;
+  **JetBrains Mono** is now reserved strictly for machine data via the `.metric`
+  token. The mono-vs-sans split is the design thesis. `main.tsx` imports Archivo
+  `standard.css` (gives wght 100–900 + wdth 62–125%).
+- **Foundation (built by me, LOCKED)**: `tailwind.config.js` (2 surface levels +
+  `abyss`, `surface-2`, brighter fg/muted, kept accent hexes, `tracking-eyebrow`),
+  `src/index.css` (ambient aurora bg, `.card` elevation, `.well` recessed panels,
+  `.eyebrow`, `.wordmark`, `.reveal` load anim, focus-visible, reduced-motion),
+  `components/ui.tsx` (new `<PageHeader>`, restyled Card/states/StatusDot/etc.),
+  `components/Layout.tsx` (high-seat masthead rail + aurora nav), `pages/Login.tsx`
+  (hero + thesis copy). Design spec archived at `docs/design/v0.3.5-design-system.md`.
+- **Pages** brought onto the system by 3 parallel subagents (disjoint file sets;
+  Fleet+Node, Provision+Users, Debug+VmDetail+vm/*) + Switch by me. Each page opens
+  with `<PageHeader eyebrow title>`; data in mono; cards/wells; disciplined accents
+  (cyan=live, pink=brand/selection only, amber=attention, red=danger). Behavior,
+  props, API contracts all unchanged. `tsc` + `vite build` clean.
+- **Docs**: gallery `docs/screenshots/v0.3.5-alpha/` (10 live captures) + README +
+  capture.js; index/main READMEs point at it; CHANGELOG v0.3.5-alpha; version bump.
+- **Dev-stack note** (same as v0.3.4): mock_switch must run with TLS + the backend
+  needs the pinned fingerprint, `HLIDSKJALF_COOKIE_SECURE=false` for http dev. There
+  is a launcher at `scratchpad/run_backend.sh` pattern; exact commands below.
+
+## Previous state — v0.3.4-alpha (frontend-only pass)
 
 Branch `feat/frontend-v0.3.4-alpha` (PR pending merge at time of writing; if you
 see this on `main` it merged). **Frontend only** per Christian's request:

@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 (nothing yet)
 
+## [v0.3.5-alpha] - 2026-07-13
+
+### Design (frontend-only visual system pass)
+A deliberate design-system pass giving the panel a distinctive identity built
+around its subject — Hlidskjalf, the high seat from which one watches every guest
+running on the host "hella".
+
+- **Type system — the concept**: introduced **Archivo** (variable, weight + width
+  axes) as the human interface face for headings, nav, labels, and the wordmark,
+  and reserved **JetBrains Mono** strictly for machine data (metrics, IDs, UPIDs,
+  MACs, IPs, byte counts, the faceplate). The mono-vs-sans split now *means*
+  something instead of being mono-everywhere by default.
+- **Signature masthead**: the wordmark is set wide + heavy (Archivo 800 / width
+  125%) so the name reads as carved into the seat; the sidebar became a proper
+  identity rail — wordmark, hairline, "high seat · hella" with a live pulse, an
+  aurora-bar active nav, and a "leave the seat / take the seat" vocabulary.
+- **Login redesigned** as a quiet hero: monumental wordmark, a one-line thesis
+  ("The high seat. From it, one watches over every realm running on hella."), and
+  a disciplined form with a single orchestrated page-load reveal.
+- **Refined palette**: deepened the night background, split surfaces into two
+  elevation levels (`surface` / `surface-2`) plus an `abyss` for recessed data
+  wells, brightened `fg`/`muted` for legibility. Accent hues (cyan/pink/amber/red)
+  kept exactly, but disciplined — cyan = live/healthy, pink = brand + selection
+  only, amber = attention, red = danger. No more pink-everywhere.
+- **Shared component kit**: new `<PageHeader>` (eyebrow + display title) opens every
+  page on one rhythm; `Card`, `.well` (recessed data panels), `.eyebrow` (labeled
+  hairline), `LoadingState` (spinner), `StatusDot` (live ping), `ProgressBar`
+  restyled. Ambient aurora background, `.reveal` load animation, `:focus-visible`
+  rings, and `prefers-reduced-motion` all handled centrally.
+- **Every page** (Fleet, Node, Provision, Users, Debug, Switch, VM detail + tabs)
+  brought onto the system: consistent headers, data in mono, cards and wells,
+  quiet accents. Behavior, props, and API contracts unchanged.
+- New gallery `docs/screenshots/v0.3.5-alpha/`. Frontend version bumped to
+  0.3.5-alpha; `tsc` + `vite build` clean.
+
 ## [v0.3.4-alpha] - 2026-07-13
 
 ### Frontend robustness + security (frontend-only pass)

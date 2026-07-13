@@ -18,17 +18,17 @@ setup on hella.
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.4-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.5-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
 
-**Current (v0.3.4-alpha - frontend robustness + design pass: redesigned login, error boundaries, rewritten Users admin, faceplate layout fix):**  
-[v0.3.4-alpha/README.md](docs/screenshots/v0.3.4-alpha/README.md)  
+**Current (v0.3.5-alpha - design-system pass: Archivo display face + JetBrains Mono for data, monumental wordmark masthead, high-seat identity, PageHeader rhythm across every page):**  
+[v0.3.5-alpha/README.md](docs/screenshots/v0.3.5-alpha/README.md)  
 (Real captured screenshots after merges)
 
-**Previous (v0.3.2-alpha multi-user panels):** [v0.3.2-alpha/README.md](docs/screenshots/v0.3.2-alpha/README.md)
+**Previous (v0.3.4-alpha robustness + design pass):** [v0.3.4-alpha/README.md](docs/screenshots/v0.3.4-alpha/README.md)
 
 **Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 
