@@ -134,15 +134,18 @@ export async function restoreSession(): Promise<SessionInfo | null> {
   }
 }
 
-export async function login(username: string, password: string): Promise<SessionInfo> {
-  const res = await api.post<{
-    ok: boolean;
-    csrf: string;
-    user: string;
-    role?: string;
-    vmid?: number | null;
-    node?: string;
-  }>("/api/login", { username, password }, { skipAuthRedirect: true });
+/** The wire shape of a freshly minted session (`POST /api/login`, `POST /api/setup`). */
+interface SessionResponse {
+  ok: boolean;
+  csrf: string;
+  user: string;
+  role?: string;
+  vmid?: number | null;
+  node?: string;
+}
+
+/** Install a just-issued session into module state and hand it back typed. */
+function adoptSession(res: SessionResponse): SessionInfo {
   setCsrf(res.csrf);
   remember(res);
   return {
@@ -154,6 +157,15 @@ export async function login(username: string, password: string): Promise<Session
   };
 }
 
+export async function login(username: string, password: string): Promise<SessionInfo> {
+  const res = await api.post<SessionResponse>(
+    "/api/login",
+    { username, password },
+    { skipAuthRedirect: true },
+  );
+  return adoptSession(res);
+}
+
 export async function logout(): Promise<void> {
   try {
     await api.post<{ ok: boolean }>("/api/logout");
@@ -161,6 +173,71 @@ export async function logout(): Promise<void> {
     setCsrf(null);
     currentUsername = "";
   }
+}
+
+// --- First-run setup ------------------------------------------------------
+// The panel ships unconfigured: until a user exists, these three unauthenticated
+// endpoints are the only way in. They all refuse once setup has completed (409),
+// so nothing here is a standing backdoor.
+
+/** The Proxmox connection the wizard collects. `token_secret` never leaves this object. */
+export interface SetupPveConnection {
+  host: string;
+  port: number;
+  node: string;
+  scheme: "https" | "http";
+  token_id: string;
+  token_secret: string;
+  /** Optional SHA-256 cert pin; "" means "don't pin". */
+  fingerprint: string;
+  verify_tls: boolean;
+}
+
+export interface SetupAccount {
+  username: string;
+  password: string;
+}
+
+export interface SetupFirstUser extends SetupAccount {
+  vmid: number;
+}
+
+export interface SetupRequest {
+  pve: SetupPveConnection;
+  admin: SetupAccount;
+  /** Optional — omit or send null to create no regular user. */
+  user?: SetupFirstUser | null;
+}
+
+export interface SetupStatus {
+  needed: boolean;
+}
+
+export interface SetupTestResult {
+  ok: boolean;
+  node: string;
+  guests: number;
+  nodes: string[];
+}
+
+/** Cheap, always-available: does this deployment still need first-run setup? */
+export function getSetupStatus(): Promise<SetupStatus> {
+  return api.get<SetupStatus>("/api/setup/status", { skipAuthRedirect: true });
+}
+
+/** Dry-run the Proxmox connection. Persists nothing; throws ApiError on failure. */
+export function testSetupConnection(body: SetupPveConnection): Promise<SetupTestResult> {
+  return api.post<SetupTestResult>("/api/setup/test", body, { skipAuthRedirect: true });
+}
+
+/**
+ * Commit the configuration. On success the admin is ALREADY signed in (the
+ * backend sets the session cookie), so we adopt the returned session exactly as
+ * `login()` does — the caller lands in the panel authenticated.
+ */
+export async function submitSetup(body: SetupRequest): Promise<SessionInfo> {
+  const res = await api.post<SessionResponse>("/api/setup", body, { skipAuthRedirect: true });
+  return adoptSession(res);
 }
 
 // --- Debug (admin-only, only present when HLIDSKJALF_DEBUG=true) -----------
