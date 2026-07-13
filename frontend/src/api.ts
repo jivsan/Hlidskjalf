@@ -345,3 +345,39 @@ export function putProvisionSettings(
 ): Promise<ProvisionSettings> {
   return api.put<ProvisionSettings>("/api/settings/provision", body);
 }
+
+// --- Version / update detection (admin only) --------------------------------
+// Fail-soft by contract: `error` is set and `update_available` is false when the
+// panel cannot reach GitHub. Nothing identifying is ever sent upstream.
+
+export interface RemoteCommit {
+  commit: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
+export interface VersionInfo {
+  version: string;
+  /** "" when this install is not a git checkout (docker/nix/pip). */
+  commit: string;
+  branch: string;
+  /** Uncommitted local changes — you are ahead of any release, not behind. */
+  dirty: boolean;
+  deployment: "git" | "docker" | "nix" | "package";
+  repo: string;
+  branch_tracked: string;
+  latest: RemoteCommit | null;
+  update_available: boolean;
+  behind_by: number;
+  commits: { sha: string; message: string }[];
+  /** The honest way to apply an update for THIS deployment. */
+  command: string;
+  notes_url: string;
+  error: string | null;
+  checked_at: number;
+}
+
+export function getVersion(force = false): Promise<VersionInfo> {
+  return api.get<VersionInfo>(`/api/version${force ? "?force=true" : ""}`);
+}

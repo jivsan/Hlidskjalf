@@ -1,17 +1,34 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-13 (v0.3.6-alpha + Phase 1 real-hardware validation done — PRs #32–#34, 193 tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-13 (**v0.4.0-alpha — tested against real hardware**; PRs #32–#41, 219 tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## 🔴 START HERE IF YOU ARE ON THE DEBIAN DEV VM (real Proxmox)
+## ✅ v0.4.0-alpha — THE PANEL HAS RUN AGAINST A REAL PROXMOX HOST
 
-You are the first contact with reality. Read `CLAUDE.md` first — the hard safety
-rules are not negotiable. Setup for this box: `docs/dev-against-real-proxmox.md`.
+**This is no longer a panel that has only ever met a mock.** It was run against a
+real Proxmox VE 9.2.3 host (`hella`) on 2026-07-13, from a Debian dev VM on the
+same LAN: read-only validation, then the panel itself, live, with a real scoped
+token — first-run wizard, fleet, node, graphs, and both consoles.
 
-**Everything below has been validated only against `dev/mock_pve.py`, a mock we
-wrote ourselves.** Green tests prove self-consistency, not correctness. The mock
-has been caught lying twice now: 8-field UPIDs (real PVE emits 9 — silently 403'd
-every tenant polling their own task) and fabricated QEMU disk usage (real PVE
-reports 0). Assume there are more.
+**What reality changed, that no test had caught:**
+
+| found on real hardware | verdict |
+|---|---|
+| Wrong TLS-pin negative test (`wrap_socket` doesn't use `sslobject_class`) | panel was right, **validator** was wrong (#32) |
+| PVE 9 renamed the guest-agent privilege to `VM.GuestAgent.*` | **validator** map outdated (#33) |
+| QEMU `disk` is always 0 on real PVE | **mock** fabricated 45% (#34) |
+| **Containers have no working VNC** — LXC `vncproxy` hangs at ClientInit | **panel** was wrong: containers need termproxy (#39) |
+| **Every VM console died on arrival** — noVNC offers no subprotocol, panel asserted `binary` | **panel** was wrong (RFC 6455 §4.1) (#40) |
+| Provisioning could not work at all — `vlan_gateways` empty ⇒ every create rejected | **panel** was wrong: now editable in Settings (#38) |
+
+Both consoles now work on real hardware: a **QEMU VM** opens a live noVNC
+framebuffer, an **LXC container** opens a live xterm.js shell.
+
+Green tests prove self-consistency, not correctness — `dev/mock_pve.py` is a mock
+we wrote ourselves, and it has now been caught lying **three** times (8-field
+UPIDs, fabricated QEMU disk usage, and one echo websocket that made a container's
+console look identical to a VM's). Each was fixed in the mock too. **Assume there
+are more.** Read `CLAUDE.md` first — the hard safety rules are not negotiable.
+Setup for the dev box: `docs/dev-against-real-proxmox.md`.
 
 ### ✅ Phase 1 — DONE (2026-07-13, against hella, PVE 9.2.3)
 
@@ -33,9 +50,9 @@ QEMU disk usage (#34, mock now honest). The rest are environment facts (below).
 - Storages are `pbs / vm-drives / local / local-zfs` — VM disks live on
   **`vm-drives`**, so set `HLIDSKJALF_CLONE_STORAGE=vm-drives` (the `local-lvm`
   default does not exist on hella; every provision would fail).
-- **There is no VM template on hella.** The provision form will be empty and
-  Phase 3 step 6 is impossible until one is created (a cloud-init Debian
-  template with `scsi0`, per plan §3).
+- A Debian cloud-init **template now exists** (created 2026-07-13; `scsi0` on
+  `vm-drives`, agent enabled). Note the stock cloud image ships **without**
+  `qemu-guest-agent`, so clones show no in-guest IPs/disk until it is installed.
 - Real fleet (protect ALL of these): 151 proxmox-backup-server, 152 lxc-pihole,
   153 nixos-services, 154 heimdall-nix, 155 homeassistant, **201
   dev-debian-homelab (the dev VM itself)** →
@@ -48,33 +65,58 @@ QEMU disk usage (#34, mock now honest). The rest are environment facts (below).
   `protect-main` — PRs + green `backend`/`frontend` CI required, no force-push).
   Mind what lands in commits/PRs; plan.md already exposes LAN topology.
 
+### ✅ Phase 2 — DONE (2026-07-13). The panel ran against hella.
+
+Started with `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201` (env-only,
+empty by default — **set it before the first start or nothing is guarded**), no
+Proxmox connection in the env, so the **first-run wizard** was exercised for real:
+host + node + token + fingerprint → live-validated → admin → signed in. It worked.
+
+Found and fixed while the panel was up (all merged):
+- **Both consoles were broken, in two different ways** (#39, #40 — see the table
+  above). They now work: QEMU → noVNC framebuffer; LXC → xterm.js terminal.
+- **Provisioning was impossible** without hand-written env vars (#38) → the new
+  admin **Settings** page (VLANs, clone storage, bridge, from live node data).
+- The wizard asked for a "scheme" and an "optional" fingerprint with no hint how
+  to get one (#36) — both now say what they mean, and https requires the pin.
+- No way to change your own password (#37) → `/profile`.
+
 ### The remaining plan, in this order. Do not skip ahead to the fun part.
 
-**Phase 2 — panel up, but only reading.**
-4. `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201` **before** the first
-   start (see fleet list above). It is env-only and defaults to EMPTY. If the
-   Fleet page shows the amber "no guest is protected" banner, stop and fix it.
-5. Start the panel. Check Fleet / Node / Graphs / Bandwidth against what the Proxmox
-   web UI says. Look specifically for normalisation bugs the mock hid:
-   - **disk usage** (real PVE reports 0 without the guest agent; the mock fabricates 45%)
-   - node `memory` nested vs flat, `cpuinfo.cpus`
-   - rrddata shapes across hour/day/week/month
+**Phase 3 — writes. NEXT SESSION. Scratch VM only, VMID ≥ 900.**
+1. Set `HLIDSKJALF_CLONE_STORAGE=vm-drives`, then in **Settings → provisioning**
+   add VLAN `20 → 10.0.20.1` and bridge `vmbr1` (hella's guests are NOT on vmbr0).
+2. Provision a scratch guest *from the panel*, from the Debian template. Then, on
+   that guest only:
+3. Power-cycle it, and **watch the task poll actually complete** (the UPID path —
+   validated read-only, never yet driven end-to-end through the panel's poller).
+4. ~~Open the console and type in it~~ — **DONE, both kinds work** (#39, #40).
+5. Rescue enter/exit (boot order must be restored). Reinstall (MAC/IP preserved).
+6. Destroy it. Then confirm a **protected** VMID genuinely refuses destroy.
+7. Create a regular user, assign it the scratch VM, and confirm it can see *only*
+   that VM — and that it can poll its own power-action task.
 
-**Phase 3 — writes. Scratch VM only, VMID ≥ 900.**
-6. Provision a scratch guest *from the panel*. Then, on that guest only:
-7. Power-cycle it, and **watch the task poll actually complete** (this is the UPID path).
-8. **Open the console and type in it.** This is the single biggest unknown — the
-   byte-pump has never moved a real frame. `console.py` dials `vncwebsocket` with only
-   the `PVEAPIToken` header; Proxmox may demand a `PVEAuthCookie`. If it 401s, the
-   console needs redesigning around `/access/ticket`.
-9. Rescue enter/exit (boot order must be restored). Reinstall (MAC/IP preserved).
-10. Destroy it. Then confirm a **protected** VMID genuinely refuses destroy.
-11. Create a regular user, assign it the scratch VM, and confirm it can see *only* that
-    VM — and that it can poll its own power-action task (the bug we just fixed).
+Watch for the two write-path assumptions the mock still cannot test:
+`destroy-unreferenced-disks` (the panel passes it for LXC too; real PVE may 400)
+and **`scsi0` is hardcoded** for template disk reads and resize (a template on
+`virtio0`/`sata0` silently never resizes).
 
 **Phase 4 — the slow one.**
-12. After ~24 h: daily bandwidth rows exist for every running guest, survive a restart
-    without double-counting, and a mid-day reboot produces no negative delta.
+8. After ~24 h: daily bandwidth rows exist for every running guest, survive a restart
+   without double-counting, and a mid-day reboot produces no negative delta.
+
+### Also queued (asked for, not yet built)
+- **Choose your own VMID** on the provision form (a box, prefilled with the next
+  free id, validated against the ones in use). Backend `create_vm` currently
+  always picks the next free id itself.
+- **Self-update** (`POST /api/update`). Detection landed in v0.4.0-alpha; applying
+  is deliberately not implemented. If it is built: off unless
+  `HLIDSKJALF_ALLOW_SELF_UPDATE=true`, admin + CSRF + typed confirm, verify the
+  artifact, `git pull --ff-only` into a *new* venv, migrate (the DB backs itself
+  up now), restart, health-check, **roll back on failure**. Never in Docker/Nix.
+- **The switch faceplate is still hardcoded** to a 48-port Arista DCS-7050TX-48.
+  Christian's call: this one may stay site-specific for now. Everything else must
+  be generic — no homelab baked into code.
 
 ### Reporting back
 Commit as `jivsan <chrsol3@gmail.com>`, no `Co-Authored-By` trailers. Push branches
@@ -83,11 +125,30 @@ token on that box), just push the branch — Christian will merge.
 
 ---
 
-## ⚡ Current state — v0.3.6-alpha
+## ⚡ Current state — v0.4.0-alpha
 
-**The release that makes this runnable by other people.** It was wired to one
-homelab; now it ships unconfigured and sets itself up in a browser.
-`main` is green: **193 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+**The release that was tested against real hardware.** `main` is green:
+**219 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+
+New in v0.4.0-alpha (all found or driven by the real-hardware run above):
+- **Settings page** (admin): *provisioning* tab — VLAN tags → gateways, clone
+  storage, bridge, with options read from what the node actually reports; and an
+  *updates* tab (below). Env still wins; env-locked keys refuse edits.
+- **Update detection** — `GET /api/version` compares the running commit with the
+  tip of `main` on GitHub: push, merge, and the panel notices it is N commits
+  behind, with the list. Fail-soft (no network → no offer, no error, no nag),
+  never phones home with anything identifying, never claims "up to date" without
+  actually comparing, and treats an *ahead* checkout as ahead — not behind. It
+  prints the honest update command for the detected deployment (docker / nix /
+  git) and **does not update itself**: an endpoint that runs new code on demand is
+  a bigger hole than anything it protects.
+- **Profile page** — click your username → change your own password.
+- **Both consoles fixed** (#39, #40) — QEMU noVNC and LXC xterm.js, live on hella.
+
+### The v0.3.6-alpha foundation (still true)
+
+It was wired to one homelab; it now ships unconfigured and sets itself up in a
+browser.
 
 - **First-run setup wizard** (`routes/setup.py`, `docs/setup.md`). Start with no env
   file → the panel serves a wizard: Proxmox host/node/token (validated with a LIVE
