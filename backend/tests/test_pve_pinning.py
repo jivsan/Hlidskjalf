@@ -2,9 +2,13 @@
 
 A throwaway self-signed cert (via `cryptography`) backs a local TLS server
 socket; the pinned client context must complete the handshake for the correct
-SHA-256 fingerprint and abort it for a wrong one. asyncio's TLS support uses
-SSLObject (wrap_bio), the same path httpx/anyio and websockets take, so the
-`sslobject_class` hook that enforces the pin is genuinely exercised.
+SHA-256 fingerprint and abort it for a wrong one — on BOTH handshake paths:
+
+- the memory-BIO path (`SSLContext.wrap_bio` -> `sslobject_class`), which is
+  what asyncio/httpx/anyio and websockets use — i.e. what the panel uses;
+- the plain-socket path (`SSLContext.wrap_socket` -> `sslsocket_class`), which
+  the panel does not use today but which would silently skip the pin if only
+  `sslobject_class` were set (real-hardware validation caught exactly that).
 """
 
 import asyncio
@@ -41,6 +45,10 @@ def test_pinned_context_wiring_shape():
     assert ctx.verify_mode == ssl.CERT_NONE
     assert issubclass(ctx.sslobject_class, ssl.SSLObject)
     assert ctx.sslobject_class is not ssl.SSLObject  # the pinning subclass
+    # wrap_socket() bypasses sslobject_class entirely; the pin must be wired
+    # into sslsocket_class too or that path is a silent MITM hole.
+    assert issubclass(ctx.sslsocket_class, ssl.SSLSocket)
+    assert ctx.sslsocket_class is not ssl.SSLSocket  # the pinning subclass
 
 
 def test_pveclient_refuses_https_without_fingerprint():
@@ -153,3 +161,24 @@ async def test_wrong_fingerprint_aborts_handshake(tls_server):
         await asyncio.wait_for(
             asyncio.open_connection(host, port, ssl=ctx), timeout=10
         )
+
+
+# --- the plain-socket path (wrap_socket / sslsocket_class) -------------------
+
+
+def test_wrap_socket_correct_fingerprint_connects(tls_server):
+    host, port, fingerprint = tls_server
+    ctx = make_pinned_ssl_context(fingerprint)
+    with socket.create_connection((host, port), timeout=10) as sock:
+        with ctx.wrap_socket(sock, server_hostname=host) as tls:
+            assert tls.version() is not None  # handshake completed
+
+
+def test_wrap_socket_wrong_fingerprint_aborts_handshake(tls_server):
+    """FAILS if the pin is only enforced via sslobject_class (the original bug)."""
+    host, port, _ = tls_server
+    ctx = make_pinned_ssl_context("00" * 32)
+    with socket.create_connection((host, port), timeout=10) as sock:
+        with pytest.raises(FingerprintMismatch):
+            with ctx.wrap_socket(sock, server_hostname=host):
+                pass
