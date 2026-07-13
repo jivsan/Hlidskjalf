@@ -1,6 +1,6 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-13 (v0.3.6-alpha — security audit, setup wizard, genericity, Prometheus, code-split). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-13 (v0.3.6-alpha + Phase 1 real-hardware validation done — PRs #32–#34, 193 tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
 ## 🔴 START HERE IF YOU ARE ON THE DEBIAN DEV VM (real Proxmox)
 
@@ -8,23 +8,51 @@ You are the first contact with reality. Read `CLAUDE.md` first — the hard safe
 rules are not negotiable. Setup for this box: `docs/dev-against-real-proxmox.md`.
 
 **Everything below has been validated only against `dev/mock_pve.py`, a mock we
-wrote ourselves.** 184 green tests prove self-consistency, not correctness. The mock
-has already been caught lying once: it emitted 8-field UPIDs where real Proxmox emits
-9, which silently 403'd every tenant polling their own task. Assume there are more.
+wrote ourselves.** Green tests prove self-consistency, not correctness. The mock
+has been caught lying twice now: 8-field UPIDs (real PVE emits 9 — silently 403'd
+every tenant polling their own task) and fabricated QEMU disk usage (real PVE
+reports 0). Assume there are more.
 
-### The plan, in this order. Do not skip ahead to the fun part.
+### ✅ Phase 1 — DONE (2026-07-13, against hella, PVE 9.2.3)
 
-**Phase 1 — read-only. Nothing is started, nothing is touched.**
-1. `scripts/validate-proxmox.py` (read-only by default). Capture the full output.
-2. Triage **every** FAIL/WARN. For each one ask: *is the panel wrong, or is the mock
-   wrong?* Both happen. The UPID bug was the mock; the parser was right.
-3. Fix it → add the test that would have caught it → **fix `dev/mock_pve.py` so the
-   mock stops lying.** If you skip that last step the suite goes green again and we
-   learn nothing. Open a PR per finding.
+`scripts/validate-proxmox.py` ran read-only against the real host: **33 pass,
+1 FAIL, 4 warn**; after triage (PRs #32/#33/#34) it is **35 pass, 0 FAIL**. The
+scary assumptions HELD on real hardware: 9-field UPIDs parse correctly in
+`_vmid_from_upid` (task authz is sound), **the console websocket handshakes with
+the `PVEAPIToken` header alone and a real RFB server greeted back**, a scoped
+token can `GET /nodes` (setup wizard lives), rrd/node/task shapes all match.
+Triage results: the FAIL was the *validator's* negative TLS test probing the one
+TLS API the panel never uses (`wrap_socket`); the pin now covers both paths
+(#32, defense-in-depth). One WARN was PVE 9 renaming the guest-agent privilege
+to `VM.GuestAgent.*` (#33, validator map fixed). One was the mock fabricating
+QEMU disk usage (#34, mock now honest). The rest are environment facts (below).
+
+**Environment facts discovered (matter for Phases 2–3):**
+- Node name is `hella`; API at `https://10.0.20.10:8006`; cert SHA-256 pin
+  `08:9B:64:D1:A5:71:09:0E:F4:B5:90:65:B9:4D:67:CD:51:99:61:CA:F1:33:1E:09:93:87:25:07:E5:E1:7E:A3`.
+- Storages are `pbs / vm-drives / local / local-zfs` — VM disks live on
+  **`vm-drives`**, so set `HLIDSKJALF_CLONE_STORAGE=vm-drives` (the `local-lvm`
+  default does not exist on hella; every provision would fail).
+- **There is no VM template on hella.** The provision form will be empty and
+  Phase 3 step 6 is impossible until one is created (a cloud-init Debian
+  template with `scsi0`, per plan §3).
+- Real fleet (protect ALL of these): 151 proxmox-backup-server, 152 lxc-pihole,
+  153 nixos-services, 154 heimdall-nix, 155 homeassistant, **201
+  dev-debian-homelab (the dev VM itself)** →
+  `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201`.
+- Token `hlidskjalf@pve!panel` (PVEVMAdmin+PVEDatastoreUser+PVEAuditor,
+  privsep 0) holds every privilege the panel needs on PVE 9. **The secret was
+  pasted into a chat once on 2026-07-13 — rotate it** (`pveum user token remove
+  hlidskjalf@pve panel` + re-add) before anything long-lived uses it.
+- The repo is now **public** (that unlocked branch protection: ruleset
+  `protect-main` — PRs + green `backend`/`frontend` CI required, no force-push).
+  Mind what lands in commits/PRs; plan.md already exposes LAN topology.
+
+### The remaining plan, in this order. Do not skip ahead to the fun part.
 
 **Phase 2 — panel up, but only reading.**
-4. `HLIDSKJALF_PROTECTED_VMIDS` must contain the dev VM, heimdall, and everything
-   precious **before** the first start. It is env-only and defaults to EMPTY. If the
+4. `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201` **before** the first
+   start (see fleet list above). It is env-only and defaults to EMPTY. If the
    Fleet page shows the amber "no guest is protected" banner, stop and fix it.
 5. Start the panel. Check Fleet / Node / Graphs / Bandwidth against what the Proxmox
    web UI says. Look specifically for normalisation bugs the mock hid:
@@ -59,7 +87,7 @@ token on that box), just push the branch — Christian will merge.
 
 **The release that makes this runnable by other people.** It was wired to one
 homelab; now it ships unconfigured and sets itself up in a browser.
-`main` is green: **184 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+`main` is green: **193 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
 
 - **First-run setup wizard** (`routes/setup.py`, `docs/setup.md`). Start with no env
   file → the panel serves a wizard: Proxmox host/node/token (validated with a LIVE
@@ -143,22 +171,14 @@ of an unversioned schema is how people lose their bandwidth history.
    reports). For genericity it should render from the ports the backend actually
    returns, with the model read from eAPI (`show version` → `modelName`). The Switch
    page is already optional (unset `switch_host` hides it).
-2. **Real-hardware validation — the top priority, and now tooled.** The panel has still
-   never talked to a real Proxmox host; the whole suite runs against `dev/mock_pve.py`,
-   a mock we wrote ourselves. Run **`scripts/validate-proxmox.py`** (read-only by
-   default; nothing is mutated without `--allow-writes --vmid <>=900>`) against the real
-   host and work the manual checklist in **`docs/real-hardware-validation.md`**.
-   Highest-risk assumptions, in order: the **noVNC console byte-pump** (never exercised
-   against a real VNC endpoint — the mock is a byte echo); **UPID parsing** in
-   `routes/vms.py::_vmid_from_upid` (security-critical, authorizes task-status reads);
-   whether a scoped token may call **`GET /nodes`** (the setup wizard dies without it).
-   - **Already found, without leaving the workshop:** `dev/mock_pve.py::_mk_upid` emits
-     **8**-field UPIDs (it omits `pstart`); real Proxmox emits **9**. So every mock UPID
-     parses to `None` in `_vmid_from_upid`, is treated as a *node-level* task, and is
-     restricted to admins — meaning **a regular user polling their own power-action task
-     gets a 403 against the mock, and no test caught it** (the security tests hand-write
-     correct UPIDs instead of using the mock's). The panel's parser looks right for real
-     PVE; the mock is the liar. Fix the mock and add a test that uses a mock-issued UPID.
+2. **Real-hardware validation — Phase 1 DONE (2026-07-13), Phases 2–4 remain.** The
+   read-only validator passed against hella (PVE 9.2.3): 35 pass, 0 FAIL — see the
+   "START HERE" section at the top for full results and environment facts. The panel
+   process itself has still never run against real Proxmox; that is Phase 2. The
+   manual checklist in **`docs/real-hardware-validation.md`** (open a console and
+   *type* in it; watch a task poll complete as a regular user; protected destroy
+   refusal) is still all ahead of us. The UPID and mock-disk lies are fixed
+   (PRs #32–#34 + the earlier 9-field UPID fix).
 3. Prometheus exporter metric names are assumed from prometheus-pve-exporter's
    `/cluster/resources` collector — confirm against your exporter version. Node
    `iowait`/`loadavg`/`netin`/`netout` don't exist there and stay null unless you set

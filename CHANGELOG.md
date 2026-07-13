@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — first contact with real hardware (Phase 1, 2026-07-13)
+`scripts/validate-proxmox.py` ran read-only against a real Proxmox VE 9.2.3 host
+for the first time: **33 pass, 1 FAIL, 4 warn** on first run; after triage,
+**35 pass, 0 FAIL** with only environment warns left. The headline unknowns held:
+real UPIDs are 9-field and `_vmid_from_upid` authorises correctly, the console
+websocket handshakes with the `PVEAPIToken` header alone and a live RFB server
+answered, a scoped token can call `GET /nodes`, and the rrd/node shapes match
+what the panel normalises. Each finding got its own PR:
+
+- **TLS pin enforced on both handshake paths** (#32). The one FAIL: a wrong
+  fingerprint completed a handshake — but only via `SSLContext.wrap_socket`,
+  which ignores `sslobject_class`. The panel's own traffic (httpx/websockets,
+  memory-BIO path) was always pinned; the validator's negative test was probing
+  the one API the panel never uses. `sslsocket_class` now carries the identical
+  check in `pve.py` and the validator (defense-in-depth), the negative test
+  exercises both paths, and new tests fail on the old code.
+- **PVE 9 privilege rename handled** (#33). PVE 9 split guest-agent access out
+  of `VM.Monitor` into `VM.GuestAgent.*`, so the validator warned about a
+  privilege the panel demonstrably didn't need. The needed-privileges map now
+  takes alternatives (`VM.GuestAgent.Audit` on 9+, `VM.Monitor` on 8), logic in
+  a pure `unmet_requirements()` with unit tests pinned to the observed 9.2.3
+  privilege list.
+- **The mock stops fabricating QEMU disk usage** (#34). Real PVE reports
+  `disk=0` for QEMU guests everywhere (only LXC reports real usage);
+  `dev/mock_pve.py` invented 45% of maxdisk. The mock now matches reality, with
+  parity + pass-through tests; the UI already handled 0 honestly.
+
+193 backend tests. Also: branch protection (ruleset `protect-main`) — PRs
+required, force-push/deletion blocked, `backend`+`frontend` CI checks required.
+
 ### Security — hardening from a self-audit
 A pass over the gaps the v0.3.6 audit did not cover. Each of these was real:
 

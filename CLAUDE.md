@@ -11,12 +11,15 @@ and is kept current every session. `CHANGELOG.md` is Keep-a-Changelog format.
 
 # ⚠️ READ THIS FIRST IF YOU ARE ON REAL HARDWARE
 
-**This panel has never been run against a real Proxmox host.**
+**The panel process has never been run against a real Proxmox host.** (Phase 1 —
+the read-only `scripts/validate-proxmox.py` sweep — passed against a real PVE
+9.2.3 host on 2026-07-13: 35 pass, 0 FAIL. See `handoff.md` for results and the
+remaining Phases 2–4.)
 
-All 163 backend tests pass — against `dev/mock_pve.py`, a mock **we wrote
+All 193 backend tests pass — against `dev/mock_pve.py`, a mock **we wrote
 ourselves**. It is our own assumptions reflected back at us. Green tests here mean
 "self-consistent", not "works". If you are running on Christian's LAN with access to
-the real Proxmox host, **you are the first contact with reality** and that is the
+the real Proxmox host, **you are the next contact with reality** and that is the
 whole point of you being there.
 
 ## Hard safety rules — do not negotiate with these
