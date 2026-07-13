@@ -200,11 +200,20 @@ function ProvisioningTab() {
 
       <form onSubmit={submit} className="card p-5 space-y-6">
         <div className="eyebrow">provisioning</div>
+        <p className="text-muted text-sm">
+          What the provision form offers a new VM: which networks it may join, where its
+          disk is written, and which bridge it plugs into. Provisioning cannot work until
+          at least one VLAN exists here.
+        </p>
 
         {/* VLANs */}
         <div className="space-y-3">
           <div>
             <span className="label">VLANs offered on the provision form</span>
+            <p className="text-muted text-xs mt-1">
+              tag → the gateway a VM on that VLAN gets via cloud-init. Leave the gateway
+              empty for a network without one.
+            </p>
             {vlansLocked && <LockedNote />}
           </div>
           {rows.length === 0 && !vlansLocked && (
@@ -285,7 +294,7 @@ function ProvisioningTab() {
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="label" htmlFor="s-storage">
-              clone storage
+              disk storage
             </label>
             <OptionSelect
               id="s-storage"
@@ -294,11 +303,18 @@ function ProvisioningTab() {
               locked={locked("clone_storage")}
               onChange={setStorage}
             />
-            {locked("clone_storage") && <LockedNote />}
+            {locked("clone_storage") ? (
+              <LockedNote />
+            ) : (
+              <p className="text-muted text-xs mt-1">
+                where a new VM's disk is written when the template is cloned. Only
+                storages the node reports as able to hold disk images are listed.
+              </p>
+            )}
           </div>
           <div>
             <label className="label" htmlFor="s-bridge">
-              bridge
+              network bridge
             </label>
             <OptionSelect
               id="s-bridge"
@@ -307,7 +323,14 @@ function ProvisioningTab() {
               locked={locked("bridge")}
               onChange={setBridge}
             />
-            {locked("bridge") && <LockedNote />}
+            {locked("bridge") ? (
+              <LockedNote />
+            ) : (
+              <p className="text-muted text-xs mt-1">
+                the Proxmox bridge a new VM's NIC attaches to — the one your guests
+                already live on.
+              </p>
+            )}
           </div>
         </div>
 
