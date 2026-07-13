@@ -5,6 +5,32 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed — the documented Proxmox role set could not provision (PVE 9)
+- **Every clone failed** on real hardware with
+  `Permission check failed (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)`. Proxmox 9
+  gates *attaching a NIC to a bridge/VLAN* behind **`SDN.Use`**, and the role set
+  this project has documented since day one (`PVEVMAdmin,PVEDatastoreUser,PVEAuditor`)
+  grants only `SDN.Audit` (read). The fix is one more role — **`PVESDNUser`** — and it
+  is now in every place the commands appear (CLAUDE.md, docs/setup.md,
+  docs/dev-against-real-proxmox.md, docs/real-hardware-validation.md).
+- `scripts/validate-proxmox.py` now **requires `SDN.Use`**, so this is caught before
+  anyone clicks "create VM" rather than after. The unit test that used to assert "the
+  documented role set is sufficient" was encoding a false belief; it now asserts the
+  opposite, with the real error message in the docstring.
+- **The setup wizard now tells you how to make the token** — a collapsible block with
+  the exact `pveum` commands, plus the two traps that produce a token which connects
+  and then fails everything (`--privsep 0`, and the four roles).
+
+### Added — `scripts/dev.sh`
+- One command to start the panel: `./scripts/dev.sh` (real Proxmox, from `dev/dev.env`),
+  `--mock` (no Proxmox at all), `--reload`, `--vite`. It builds the SPA on first run and
+  **warns when `HLIDSKJALF_PROTECTED_VMIDS` is empty**, because then nothing — including
+  the machine the panel runs on — is safe from destroy.
+- It is a *dev* launcher, and says so: production is systemd/Docker/Nix. Documented in
+  `README.md` ("Starting it") and `CLAUDE.md`.
+
 ## [0.4.0-alpha] — 2026-07-13
 
 **The release where the panel met a real Proxmox host — and the mock stopped

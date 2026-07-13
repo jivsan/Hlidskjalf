@@ -38,12 +38,21 @@ VM's — hiding the fact that neither console worked. Assume there are more.
    ```bash
    HLIDSKJALF_PROTECTED_VMIDS=<panel-host-vmid>,<anything-else-precious>
    ```
-3. **Use a scoped, non-root API token.** Never `root@pam`, never a password.
+3. **Use a scoped, non-root API token.** Never `root@pam`, never a password, and
+   **never `PVEAdmin`** (it carries Sys.Console/Sys.Syslog/User.Modify). Four narrow
+   roles, each on the path that needs it:
    ```bash
    pveum user add hlidskjalf@pve
-   pveum acl modify / --users hlidskjalf@pve --roles PVEVMAdmin,PVEDatastoreUser,PVEAuditor
+   pveum acl modify /vms       --users hlidskjalf@pve --roles PVEVMAdmin      # guests
+   pveum acl modify /storage   --users hlidskjalf@pve --roles PVEDatastoreUser # clone disks
+   pveum acl modify /          --users hlidskjalf@pve --roles PVEAuditor      # GET /nodes, tasks
+   pveum acl modify /sdn/zones --users hlidskjalf@pve --roles PVESDNUser      # NIC -> bridge/VLAN
    pveum user token add hlidskjalf@pve panel --privsep 0     # prints the secret ONCE
    ```
+   `--privsep 0` is mandatory (else the token gets its own empty ACL and can do
+   nothing). **`PVESDNUser` is not optional on PVE 9**: without `SDN.Use`, every clone
+   dies with `Permission check failed (/sdn/zones/.../vmbr1/20, SDN.Use)`. The panel's
+   setup wizard prints these commands, generated from the token id you type.
 4. **Read-only first.** Run `scripts/validate-proxmox.py` (read-only by default) before
    the panel touches anything. See `docs/real-hardware-validation.md`, and
    `docs/dev-against-real-proxmox.md` for the dev-VM setup.
@@ -93,18 +102,21 @@ lying — otherwise the suite goes green again and we learn nothing.
 
 # Running it
 
-## Local dev (no Proxmox needed)
+**Use the launcher — don't retype the commands.**
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e ./backend python-multipart
-cp dev/dev.env.example dev/dev.env        # then fill ADMIN_PASSWORD_HASH + SWITCH_FINGERPRINT
-cd dev  && ../.venv/bin/uvicorn mock_pve:app --port 18006 &
-cd dev  && ../.venv/bin/uvicorn mock_switch:app --port 18080 \
-             --ssl-certfile mock_switch.crt --ssl-keyfile mock_switch.key &
-cd backend  && set -a && source ../dev/dev.env && set +a \
-             && ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787
-cd frontend && npm install && npm run dev     # :5173, proxies /api to :8787
+./scripts/dev.sh --mock      # no Proxmox: starts dev/mock_pve.py too. Panel on :8787.
+./scripts/dev.sh             # real Proxmox, config from dev/dev.env
+./scripts/dev.sh --reload    # + backend restarts on save
+./scripts/dev.sh --vite      # + Vite on :5173 (open THAT url) with hot reload
 ```
+
+It creates nothing it cannot recreate: first run builds the SPA, `--mock` needs no
+secrets, and it warns loudly when `HLIDSKJALF_PROTECTED_VMIDS` is empty. It is a
+**dev** launcher — production runs under systemd/Docker/Nix (see `README.md`).
+
+Frontend changes only show up after `npm run build` (the backend serves `dist/`), or
+use `--vite`.
 
 Gotchas that have bitten every session:
 - `HLIDSKJALF_PVE_NODE` **must** be set (`hella` for the mock). The default is Proxmox's

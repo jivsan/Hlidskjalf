@@ -83,6 +83,94 @@ function Field({
   );
 }
 
+/** The `pveum` recipe for the token, written for the id the operator actually typed.
+ *
+ *  The commands are least-privilege on purpose — four narrow roles, each scoped to
+ *  the path that needs it. Deliberately NOT `PVEAdmin` (which carries Sys.Console,
+ *  Sys.Syslog, User.Modify and SDN.Allocate) and never `root@pam`. This token can
+ *  do what the panel does — guests — and nothing else: it cannot reboot the host,
+ *  change permissions, create users, reconfigure storage or alter SDN topology.
+ */
+function TokenRecipe({ tokenId }: { tokenId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  // "user@realm!name" -> user@realm + name. Fall back to sane defaults while the
+  // field is empty or half-typed, so the recipe is never broken or blank.
+  const m = /^([^!\s]+@[^!\s]+)!([^!\s]+)$/.exec(tokenId.trim());
+  const user = m ? m[1] : "hlidskjalf@pve";
+  const name = m ? m[2] : "panel";
+
+  const script = [
+    `pveum user add ${user}`,
+    ``,
+    `# guests: create / clone / destroy / power / console`,
+    `pveum acl modify /vms       --users ${user} --roles PVEVMAdmin`,
+    `# disk space for the clones`,
+    `pveum acl modify /storage   --users ${user} --roles PVEDatastoreUser`,
+    `# read-only: GET /nodes, node status, task log`,
+    `pveum acl modify /          --users ${user} --roles PVEAuditor`,
+    `# attach a NIC to an existing bridge/VLAN (PVE 9 requires SDN.Use)`,
+    `pveum acl modify /sdn/zones --users ${user} --roles PVESDNUser`,
+    ``,
+    `# prints the secret ONCE — copy it into the field below`,
+    `pveum user token add ${user} ${name} --privsep 0`,
+  ].join("\n");
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(script);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked (no https / no permission) — the text is right there */
+    }
+  };
+
+  return (
+    <details className="well p-3 text-xs">
+      <summary className="cursor-pointer text-cyan">
+        How do I create this token on Proxmox?
+      </summary>
+      <div className="mt-3 space-y-3 text-muted">
+        <p>
+          Run these on the Proxmox host's shell. Never <span className="metric">root@pam</span>,
+          never a password — the panel wants a scoped, non-root token, and these are the
+          narrowest roles that actually work.
+        </p>
+
+        <div className="relative">
+          <pre className="metric text-fg overflow-x-auto whitespace-pre leading-relaxed pr-16">
+            {script}
+          </pre>
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="absolute top-0 right-0 btn-plain text-[11px] px-2 py-0.5"
+          >
+            {copied ? "copied" : "copy"}
+          </button>
+        </div>
+
+        <p>
+          <span className="text-fg">Two traps</span>, both of which produce a token that
+          connects and then fails everything:{" "}
+          <span className="metric text-fg">--privsep 0</span> is required (without it the
+          token gets its own empty ACL and is granted nothing), and all four roles are
+          needed — <span className="text-fg">PVEAuditor</span> alone grants no console, no
+          power and no provisioning, and without <span className="text-fg">PVESDNUser</span>{" "}
+          Proxmox 9 refuses to attach a new VM's NIC to a bridge, so every create fails
+          with <span className="metric">Permission check failed … SDN.Use</span>.
+        </p>
+        <p>
+          This token <span className="text-fg">cannot</span> reboot the host, change
+          permissions, create users, reconfigure storage or alter SDN zones. It is not{" "}
+          <span className="metric">PVEAdmin</span>.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 /** One review line: label left, machine value right (mono). */
 function ReviewRow({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -300,15 +388,17 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
             <div className="hairline" />
 
             <div className="eyebrow">API token</div>
+
+            {/* The single most common way a first run dies: a token that
+                authenticates and then 403s on everything. Give the operator the
+                exact commands — written for the token id they actually typed —
+                rather than a link they have to go and find. */}
+            <TokenRecipe tokenId={tokenId} />
+
             <Field
               id="s-token-id"
               label="token id"
-              hint={
-                <>
-                  create it on the node:{" "}
-                  <span className="metric">pveum user token add hlidskjalf@pve panel</span>
-                </>
-              }
+              hint="the full id, including the token name after the '!'"
             >
               <input
                 id="s-token-id"

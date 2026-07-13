@@ -11,15 +11,42 @@ docker run -p 8787:8787 -v hlidskjalf-state:/var/lib/hlidskjalf ghcr.io/jivsan/h
 
 ## Before you start: make a Proxmox API token
 
-The panel never uses root, and never uses a password. Create a scoped token:
+The panel never uses root, never uses a password, and never asks for `PVEAdmin`.
+Four narrow roles, each scoped to the path that needs it:
 
 ```bash
 # On the Proxmox host
 pveum user add hlidskjalf@pve
-pveum acl modify / --users hlidskjalf@pve --roles PVEVMAdmin,PVEDatastoreUser,PVEAuditor
+
+# guests: create / clone / destroy / power / console
+pveum acl modify /vms       --users hlidskjalf@pve --roles PVEVMAdmin
+# disk space for the clones
+pveum acl modify /storage   --users hlidskjalf@pve --roles PVEDatastoreUser
+# read-only: GET /nodes, node status, task log
+pveum acl modify /          --users hlidskjalf@pve --roles PVEAuditor
+# attach a NIC to an existing bridge/VLAN (PVE 9 requires SDN.Use)
+pveum acl modify /sdn/zones --users hlidskjalf@pve --roles PVESDNUser
+
 pveum user token add hlidskjalf@pve panel --privsep 0
 #  ^ prints the secret ONCE — copy it, the wizard needs it
 ```
+
+The wizard prints these same commands (generated from the token id you type, with a
+copy button) — you do not have to come back here.
+
+**Three traps**, each producing a token that connects and then fails everything:
+
+- **`--privsep 0` is mandatory.** With `--privsep 1` the token carries its own ACL,
+  which by default grants nothing.
+- **`PVEAuditor` alone is not enough** — it grants no `VM.Console`, `VM.PowerMgmt` or
+  `VM.Allocate`, so console, power and provisioning would all 403.
+- **`PVESDNUser` is not optional on Proxmox 9.** Attaching a NIC to a bridge/VLAN
+  needs `SDN.Use`; `PVEAuditor` grants only `SDN.Audit` (read). Without it, *every*
+  clone fails with `Permission check failed (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)`.
+
+This token cannot reboot the host, change permissions, create users, reconfigure
+storage or alter SDN zones. Run `scripts/validate-proxmox.py` and it will tell you if
+any of the above is missing, before the panel ever touches anything.
 
 You also want the certificate fingerprint, because the panel **pins** the Proxmox
 certificate rather than trusting whatever answers on the wire:

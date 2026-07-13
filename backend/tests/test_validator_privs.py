@@ -51,19 +51,33 @@ PVE9_PRIVS = {
     "VM.Snapshot", "VM.Snapshot.Rollback",
 }
 
+# What the token needs to actually work: the above PLUS SDN.Use (role PVESDNUser).
+# Without it PVE 9 refuses to attach a NIC to a bridge/VLAN, so every clone fails.
+SUFFICIENT = PVE9_PRIVS | {"SDN.Use"}
+
 # A PVE 8-style grant: VM.Monitor exists, no VM.GuestAgent.* family.
-PVE8_PRIVS = (PVE9_PRIVS - {p for p in PVE9_PRIVS if p.startswith("VM.GuestAgent.")}) | {
+PVE8_PRIVS = (SUFFICIENT - {p for p in SUFFICIENT if p.startswith("VM.GuestAgent.")}) | {
     "VM.Monitor",
 }
 
 
-def test_pve9_documented_role_set_is_fully_sufficient(validator):
-    """The real PVE 9.2.3 privilege list must produce NO unmet requirements.
+def test_pve9_role_set_without_sdn_user_cannot_provision(validator):
+    """The role set we documented is NOT sufficient on PVE 9 — SDN.Use is missing.
 
-    This fails against the old behavior, where the map demanded VM.Monitor and
-    the token (correctly) holds VM.GuestAgent.Audit instead.
+    Proven the hard way on real hardware (2026-07-13): every clone died with
+        Permission check failed (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)
+    because PVE 9 gates *attaching a NIC to a bridge/VLAN* behind SDN.Use, and
+    PVEAuditor grants only SDN.Audit (read). The fix is the PVESDNUser role. The
+    validator must now say so BEFORE anyone clicks "create VM".
     """
-    assert validator.unmet_requirements(PVE9_PRIVS) == []
+    unmet = validator.unmet_requirements(PVE9_PRIVS)
+    assert [alts for alts, _ in unmet] == [frozenset({"SDN.Use"})]
+    assert "PVESDNUser" in unmet[0][1]
+
+
+def test_pve9_role_set_with_sdn_user_is_sufficient(validator):
+    """PVEVMAdmin + PVEDatastoreUser + PVEAuditor + PVESDNUser — the real minimum."""
+    assert validator.unmet_requirements(SUFFICIENT) == []
 
 
 def test_pve8_vm_monitor_still_satisfies_the_agent_requirement(validator):
@@ -75,7 +89,7 @@ def test_pve8_vm_monitor_still_satisfies_the_agent_requirement(validator):
 
 
 def test_missing_privilege_is_reported_with_its_reason(validator):
-    unmet = validator.unmet_requirements(PVE9_PRIVS - {"VM.Console"})
+    unmet = validator.unmet_requirements(SUFFICIENT - {"VM.Console"})
     assert len(unmet) == 1
     alts, why = unmet[0]
     assert alts == frozenset({"VM.Console"})
@@ -83,7 +97,7 @@ def test_missing_privilege_is_reported_with_its_reason(validator):
 
 
 def test_neither_agent_privilege_reports_both_alternatives(validator):
-    unmet = validator.unmet_requirements(PVE9_PRIVS - {"VM.GuestAgent.Audit"})
+    unmet = validator.unmet_requirements(SUFFICIENT - {"VM.GuestAgent.Audit"})
     assert len(unmet) == 1
     alts, why = unmet[0]
     assert alts == frozenset({"VM.GuestAgent.Audit", "VM.Monitor"})

@@ -47,7 +47,10 @@ and this one sits on an authorization check.
 
 ```bash
 pveum user add hlidskjalf@pve
-pveum acl modify / --users hlidskjalf@pve --roles PVEVMAdmin,PVEDatastoreUser,PVEAuditor
+pveum acl modify /vms       --users hlidskjalf@pve --roles PVEVMAdmin       # guests
+pveum acl modify /storage   --users hlidskjalf@pve --roles PVEDatastoreUser # clone disks
+pveum acl modify /          --users hlidskjalf@pve --roles PVEAuditor       # GET /nodes, tasks
+pveum acl modify /sdn/zones --users hlidskjalf@pve --roles PVESDNUser       # NIC -> bridge/VLAN (PVE 9)
 pveum user token add hlidskjalf@pve panel --privsep 0    # prints the secret ONCE
 ```
 
