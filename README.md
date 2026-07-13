@@ -37,17 +37,17 @@ See `plan.md` for the full design and `docs/bootstrap.md` for the Proxmox-side s
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.5-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.6-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
 
-**Current (v0.3.5-alpha - design-system pass: Archivo display face + JetBrains Mono for data, monumental wordmark masthead, high-seat identity, PageHeader rhythm across every page):**  
-[v0.3.5-alpha/README.md](docs/screenshots/v0.3.5-alpha/README.md)  
-(Real captured screenshots after merges)
+**Current (v0.3.6-alpha - first-run setup wizard, security audit, no hardcoded host, Prometheus, −71% bundle):**  
+[v0.3.6-alpha/README.md](docs/screenshots/v0.3.6-alpha/README.md)  
+(Real captured screenshots after merges — includes the setup wizard)
 
-**Previous (v0.3.4-alpha robustness + design pass):** [v0.3.4-alpha/README.md](docs/screenshots/v0.3.4-alpha/README.md)
+**Previous (v0.3.5-alpha design system):** [v0.3.5-alpha/README.md](docs/screenshots/v0.3.5-alpha/README.md)
 
 **Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 
