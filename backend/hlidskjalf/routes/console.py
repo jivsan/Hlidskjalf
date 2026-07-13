@@ -132,8 +132,16 @@ async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
     # a real WebSocket close code (4401/4403) to the browser. Closing before
     # accept makes uvicorn reject the handshake with a bare HTTP 403 and the
     # code never reaches the client (noVNC would only see a generic 1006).
-    # noVNC always offers the "binary" subprotocol.
-    await websocket.accept(subprotocol="binary")
+    #
+    # NEGOTIATE the subprotocol — never assert one. RFC 6455 §4.1: a client MUST
+    # fail the connection if the server selects a subprotocol it did not offer.
+    # We used to answer "binary" unconditionally, which browsers duly killed:
+    # noVNC (>=1.5) offers NO subprotocol by default (`wsProtocols: []`), so the
+    # VM console died the instant it connected — "connection lost unexpectedly",
+    # black screen. The xterm.js terminal asks for "binary" explicitly and so
+    # survived, which is exactly why containers worked and VMs did not.
+    offered = websocket.scope.get("subprotocols") or []
+    await websocket.accept(subprotocol="binary" if "binary" in offered else None)
     db: Db = websocket.app.state.db
     try:
         username = await session_from_request(websocket, db)

@@ -376,7 +376,11 @@ async def vncwebsocket(
     the ticket never reaches the browser) — this is what keeps the suite honest
     about it.
     """
-    await websocket.accept(subprotocol="binary")
+    # Negotiate, don't assert (RFC 6455 §4.1) — real PVE echoes back "binary"
+    # only because the panel offers it. A server that selects a subprotocol the
+    # client never offered gets its connection killed by the client.
+    offered = websocket.scope.get("subprotocols") or []
+    await websocket.accept(subprotocol="binary" if "binary" in offered else None)
     try:
         if kind == "lxc":
             auth = await websocket.receive()

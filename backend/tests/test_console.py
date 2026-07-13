@@ -197,6 +197,28 @@ async def test_console_echo_is_bidirectional(panel, cookie):
         assert await asyncio.wait_for(ws.recv(), timeout=5) == second
 
 
+async def test_console_ws_accepts_a_client_that_offers_no_subprotocol(panel, cookie):
+    """noVNC is that client, and the panel used to hang up on it.
+
+    RFB 6455 §4.1: a client MUST fail the connection if the server selects a
+    subprotocol it did not offer. noVNC >= 1.5 offers NONE (`wsProtocols: []`),
+    while the panel answered "binary" unconditionally — so every VM console died
+    on arrival ("connection lost unexpectedly", black screen) while the xterm.js
+    terminal, which asks for "binary" explicitly, worked fine. Negotiate; never
+    assert.
+    """
+    base_url, port = panel
+    body = await _ticket(base_url, cookie, 105)  # qemu — the noVNC path
+    ws_url = f"ws://127.0.0.1:{port}{body['ws_path']}"
+
+    async with websockets.connect(  # note: NO subprotocols= argument
+        ws_url, additional_headers=_cookie_header(cookie)
+    ) as ws:
+        assert ws.subprotocol is None  # the server must not invent one
+        await ws.send(b"RFB 003.008\n")  # and the pump must still work
+        assert await asyncio.wait_for(ws.recv(), timeout=5) == b"RFB 003.008\n"
+
+
 # --- containers: a terminal, not a framebuffer ------------------------------
 # Validated against real PVE 9.2.3 (2026-07-13): an LXC guest's vncproxy
 # completes the RFB handshake and then hangs forever at ClientInit — with the
