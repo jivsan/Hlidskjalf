@@ -1,5 +1,5 @@
 import { debug } from "../api";
-import { Card, EmptyState, ErrorState, LoadingState } from "../components/ui";
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 
 function formatTs(ts: number): string {
@@ -19,14 +19,16 @@ export function Debug() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Debug</h1>
-        <p className="text-muted text-sm">Admin-only diagnostics and internal state. HLIDSKJALF_DEBUG must be enabled.</p>
-      </div>
+      <PageHeader
+        eyebrow="diagnostics"
+        title="Debug"
+        sub="Admin-only diagnostics and internal state. HLIDSKJALF_DEBUG must be enabled."
+      />
 
       {health.data?.debug && (
-        <div className="card border-pink/40 p-3 text-sm text-pink">
-          Debug mode active (HLIDSKJALF_DEBUG)
+        <div className="card border-amber/50 bg-amber/10 p-3 text-sm text-amber flex items-center gap-2">
+          <span className="eyebrow">debug mode</span>
+          <span>active (HLIDSKJALF_DEBUG)</span>
         </div>
       )}
 
@@ -44,7 +46,7 @@ export function Debug() {
         ) : health.error ? (
           <ErrorState message={health.error} />
         ) : health.data ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm font-mono">
+          <div className="well p-3 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm metric">
             {Object.entries(health.data).map(([k, v]) => (
               <div key={k} className="break-all">
                 <span className="text-muted">{k}:</span>{" "}
@@ -71,7 +73,7 @@ export function Debug() {
         ) : config.error ? (
           <ErrorState message={config.error} />
         ) : config.data ? (
-          <div className="max-h-80 overflow-auto text-xs font-mono space-y-1">
+          <div className="well p-3 max-h-80 overflow-auto text-xs metric space-y-1">
             {Object.entries(config.data)
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([k, v]) => (
@@ -100,7 +102,7 @@ export function Debug() {
         ) : acc.error ? (
           <ErrorState message={acc.error} />
         ) : acc.data ? (
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-4 text-sm metric">
             <div>
               <span className="text-muted">running:</span>{" "}
               <span className={acc.data.running ? "text-cyan" : "text-red"}>{String(acc.data.running)}</span>
@@ -133,7 +135,7 @@ export function Debug() {
         ) : logs.error ? (
           <ErrorState message={logs.error} />
         ) : logs.data && logs.data.length > 0 ? (
-          <div className="max-h-96 overflow-auto text-xs font-mono">
+          <div className="well p-2 max-h-96 overflow-auto text-xs metric">
             <table className="w-full">
               <tbody>
                 {[...logs.data].reverse().map((l, i) => (
@@ -167,7 +169,7 @@ export function Debug() {
         ) : errors.error ? (
           <ErrorState message={errors.error} />
         ) : errors.data && errors.data.length > 0 ? (
-          <div className="max-h-96 overflow-auto text-xs font-mono">
+          <div className="well p-2 max-h-96 overflow-auto text-xs metric">
             <table className="w-full">
               <tbody>
                 {[...errors.data].reverse().map((e, i) => (

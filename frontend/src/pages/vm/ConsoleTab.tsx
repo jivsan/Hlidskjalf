@@ -110,7 +110,7 @@ export function ConsoleTab({ vmid }: { vmid: number }) {
       {lastError && <div className="text-red text-xs mb-2">{lastError}</div>}
       <div
         ref={screenRef}
-        className="w-full bg-bg border border-border-token rounded-card overflow-hidden"
+        className="well w-full overflow-hidden"
         style={{ height: "60vh", minHeight: 320 }}
       >
         {state === "disconnected" && !lastError && (

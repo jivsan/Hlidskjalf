@@ -4,56 +4,115 @@
 
 @layer base {
   html {
-    @apply bg-bg text-fg font-mono;
+    @apply bg-bg text-fg font-sans;
     color-scheme: dark;
+    /* Archivo reads a touch light at UI sizes; nudge the default up. */
+    font-variation-settings: "wght" 420;
+    -webkit-font-smoothing: antialiased;
   }
   body {
     @apply min-h-screen antialiased text-sm;
+    /* Ambient watch: a faint aurora at the horizon over an otherwise black void.
+       Barely there — it should register as depth, not decoration. */
+    background-color: theme(colors.bg);
+    background-image:
+      radial-gradient(120% 60% at 50% -10%, rgba(45, 226, 230, 0.05), transparent 60%),
+      radial-gradient(90% 50% at 100% 0%, rgba(255, 79, 163, 0.035), transparent 55%);
+    background-attachment: fixed;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
   }
   ::selection {
-    background-color: rgba(255, 79, 163, 0.35);
+    background-color: rgba(255, 79, 163, 0.32);
+    color: #fff;
   }
 }
 
 @layer components {
+  /* Card: a lit surface above the void — hairline top-highlight, soft lift. */
   .card {
-    @apply bg-surface border border-border-token rounded-card shadow-sm;
+    @apply bg-surface border border-border-token rounded-card;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.035),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 8px 24px -16px rgba(0, 0, 0, 0.6);
+  }
+  /* Data well: recessed, darker than the card it sits in (logs, config, code). */
+  .well {
+    @apply bg-abyss border border-border-token rounded-card;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
   }
   .metric {
+    @apply font-mono;
     font-variant-numeric: tabular-nums;
   }
+  /* Section eyebrow: a labeled hairline that frames a view from the seat. */
+  .eyebrow {
+    @apply flex items-center gap-2 text-[11px] font-medium uppercase tracking-eyebrow text-muted;
+  }
+  .eyebrow::before {
+    content: "";
+    @apply inline-block w-4 h-px bg-cyan/60;
+  }
+  /* Thin gradient rule. */
+  .hairline {
+    height: 1px;
+    background: linear-gradient(90deg, theme(colors.border-token), transparent);
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-card border text-sm
-      disabled:opacity-40 disabled:cursor-not-allowed select-none transition-colors duration-100;
+      font-medium tracking-tight disabled:opacity-40 disabled:cursor-not-allowed select-none
+      transition-colors duration-100;
   }
   .btn-cyan {
-    @apply btn border-cyan/50 text-cyan hover:bg-cyan/10;
+    @apply btn border-cyan/45 text-cyan hover:bg-cyan/10 hover:border-cyan/70;
   }
   .btn-pink {
-    @apply btn border-pink/60 text-pink hover:bg-pink/10;
+    @apply btn border-pink/55 text-pink hover:bg-pink/10 hover:border-pink/80;
   }
   .btn-plain {
-    @apply btn border-border-token text-fg hover:bg-border-token/40;
+    @apply btn border-border-token text-fg hover:bg-surface-2 hover:border-muted/50;
   }
   .btn-red {
-    @apply btn border-red/60 text-red hover:bg-red/10;
+    @apply btn border-red/55 text-red hover:bg-red/10 hover:border-red/80;
   }
   .btn-amber {
-    @apply btn border-amber/60 text-amber hover:bg-amber/10;
+    @apply btn border-amber/55 text-amber hover:bg-amber/10 hover:border-amber/80;
   }
   .input {
-    @apply bg-bg border border-border-token rounded-card px-3 py-1.5 text-sm text-fg w-full
-      placeholder:text-muted focus:outline-none focus:border-pink/70 transition-colors duration-100;
+    @apply bg-abyss border border-border-token rounded-card px-3 py-1.5 text-sm text-fg w-full
+      placeholder:text-muted focus:outline-none focus:border-cyan/70 transition-colors duration-100;
   }
   .label {
     @apply block text-xs text-muted mb-1;
+  }
+
+  /* Signature wordmark: Archivo pushed wide + heavy so the name reads as carved
+     into the seat. Split coloring is applied in markup (.wordmark > .lit). */
+  .wordmark {
+    @apply font-display;
+    font-variation-settings: "wght" 800, "wdth" 125;
+    letter-spacing: 0.02em;
   }
 }
 
 /* Recessive scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2f3549 transparent;
+  scrollbar-color: theme(colors.border-token) transparent;
+}
+
+/* Signature page-load reveal: the seat settles into view once, top-down.
+   Staggered by CSS var --step. Disabled under reduced-motion (see below). */
+@keyframes seat-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.reveal {
+  animation: seat-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--step, 0) * 70ms);
 }
 
 /* Flux-panel inspired: cleaner modern cards, subtle depth, professional cyberpunk (less neon/glow) */
@@ -607,7 +666,7 @@
   border-radius: 2px;
 }
 
-/* Motion sensitivity: stop the LED blinking + spinner rotation */
+/* Motion sensitivity: stop the LED blinking + spinner rotation + reveal */
 @media (prefers-reduced-motion: reduce) {
   .led-active,
   .rj45-port.active .port-led,
@@ -616,5 +675,8 @@
   }
   .spinner {
     animation-duration: 2s;
+  }
+  .reveal {
+    animation: none;
   }
 }

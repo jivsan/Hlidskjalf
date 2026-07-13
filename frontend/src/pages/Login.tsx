@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, type SessionInfo } from "../api";
+import { Wordmark } from "../components/Layout";
 
 export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   const [username, setUsername] = useState("");
@@ -26,18 +27,22 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 login-backdrop">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <form onSubmit={submit} className="card login-card p-6 space-y-4">
-          <div className="text-center space-y-1 pb-1">
-            <div className="text-2xl font-medium tracking-wide">
-              <span className="text-pink">hlid</span>
-              <span className="text-cyan">skjalf</span>
-            </div>
-            <p className="text-xs text-muted tracking-widest uppercase">
-              the high seat overlooking hella
-            </p>
-          </div>
+        {/* Thesis: the high seat, from which all realms are seen. */}
+        <div className="reveal text-center mb-8" style={{ ["--step" as string]: 0 }}>
+          <div className="eyebrow justify-center mb-4">Proxmox control</div>
+          <Wordmark className="text-[44px] leading-none" />
+          <p className="text-muted text-sm mt-4 max-w-xs mx-auto leading-relaxed">
+            The high seat. From it, one watches over every realm running on hella.
+          </p>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="reveal card login-card p-6 space-y-4"
+          style={{ ["--step" as string]: 1 }}
+        >
           <div>
             <label className="label" htmlFor="username">
               username
@@ -75,11 +80,15 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
             </div>
           )}
           <button type="submit" className="btn-pink w-full" disabled={busy}>
-            {busy ? "authenticating…" : "login"}
+            {busy ? "taking the seat…" : "take the seat"}
           </button>
         </form>
-        <p className="text-center text-[10px] text-muted tracking-widest mt-4">
-          HLIDSKJALF · PROXMOX CONTROL PANEL
+
+        <p
+          className="reveal text-center text-[10px] text-muted uppercase tracking-eyebrow mt-6"
+          style={{ ["--step" as string]: 2 }}
+        >
+          watching hella
         </p>
       </div>
     </div>

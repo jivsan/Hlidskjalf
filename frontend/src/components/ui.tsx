@@ -1,5 +1,33 @@
 import type { ReactNode } from "react";
 
+/**
+ * Page header: the frame every view hangs under. The eyebrow names the section
+ * (a labeled hairline), the title carries it in the display face, and actions
+ * sit to the right. Keeps every page opening on the same rhythm.
+ */
+export function PageHeader({
+  eyebrow,
+  title,
+  sub,
+  actions,
+}: {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0">
+        {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
+        <h1 className="font-display text-2xl leading-none tracking-tight text-fg">{title}</h1>
+        {sub && <p className="text-muted text-sm mt-1.5">{sub}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+    </div>
+  );
+}
+
 export function Card({
   title,
   children,
@@ -15,7 +43,9 @@ export function Card({
     <div className={`card p-4 ${className}`}>
       {(title || actions) && (
         <div className="flex items-center justify-between mb-3">
-          {title && <h3 className="text-xs uppercase tracking-wider text-muted">{title}</h3>}
+          {title && (
+            <h3 className="text-[11px] font-medium uppercase tracking-eyebrow text-muted">{title}</h3>
+          )}
           {actions}
         </div>
       )}
@@ -26,16 +56,16 @@ export function Card({
 
 export function ErrorState({ message }: { message: string }) {
   return (
-    <div className="card border-red/40 p-4 text-red text-sm" role="alert">
-      <span className="text-muted mr-2">error:</span>
-      {message}
+    <div className="card border-red/40 p-4 text-red text-sm flex items-start gap-2" role="alert">
+      <span className="text-muted uppercase text-[11px] tracking-eyebrow mt-0.5 shrink-0">error</span>
+      <span>{message}</span>
     </div>
   );
 }
 
 export function EmptyState({ message }: { message: string }) {
   return (
-    <div className="card border-dashed p-6 text-center text-muted text-sm">{message}</div>
+    <div className="well border-dashed p-6 text-center text-muted text-sm">{message}</div>
   );
 }
 
@@ -55,12 +85,14 @@ export function StatusDot({ status }: { status: string }) {
       : status === "stopped"
         ? "bg-muted"
         : "bg-red";
+  const live = status === "running";
   return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${color}`}
-      title={status}
-      aria-label={status}
-    />
+    <span className="relative inline-flex" title={status} aria-label={status}>
+      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
+      {live && (
+        <span className="absolute inset-0 rounded-full bg-cyan/60 animate-ping" aria-hidden="true" />
+      )}
+    </span>
   );
 }
 
@@ -104,7 +136,7 @@ export function ProgressBar({
 export function KindBadge({ kind }: { kind: string }) {
   if (kind !== "lxc") return null;
   return (
-    <span className="text-[10px] uppercase border border-border-token rounded px-1 py-px text-muted">
+    <span className="text-[10px] uppercase tracking-wider border border-border-token rounded px-1 py-px text-muted align-middle">
       lxc
     </span>
   );

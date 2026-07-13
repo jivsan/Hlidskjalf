@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { TaskProgress } from "../components/TaskProgress";
 import { useToast } from "../components/Toast";
-import { Card, ErrorState, LoadingState } from "../components/ui";
+import { Card, ErrorState, LoadingState, PageHeader } from "../components/ui";
 import type { ProvisionDefaults, ProvisionRequest, TemplateInfo } from "../types";
 
 const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -103,8 +103,8 @@ export function Provision() {
 
   if (submitted) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-lg">Provision</h1>
+      <div className="space-y-6">
+        <PageHeader eyebrow="new guest" title="Provision" />
         <Card title={`Creating ${name} (vmid ${submitted.vmid})`}>
           <TaskProgress
             upids={submitted.upids}
@@ -136,12 +136,13 @@ export function Provision() {
   }
 
   return (
-    <div className="space-y-4 max-w-2xl">
-      <h1 className="text-lg">Provision</h1>
+    <div className="space-y-6 max-w-2xl">
+      <PageHeader eyebrow="new guest" title="Provision" />
       {templates.length === 0 && (
         <ErrorState message="no templates found on hella — create a cloud-init template first (VMID 9000+)" />
       )}
-      <form onSubmit={submit} className="card p-5 space-y-4">
+      <form onSubmit={submit} className="card p-5 space-y-6">
+        {/* identity */}
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="label" htmlFor="p-name">hostname</label>
@@ -176,110 +177,136 @@ export function Provision() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="label" htmlFor="p-cores">cores</label>
-            <input
-              id="p-cores"
-              type="number"
-              className="input metric"
-              min={1}
-              max={32}
-              value={cores}
-              onChange={(e) => setCores(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="p-mem">RAM (MB)</label>
-            <input
-              id="p-mem"
-              type="number"
-              className="input metric"
-              min={128}
-              step={128}
-              value={memoryMb}
-              onChange={(e) => setMemoryMb(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="p-disk">disk (GB)</label>
-            <input
-              id="p-disk"
-              type="number"
-              className="input metric"
-              min={1}
-              value={diskGb}
-              onChange={(e) => setDiskGb(Number(e.target.value))}
-              required
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="p-vlan">VLAN</label>
-            <select
-              id="p-vlan"
-              className="input"
-              value={vlan}
-              onChange={(e) => onVlanChange(e.target.value)}
-              required
-            >
-              {defaults.vlans.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="p-ip">static IP (CIDR)</label>
-            <input
-              id="p-ip"
-              className="input metric"
-              value={ipCidr}
-              onChange={(e) => setIpCidr(e.target.value.trim())}
-              placeholder="10.0.20.50/24"
-              spellCheck={false}
-              required
-            />
-            {ipCidr && !ipOk && (
-              <p className="text-red text-xs mt-1">expected x.x.x.x/nn</p>
-            )}
-          </div>
-          <div>
-            <label className="label" htmlFor="p-gw">gateway</label>
-            <input
-              id="p-gw"
-              className="input metric"
-              value={gateway}
-              onChange={(e) => setGateway(e.target.value.trim())}
-              placeholder="(may be empty)"
-              spellCheck={false}
-            />
+        </div>
+
+        {/* resources */}
+        <div className="space-y-3">
+          <div className="eyebrow">resources</div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="label" htmlFor="p-cores">cores</label>
+              <input
+                id="p-cores"
+                type="number"
+                className="input metric"
+                min={1}
+                max={32}
+                value={cores}
+                onChange={(e) => setCores(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="p-mem">RAM (MB)</label>
+              <input
+                id="p-mem"
+                type="number"
+                className="input metric"
+                min={128}
+                step={128}
+                value={memoryMb}
+                onChange={(e) => setMemoryMb(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="p-disk">disk (GB)</label>
+              <input
+                id="p-disk"
+                type="number"
+                className="input metric"
+                min={1}
+                value={diskGb}
+                onChange={(e) => setDiskGb(Number(e.target.value))}
+                required
+              />
+            </div>
           </div>
         </div>
-        <div>
-          <label className="label" htmlFor="p-ssh">SSH authorized keys</label>
-          <textarea
-            id="p-ssh"
-            className="input h-24 text-xs"
-            value={sshKeys}
-            onChange={(e) => setSshKeys(e.target.value)}
-            spellCheck={false}
-          />
+
+        {/* network */}
+        <div className="space-y-3">
+          <div className="eyebrow">network</div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="label" htmlFor="p-vlan">VLAN</label>
+              <select
+                id="p-vlan"
+                className="input"
+                value={vlan}
+                onChange={(e) => onVlanChange(e.target.value)}
+                required
+              >
+                {defaults.vlans.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="p-ip">static IP (CIDR)</label>
+              <input
+                id="p-ip"
+                className="input metric"
+                value={ipCidr}
+                onChange={(e) => setIpCidr(e.target.value.trim())}
+                placeholder="10.0.20.50/24"
+                spellCheck={false}
+                required
+              />
+              {ipCidr && !ipOk && (
+                <p className="text-red text-xs mt-1">expected x.x.x.x/nn</p>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="p-gw">gateway</label>
+              <input
+                id="p-gw"
+                className="input metric"
+                value={gateway}
+                onChange={(e) => setGateway(e.target.value.trim())}
+                placeholder="(may be empty)"
+                spellCheck={false}
+              />
+            </div>
+          </div>
         </div>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={start}
-            onChange={(e) => setStart(e.target.checked)}
-            className="accent-[#ff4fa3]"
-          />
-          start after create
-        </label>
-        <div className="text-xs text-muted metric">next free vmid: {defaults.next_vmid}</div>
-        <button type="submit" className="btn-pink" disabled={!formOk || busy || templates.length === 0}>
-          {busy ? "creating…" : "create VM"}
-        </button>
+
+        {/* access */}
+        <div className="space-y-3">
+          <div className="eyebrow">access</div>
+          <div>
+            <label className="label" htmlFor="p-ssh">SSH authorized keys</label>
+            <textarea
+              id="p-ssh"
+              className="input h-24 text-xs metric"
+              value={sshKeys}
+              onChange={(e) => setSshKeys(e.target.value)}
+              spellCheck={false}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={start}
+              onChange={(e) => setStart(e.target.checked)}
+              className="accent-pink"
+            />
+            start after create
+          </label>
+        </div>
+
+        <div className="hairline" />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-muted">
+            next free vmid <span className="metric text-fg">{defaults.next_vmid}</span>
+          </div>
+          <button type="submit" className="btn-pink" disabled={!formOk || busy || templates.length === 0}>
+            {busy ? "creating…" : "create VM"}
+          </button>
+        </div>
       </form>
     </div>
   );

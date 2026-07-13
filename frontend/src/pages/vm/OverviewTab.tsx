@@ -59,7 +59,7 @@ export function OverviewTab({
         <Card
           title="Bandwidth (since boot)"
           actions={
-            <Link to={`/vm/${vm.vmid}?tab=graphs&sub=bandwidth`} className="text-xs text-pink hover:underline">
+            <Link to={`/vm/${vm.vmid}?tab=graphs&sub=bandwidth`} className="text-xs text-cyan hover:underline">
               graphs →
             </Link>
           }

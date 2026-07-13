@@ -5,7 +5,7 @@ import {
   MetricAreaChart,
   TimeframePills,
 } from "../components/charts";
-import { Card, EmptyState, ErrorState, LoadingState, ProgressBar } from "../components/ui";
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader, ProgressBar } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 import { formatBytes, formatPercent, formatRate, formatUptime } from "../lib/format";
 import type { NodeInfo, NodeMetricPoint, Timeframe } from "../types";
@@ -35,32 +35,38 @@ export function NodePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-lg">
-          Node <span className="text-cyan">{info?.name ?? "?"}</span>
-        </h1>
-        {st && (
-          <div className="text-xs text-muted metric">
-            up {formatUptime(st.uptime)}
-            {loadavg && <> · load {loadavg}</>}
-          </div>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="hypervisor host"
+        title={info?.name ?? "?"}
+        sub={
+          st ? (
+            <>
+              up <span className="metric text-fg">{formatUptime(st.uptime)}</span>
+              {loadavg && (
+                <>
+                  {" · "}load <span className="metric text-fg">{loadavg}</span>
+                </>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
       {node.error && <ErrorState message={node.error} />}
 
       {st && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Card title="CPU">
-            <div className="text-sm metric mb-2">
+            <div className="metric text-lg leading-none text-fg mb-3">
               {formatPercent(st.cpu)}{" "}
-              {cores != null && <span className="text-muted">of {cores} cores</span>}
+              {cores != null && <span className="text-muted text-sm">of {cores} cores</span>}
             </div>
             <ProgressBar fraction={st.cpu} />
           </Card>
           <Card title="RAM">
-            <div className="text-sm metric mb-2">
-              {formatBytes(memUsed)} <span className="text-muted">/ {formatBytes(memTotal)}</span>
+            <div className="metric text-lg leading-none text-fg mb-3">
+              {formatBytes(memUsed)}{" "}
+              <span className="text-muted text-sm">/ {formatBytes(memTotal)}</span>
             </div>
             <ProgressBar fraction={memTotal ? (memUsed ?? 0) / memTotal : 0} />
           </Card>
@@ -75,12 +81,13 @@ export function NodePage() {
             {info.storage.map((s) => {
               const f = s.total > 0 ? s.used / s.total : 0;
               return (
-                <div key={s.storage} className="text-sm metric">
-                  <div className="flex flex-wrap justify-between gap-1 mb-1">
+                <div key={s.storage} className="text-sm">
+                  <div className="flex flex-wrap justify-between gap-1 mb-1.5">
                     <span>
-                      {s.storage} <span className="text-muted text-xs">({s.type})</span>
+                      <span className="metric text-fg">{s.storage}</span>{" "}
+                      <span className="text-muted text-xs">({s.type})</span>
                     </span>
-                    <span className="text-muted">
+                    <span className="metric text-muted">
                       {formatBytes(s.used)} / {formatBytes(s.total)} · {formatPercent(f, 0)}
                     </span>
                   </div>

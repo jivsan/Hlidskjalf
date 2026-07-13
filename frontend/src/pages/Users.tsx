@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
-import { Card, EmptyState, ErrorState, LoadingState } from "../components/ui";
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/ui";
 import type { VmListItem } from "../types";
 
 interface UserRow {
@@ -133,8 +133,8 @@ export function UsersPage() {
   if (loading) return <LoadingState />;
   if (loadError && !users) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-lg">Users</h1>
+      <div className="space-y-6">
+        <PageHeader eyebrow="access control" title="Users" />
         <ErrorState message={loadError} />
         <button className="btn-plain" onClick={() => { setLoading(true); void load(); }}>
           retry
@@ -155,12 +155,16 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-lg">Users</h1>
-        <div className="text-xs text-muted metric">
-          {list.length} users · {assignedVmids.size} VMs assigned
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="access control"
+        title="Users"
+        actions={
+          <div className="text-xs text-muted">
+            <span className="metric text-fg">{list.length}</span> users ·{" "}
+            <span className="metric text-fg">{assignedVmids.size}</span> VMs assigned
+          </div>
+        }
+      />
 
       {loadError && <ErrorState message={loadError} />}
 
@@ -227,12 +231,12 @@ export function UsersPage() {
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted uppercase tracking-wider border-b border-border-token">
+            <thead className="text-left text-[11px] font-medium text-muted uppercase tracking-eyebrow border-b border-border-token">
               <tr>
-                <th className="px-3 py-2">Username</th>
-                <th className="px-3 py-2">Role</th>
-                <th className="px-3 py-2">Assigned VM</th>
-                <th className="px-3 py-2 text-right">Actions</th>
+                <th className="px-3 py-2.5 font-medium">Username</th>
+                <th className="px-3 py-2.5 font-medium">Role</th>
+                <th className="px-3 py-2.5 font-medium">Assigned VM</th>
+                <th className="px-3 py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>

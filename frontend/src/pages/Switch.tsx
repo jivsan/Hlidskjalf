@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { api } from "../api";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useToast } from "../components/Toast";
-import { ErrorState, LoadingState } from "../components/ui";
+import { ErrorState, LoadingState, PageHeader } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
 import type { SwitchPort, SwitchPortsResponse } from "../types";
 
@@ -240,19 +240,20 @@ export function SwitchPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-xl tracking-wide">
-            SWITCH <span className="text-cyan">DCS-7050TX-48</span>
-          </h1>
-          <div className="text-xs text-muted metric">
-            eAPI • {connected} up • {data.length} reported
-          </div>
-        </div>
-        <div className="text-[10px] text-muted tracking-[2px] border border-border-token px-2 py-0.5 rounded">
-          RACK 47 • TOKYO NIGHT
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="network fabric"
+        title="Switch"
+        sub={
+          <span className="metric">
+            DCS-7050TX-48 · eAPI · <span className="text-cyan">{connected}</span> up · {data.length} reported
+          </span>
+        }
+        actions={
+          <span className="text-[10px] text-muted tracking-eyebrow uppercase border border-border-token px-2 py-1 rounded">
+            Rack 47
+          </span>
+        }
+      />
 
       {/* Robust error/offline state: shows with last-known data if available (from usePoll) */}
       {(serverError || portsPoll.error) && (
@@ -297,7 +298,7 @@ export function SwitchPage() {
           {/* Top Talkers */}
           <div className="card p-3">
             <div className="flex items-baseline justify-between mb-1.5">
-              <div className="text-xs uppercase tracking-[1px] text-muted">TOP TALKERS</div>
+              <div className="text-[11px] font-medium uppercase tracking-eyebrow text-muted">Top talkers</div>
               <div className="text-[10px] text-muted">by total rate</div>
             </div>
             {topTalkers.length === 0 ? (
@@ -330,7 +331,7 @@ export function SwitchPage() {
           {/* Port Details (with desc + LLDP + inline editable notes) */}
           <div className="card p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-[1px] text-muted">PORT DETAILS</div>
+              <div className="text-[11px] font-medium uppercase tracking-eyebrow text-muted">Port details</div>
               {selected && (
                 <button
                   className="btn-plain text-[10px] px-1.5 py-px"
