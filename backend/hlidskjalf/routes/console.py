@@ -1,11 +1,26 @@
-"""noVNC console: vncproxy ticket + bidirectional WebSocket byte pump.
+"""Guest console: a VNC framebuffer for QEMU, a terminal for LXC.
 
 Flow: the SPA calls GET /api/vms/{vmid}/console; the panel asks PVE for a
-vncproxy ticket, stashes {port, ticket} under a one-time key, and returns the
-local WS path plus the ticket (noVNC needs it as the RFB password). The SPA
-then opens /ws/console/{vmid}?key=...; the handler checks the session cookie,
-redeems the key, dials hella's vncwebsocket with the API token header, and
-pumps bytes both ways.
+console ticket, stashes it under a one-time key, and returns the local WS path.
+The SPA then opens /ws/console/{vmid}?key=...; the handler checks the session
+cookie, redeems the key, dials PVE's vncwebsocket with the API token header,
+and pumps bytes both ways.
+
+**The two guest kinds speak different protocols, and this is not cosmetic.**
+Validated against a real PVE 9.2.3 host (2026-07-13): QEMU's `vncproxy` yields a
+genuine RFB server (ServerInit 1280x800 came back). An LXC container's
+`vncproxy` completes the RFB handshake *and then hangs forever at ClientInit* —
+with the panel entirely removed from the path, straight against Proxmox. That is
+why Proxmox's own UI drives containers through `termproxy` (xterm.js), not VNC.
+So:
+
+- **qemu** -> POST vncproxy -> RFB. noVNC needs the ticket as the RFB password,
+  so it is handed to the browser (unavoidable; it is single-use and short-lived).
+- **lxc**  -> POST termproxy -> a line-framed terminal protocol. The panel
+  performs the `user:ticket\\n` authentication **upstream itself** and only starts
+  pumping once PVE answers "OK", so the container's ticket never reaches the
+  browser at all. The browser speaks only termproxy's frames ("0:len:data" for
+  input, "1:cols:rows:" for resize, "2" for keepalive).
 """
 
 import asyncio
@@ -13,6 +28,7 @@ import logging
 import secrets
 import time
 import urllib.parse
+from dataclasses import dataclass
 
 from fastapi import (
     APIRouter,
@@ -32,18 +48,29 @@ from .vms import _ensure_vm_access
 log = logging.getLogger("hlidskjalf.console")
 router = APIRouter()
 
-# one-time key -> (vmid, port, ticket, created_at, owner); keys expire fast, the
-# PVE vncticket itself is only valid for a short window anyway. `owner` binds the
-# key to the user who minted it: the key travels in a URL query string (which
-# lands in proxy/access logs and browser history), so a valid key alone must not
-# be enough for a *different* authenticated user to redeem someone's console.
-_pending: dict[str, tuple[int, str, str, float, str]] = {}
+@dataclass(frozen=True)
+class _Pending:
+    vmid: int
+    kind: str  # "qemu" (RFB) or "lxc" (termproxy)
+    port: str
+    ticket: str
+    pve_user: str  # termproxy's auth line is "<user>:<ticket>"
+    created_at: float
+    owner: str  # the panel user who minted this key
+
+
+# one-time key -> _Pending; keys expire fast, and the PVE ticket itself is only
+# valid for a short window anyway. `owner` binds the key to the user who minted
+# it: the key travels in a URL query string (which lands in proxy/access logs and
+# browser history), so a valid key alone must not be enough for a *different*
+# authenticated user to redeem someone's console.
+_pending: dict[str, _Pending] = {}
 KEY_TTL = 60.0
 
 
 def _reap() -> None:
     now = time.monotonic()
-    for k in [k for k, v in _pending.items() if now - v[3] > KEY_TTL]:
+    for k in [k for k, v in _pending.items() if now - v.created_at > KEY_TTL]:
         _pending.pop(k, None)
 
 
@@ -64,13 +91,31 @@ async def console_ticket(
     kind = pve.guest_kind(resource)
     if resource.get("status") != "running":
         raise HTTPException(409, "Guest is not running — start it first")
-    data = await pve.post(f"/nodes/{pve.node}/{kind}/{vmid}/vncproxy", websocket=1)
+
+    if kind == "lxc":
+        # Containers get a terminal, not a framebuffer — their VNC endpoint hangs
+        # at ClientInit on real Proxmox (see the module docstring).
+        data = await pve.post(f"/nodes/{pve.node}/lxc/{vmid}/termproxy")
+    else:
+        data = await pve.post(f"/nodes/{pve.node}/qemu/{vmid}/vncproxy", websocket=1)
+
     _reap()
     key = secrets.token_urlsafe(24)
-    _pending[key] = (vmid, str(data["port"]), data["ticket"], time.monotonic(), username)
+    _pending[key] = _Pending(
+        vmid=vmid,
+        kind=kind,
+        port=str(data["port"]),
+        ticket=data["ticket"],
+        pve_user=data.get("user", ""),
+        created_at=time.monotonic(),
+        owner=username,
+    )
     return {
         "ws_path": f"/ws/console/{vmid}?key={key}",
-        "password": data["ticket"],
+        # noVNC needs the RFB password client-side. termproxy does NOT: the panel
+        # authenticates upstream on the browser's behalf, so the container's
+        # ticket never leaves this process.
+        "password": data["ticket"] if kind == "qemu" else "",
         "kind": kind,
     }
 
@@ -98,23 +143,21 @@ async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
     entry = _pending.pop(key, None)
     if (
         not entry
-        or entry[0] != vmid
-        or time.monotonic() - entry[3] > KEY_TTL
-        or not secrets.compare_digest(entry[4], username)
+        or entry.vmid != vmid
+        or time.monotonic() - entry.created_at > KEY_TTL
+        or not secrets.compare_digest(entry.owner, username)
     ):
         await websocket.close(code=4403)
         return
-    _, port, ticket, _, _ = entry
 
     pve: PveClient = websocket.app.state.pve
     settings = pve.settings
-    resource = await pve.find_resource(vmid)
-    kind = pve.guest_kind(resource) if resource else "qemu"
+    kind = entry.kind
     scheme = "wss" if settings.pve_scheme == "https" else "ws"
     upstream_url = (
         f"{scheme}://{settings.pve_host}:{settings.pve_port}"
         f"/api2/json/nodes/{pve.node}/{kind}/{vmid}/vncwebsocket"
-        f"?port={port}&vncticket={urllib.parse.quote(ticket, safe='')}"
+        f"?port={entry.port}&vncticket={urllib.parse.quote(entry.ticket, safe='')}"
     )
     headers = {"Authorization": f"PVEAPIToken={settings.pve_token_id}={settings.pve_token_secret}"}
 
@@ -126,17 +169,41 @@ async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
             subprotocols=["binary"],
             max_size=None,
         ) as upstream:
+            if kind == "lxc":
+                # termproxy authenticates with a "<user>:<ticket>\n" line and
+                # answers "OK". We do it here so the ticket stays server-side;
+                # the browser only ever speaks the terminal framing.
+                await upstream.send(f"{entry.pve_user}:{entry.ticket}\n")
+                try:
+                    reply = await asyncio.wait_for(upstream.recv(), timeout=10)
+                except asyncio.TimeoutError:
+                    log.warning("termproxy for vmid %d never answered the auth line", vmid)
+                    await websocket.close(code=4502)
+                    return
+                if isinstance(reply, bytes):
+                    reply = reply.decode("utf-8", "replace")
+                if not reply.startswith("OK"):
+                    log.warning("termproxy auth for vmid %d refused: %r", vmid, reply[:40])
+                    await websocket.close(code=4403)
+                    return
 
+            # noVNC speaks binary frames; xterm.js/termproxy speaks text ones.
+            # Forward whatever arrives, in the frame type it arrived as — coercing
+            # a termproxy text frame into a binary one loses the protocol.
             async def pump_up():
                 while True:
-                    data = await websocket.receive_bytes()
-                    await upstream.send(data)
+                    msg = await websocket.receive()
+                    if msg["type"] == "websocket.disconnect":
+                        raise WebSocketDisconnect(msg.get("code", 1000))
+                    data = msg.get("bytes")
+                    await upstream.send(data if data is not None else msg.get("text", ""))
 
             async def pump_down():
                 async for msg in upstream:
                     if isinstance(msg, str):
-                        msg = msg.encode()
-                    await websocket.send_bytes(msg)
+                        await websocket.send_text(msg)
+                    else:
+                        await websocket.send_bytes(msg)
 
             tasks = [asyncio.create_task(pump_up()), asyncio.create_task(pump_down())]
             try:

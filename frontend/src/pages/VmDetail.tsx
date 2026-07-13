@@ -212,7 +212,7 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
       )}
       {tab === "console" && (
         <Suspense fallback={<LoadingState message="loading console…" />}>
-          <ConsoleTab vmid={vm.vmid} />
+          <ConsoleTab vmid={vm.vmid} kind={vm.kind} />
         </Suspense>
       )}
       {tab === "rescue" && <RescueTab vm={vm} onChanged={detail.refresh} />}
