@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { getVersion, type VersionInfo } from "../../api";
+import { applyUpdate, getVersion, type VersionInfo } from "../../api";
 import { ErrorState, LoadingState } from "../../components/ui";
+
+const CONFIRM = "update";
 
 // What this tab is allowed to claim, and what it is not:
 //   - it never says "up to date" unless it actually compared two commits;
@@ -18,10 +20,35 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** Wait for the panel to answer again after it re-execs into the new code. */
+async function waitForPanel(timeoutMs = 120_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  // Give the old process a moment to actually go down first, or we'd "succeed"
+  // against the very process we are replacing.
+  await new Promise((r) => setTimeout(r, 2000));
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch("/api/health", { cache: "no-store" });
+      if (r.ok) return true;
+    } catch {
+      /* still down — that is expected */
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return false;
+}
+
 export function UpdatesTab() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+
+  // --- applying (this runs new code on the host; treat it with ceremony) ---
+  const [confirmText, setConfirmText] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [applyLog, setApplyLog] = useState<string[] | null>(null);
+  const [phase, setPhase] = useState<"" | "working" | "restarting" | "done">("");
 
   const load = useCallback(async (force = false) => {
     setChecking(true);
@@ -38,6 +65,39 @@ export function UpdatesTab() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const apply = async () => {
+    if (!info?.latest || confirmText !== CONFIRM || applying) return;
+    setApplying(true);
+    setApplyError(null);
+    setApplyLog(null);
+    setPhase("working");
+    try {
+      const res = await applyUpdate(info.latest.commit);
+      setApplyLog(res.log);
+      if (res.restarted) {
+        setPhase("restarting");
+        const back = await waitForPanel();
+        if (!back) {
+          setApplyError(
+            "The panel did not come back within two minutes. It may still be " +
+              "restarting — reload the page. The database was backed up before the " +
+              "update, and a failed update rolls itself back.",
+          );
+          setPhase("");
+          return;
+        }
+      }
+      setPhase("done");
+      setConfirmText("");
+      await load(true); // re-check: this should now say "up to date"
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : "update failed");
+      setPhase("");
+    } finally {
+      setApplying(false);
+    }
+  };
 
   if (loadError) return <ErrorState message={loadError} />;
   if (!info) return <LoadingState />;
@@ -104,23 +164,83 @@ export function UpdatesTab() {
             </div>
           )}
 
-          <div>
-            <div className="label">apply it</div>
-            <pre className="well p-3 metric text-xs overflow-x-auto whitespace-pre-wrap">
-              {info.command}
-            </pre>
-            <p className="text-muted text-xs mt-2">
-              The panel deliberately does not update itself — an endpoint that runs new
-              code on demand is a bigger hole than anything it protects. Run the command
-              above on the host.
-            </p>
-          </div>
+          {info.self_update ? (
+            <div className="space-y-3">
+              <div className="label">apply it</div>
+              <p className="text-muted text-xs">
+                The panel will fast-forward to{" "}
+                <span className="metric text-fg">{info.latest?.commit.slice(0, 8)}</span>,
+                reinstall its dependencies, rebuild the interface and restart itself. It
+                backs up the database first, refuses if you have local changes, and rolls
+                back if the new code does not even import.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  className="input metric max-w-[14rem]"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={`type "${CONFIRM}"`}
+                  disabled={applying}
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-label={`type ${CONFIRM} to confirm`}
+                />
+                <button
+                  className="btn-pink"
+                  onClick={() => void apply()}
+                  disabled={applying || confirmText !== CONFIRM}
+                >
+                  {phase === "working"
+                    ? "updating…"
+                    : phase === "restarting"
+                      ? "restarting…"
+                      : "apply update"}
+                </button>
+              </div>
+              {phase === "restarting" && (
+                <p className="text-amber text-xs" role="status">
+                  the panel is restarting into the new version — waiting for it to answer…
+                </p>
+              )}
+              {applyLog && (
+                <pre className="well p-3 metric text-xs overflow-x-auto whitespace-pre-wrap">
+                  {applyLog.join("\n")}
+                </pre>
+              )}
+              {applyError && (
+                <div className="text-red text-xs whitespace-pre-wrap" role="alert">
+                  {applyError}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="label">apply it</div>
+              <pre className="well p-3 metric text-xs overflow-x-auto whitespace-pre-wrap">
+                {info.command}
+              </pre>
+              <p className="text-muted text-xs mt-2">
+                Applying from the panel is <span className="text-fg">off</span>: it runs
+                code fetched from the internet, so it stays disabled unless the operator
+                sets <span className="metric">HLIDSKJALF_ALLOW_SELF_UPDATE=true</span> on
+                the host — and it is never possible for a Docker or Nix install, which
+                cannot replace their own image or system. Run the command above instead.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase === "done" && !info.update_available && (
+        <div className="card border-cyan/40 p-3 text-cyan text-xs" role="status">
+          updated and running the new version.
         </div>
       )}
 
       {info.dirty && (
         <p className="text-amber text-xs">
-          this checkout has uncommitted changes — you are ahead of the release, not behind
+          this checkout has uncommitted changes — you are ahead of the release, not behind.
+          {info.self_update && " Applying an update is refused until the tree is clean."}
         </p>
       )}
     </div>

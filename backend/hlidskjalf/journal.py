@@ -41,6 +41,7 @@ USER_ASSIGN = "user.assign"
 SWITCH_NOTE = "switch.note"
 
 SETTINGS_UPDATE = "settings.update"
+PANEL_UPDATE = "panel.update"   # the panel updating its own code — audit it loudly
 
 
 def client_ip(request: Request | None) -> str:

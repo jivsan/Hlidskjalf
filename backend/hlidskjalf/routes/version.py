@@ -182,6 +182,10 @@ async def _compute(force: bool) -> dict:
         "commits": [],
         "command": update_command(local["deployment"], repo),
         "notes_url": f"https://github.com/{repo}/commits/{branch}",
+        # Whether the panel may apply the update itself (routes/update.py). Only a
+        # git checkout can, and only when the operator explicitly allowed it on the
+        # host — the UI must not offer a button that is guaranteed to 403.
+        "self_update": s.allow_self_update and local["deployment"] == "git",
         "error": None,
         "checked_at": time.time(),
     }
@@ -241,6 +245,7 @@ async def get_version(force: bool = False, _admin: dict = Depends(require_admin_
             "behind_by": 0,
             "commits": [],
             "command": "",
+            "self_update": False,
             "error": f"update check failed: {type(e).__name__}",
             "checked_at": time.time(),
         }
