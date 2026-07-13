@@ -2,11 +2,64 @@
 
 _Last updated: 2026-07-13 (v0.3.6-alpha — security audit, setup wizard, genericity, Prometheus, code-split). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
+## 🔴 START HERE IF YOU ARE ON THE DEBIAN DEV VM (real Proxmox)
+
+You are the first contact with reality. Read `CLAUDE.md` first — the hard safety
+rules are not negotiable. Setup for this box: `docs/dev-against-real-proxmox.md`.
+
+**Everything below has been validated only against `dev/mock_pve.py`, a mock we
+wrote ourselves.** 184 green tests prove self-consistency, not correctness. The mock
+has already been caught lying once: it emitted 8-field UPIDs where real Proxmox emits
+9, which silently 403'd every tenant polling their own task. Assume there are more.
+
+### The plan, in this order. Do not skip ahead to the fun part.
+
+**Phase 1 — read-only. Nothing is started, nothing is touched.**
+1. `scripts/validate-proxmox.py` (read-only by default). Capture the full output.
+2. Triage **every** FAIL/WARN. For each one ask: *is the panel wrong, or is the mock
+   wrong?* Both happen. The UPID bug was the mock; the parser was right.
+3. Fix it → add the test that would have caught it → **fix `dev/mock_pve.py` so the
+   mock stops lying.** If you skip that last step the suite goes green again and we
+   learn nothing. Open a PR per finding.
+
+**Phase 2 — panel up, but only reading.**
+4. `HLIDSKJALF_PROTECTED_VMIDS` must contain the dev VM, heimdall, and everything
+   precious **before** the first start. It is env-only and defaults to EMPTY. If the
+   Fleet page shows the amber "no guest is protected" banner, stop and fix it.
+5. Start the panel. Check Fleet / Node / Graphs / Bandwidth against what the Proxmox
+   web UI says. Look specifically for normalisation bugs the mock hid:
+   - **disk usage** (real PVE reports 0 without the guest agent; the mock fabricates 45%)
+   - node `memory` nested vs flat, `cpuinfo.cpus`
+   - rrddata shapes across hour/day/week/month
+
+**Phase 3 — writes. Scratch VM only, VMID ≥ 900.**
+6. Provision a scratch guest *from the panel*. Then, on that guest only:
+7. Power-cycle it, and **watch the task poll actually complete** (this is the UPID path).
+8. **Open the console and type in it.** This is the single biggest unknown — the
+   byte-pump has never moved a real frame. `console.py` dials `vncwebsocket` with only
+   the `PVEAPIToken` header; Proxmox may demand a `PVEAuthCookie`. If it 401s, the
+   console needs redesigning around `/access/ticket`.
+9. Rescue enter/exit (boot order must be restored). Reinstall (MAC/IP preserved).
+10. Destroy it. Then confirm a **protected** VMID genuinely refuses destroy.
+11. Create a regular user, assign it the scratch VM, and confirm it can see *only* that
+    VM — and that it can poll its own power-action task (the bug we just fixed).
+
+**Phase 4 — the slow one.**
+12. After ~24 h: daily bandwidth rows exist for every running guest, survive a restart
+    without double-counting, and a mid-day reboot produces no negative delta.
+
+### Reporting back
+Commit as `jivsan <chrsol3@gmail.com>`, no `Co-Authored-By` trailers. Push branches
+and open PRs. Update this file and `CHANGELOG.md`. If you cannot open a PR (no GitHub
+token on that box), just push the branch — Christian will merge.
+
+---
+
 ## ⚡ Current state — v0.3.6-alpha
 
 **The release that makes this runnable by other people.** It was wired to one
 homelab; now it ships unconfigured and sets itself up in a browser.
-`main` is green: **163 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+`main` is green: **184 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
 
 - **First-run setup wizard** (`routes/setup.py`, `docs/setup.md`). Start with no env
   file → the panel serves a wizard: Proxmox host/node/token (validated with a LIVE

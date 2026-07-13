@@ -88,6 +88,10 @@ Full instructions, the token setup, and the manual checklist (open the console a
 in it; power-cycle a scratch VM; confirm a protected VMID refuses destroy):
 **[docs/real-hardware-validation.md](docs/real-hardware-validation.md)**.
 
+Setting up a scratch Debian VM to develop against your real Proxmox (fast reload loop,
+safety rails, and what to expect to break first):
+**[docs/dev-against-real-proxmox.md](docs/dev-against-real-proxmox.md)**.
+
 ## Local development (no Proxmox needed)
 
 ```bash
