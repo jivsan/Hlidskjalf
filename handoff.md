@@ -6,7 +6,7 @@ _Last updated: 2026-07-13 (v0.3.6-alpha — security audit, setup wizard, generi
 
 **The release that makes this runnable by other people.** It was wired to one
 homelab; now it ships unconfigured and sets itself up in a browser.
-`main` is green: **147 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+`main` is green: **163 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
 
 - **First-run setup wizard** (`routes/setup.py`, `docs/setup.md`). Start with no env
   file → the panel serves a wizard: Proxmox host/node/token (validated with a LIVE
@@ -29,6 +29,60 @@ homelab; now it ships unconfigured and sets itself up in a browser.
 - **Bundle code-split**: first paint 633 kB → 182 kB (−71%).
 - Fixed a fatal bootstrap bug: `PveClient` refuses https without a fingerprint, so
   an *unconfigured* install used to crash on startup and could never be configured.
+- **Secrets at rest (v0.3.6, later PR)**: the Proxmox token is **never stored in
+  plaintext**. `secretbox.py` encrypts stored secrets (Fernet); the key comes from
+  `HLIDSKJALF_SECRET_KEY(_FILE)` (systemd-creds / Docker / k8s — survives a stolen
+  disk) or, failing that, a generated `<state_dir>/secret.key` (0600, separate file
+  from the DB — protects the realistic "someone copied the .sqlite3" accident, not
+  local root; docs say so plainly). Every secret also accepts a `*_FILE` env twin,
+  because secret managers hand you a file, not an env var. A DB that cannot be
+  decrypted makes the panel refuse to start rather than run on garbage.
+
+### 🎯 NEXT SESSION — "update from GitHub and it just works"
+
+Requested feature, **not built yet**. Goal: an operator running Hlidskjalf can take
+a new release without hand-pulling, hand-building, or reading a migration note.
+
+**Design (proposed — argue with it before building):**
+
+1. **Version + channel.** Ship the version in the image/package and expose
+   `GET /api/version` → `{current, latest, update_available, notes_url}`. `latest`
+   comes from the GitHub Releases API (`/repos/jivsan/Hlidskjalf/releases/latest`),
+   cached ~1 h, and **must fail soft** — no network, no problem, the panel just
+   doesn't offer an update. Never phone home with anything identifying.
+2. **The update mechanism depends on how it was deployed**, and the panel must not
+   pretend otherwise. Detect and act accordingly:
+   - **Docker/Compose** (the default path for other people): the panel *cannot*
+     replace its own container. Correct behaviour is to surface "v0.4.1 available"
+     with the exact `docker compose pull && up -d` to run, plus the changelog. A
+     panel that tries to `docker exec` its way out of its own container is a
+     footgun and a privilege-escalation surface — don't.
+     Optionally support a **watchtower-style sidecar** as a documented opt-in.
+   - **NixOS module**: updates come from the flake input. The panel should say so
+     and link the changelog; `nixos-rebuild` is the operator's job. Do NOT shell out.
+   - **pip/venv/systemd**: this is the only one where an in-place self-update is
+     honest. `POST /api/update` (admin + CSRF + typed-confirm) → verify the release
+     signature/checksum → `pip install --upgrade` into a *new* venv → run DB
+     migrations → `systemctl restart` → health-check → **roll back the symlink if
+     the new version fails its health check.** Never upgrade in place over a
+     running venv.
+3. **Migrations.** There is no migration system today (`db.py` uses
+   `CREATE TABLE IF NOT EXISTS`). Before self-update is safe, add a `schema_version`
+   row + ordered migration steps, and **back up the sqlite file before applying**
+   (`hlidskjalf.sqlite3.bak-<version>`). The `secret.key` must be preserved across
+   updates or every stored secret is orphaned — call this out loudly in the docs.
+4. **Security.** `/api/update` is remote code execution by design. It must be:
+   admin-only, CSRF-guarded, typed-confirmation, rate-limited, **off unless
+   `HLIDSKJALF_ALLOW_SELF_UPDATE=true`**, and it must verify the artifact
+   (checksum from the release, ideally a signature) before running anything.
+   Default OFF. An unauthenticated or sloppy update endpoint is a worse hole than
+   anything the v0.3.6 audit found.
+5. **UI.** A quiet "update available" chip in the sidebar footer → a Settings/About
+   page with current version, latest version, changelog, and either the copy-paste
+   command (docker/nix) or the Update button (venv, if enabled).
+
+**Do first:** the `schema_version` + migration + backup work (3). Self-update on top
+of an unversioned schema is how people lose their bandwidth history.
 
 ### Known gaps / next up
 1. **The switch faceplate is still hardcoded** to a 48-port + 4-QSFP Arista

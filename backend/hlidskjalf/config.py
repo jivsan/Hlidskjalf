@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     admin_password_hash: str = ""  # argon2id hash
     session_secret: str = ""
     session_max_age: int = 12 * 3600
+
+    # --- Encryption at rest for stored secrets (see secretbox.py) -------------
+    # Secrets the panel persists (the Proxmox token, the session key) are ALWAYS
+    # encrypted in the database — there is no plaintext mode. This only chooses
+    # where the key comes from:
+    #
+    #   set  -> the key lives outside the panel's disk (systemd LoadCredential /
+    #           systemd-creds, a Docker or Kubernetes secret, a KMS). This is the
+    #           mode that survives a stolen disk image or a leaked backup.
+    #   unset-> the panel generates <state_dir>/secret.key (0600), kept in its own
+    #           file separate from the database. Protects the realistic accident
+    #           (someone copies just the .sqlite3); does NOT protect against an
+    #           attacker who can already read the state dir as this user or root.
+    # Supply as HLIDSKJALF_SECRET_KEY, or point at a file with
+    # HLIDSKJALF_SECRET_KEY_FILE (see FILE_BACKED below).
+    secret_key: str = ""
     # Set the `Secure` flag on the session cookie (cookie only sent over HTTPS).
     # Default True — safe for an internet-facing deploy. Set to False ONLY for
     # local plain-http dev/tests (Starlette's TestClient runs over http and will
@@ -134,9 +150,45 @@ class Settings(BaseSettings):
         return Path(self.state_dir) / "hlidskjalf.sqlite3"
 
 
+# Settings that may be supplied indirectly as `HLIDSKJALF_<NAME>_FILE=/path`.
+# Secret managers hand you a FILE, not an environment variable — systemd
+# LoadCredential, Docker/Compose secrets and Kubernetes all mount one — and a
+# value passed through the environment is visible in /proc and leaks into logs
+# and crash dumps far too easily.
+FILE_BACKED = (
+    "pve_token_secret",
+    "session_secret",
+    "admin_password_hash",
+    "switch_password",
+    "prometheus_token",
+    "prometheus_password",
+    "secret_key",
+)
+
+
+def _resolve_file_backed(settings: "Settings") -> None:
+    """Load any `<FIELD>_FILE` settings from disk, in place."""
+    import os
+
+    for field in FILE_BACKED:
+        path = os.environ.get(f"HLIDSKJALF_{field.upper()}_FILE", "").strip()
+        if not path:
+            continue
+        p = Path(path)
+        if not p.is_file():
+            raise RuntimeError(
+                f"HLIDSKJALF_{field.upper()}_FILE points at {path!r}, which does not exist."
+            )
+        object.__setattr__(settings, field, p.read_text().strip())
+        # Mark it as env-provided so stored config never overrides it.
+        settings.model_fields_set.add(field)
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    _resolve_file_backed(s)
+    return s
 
 
 # Settings the first-run wizard is allowed to write. Deliberately a strict
@@ -154,6 +206,27 @@ SETUP_WRITABLE = frozenset(
         "session_secret",
     }
 )
+
+
+def encryption_key(settings: Settings) -> str:
+    """The key used for secrets at rest. Generates a local one on first call."""
+    from . import secretbox
+
+    return secretbox.resolve_key(settings.secret_key, settings.state_dir)
+
+
+def seal(values: dict[str, str], settings: Settings) -> dict[str, str]:
+    """Encrypt the secret-bearing entries of a config map, ready to persist."""
+    from . import secretbox
+
+    return secretbox.encrypt_config(values, encryption_key(settings))
+
+
+def unseal(values: dict[str, str], settings: Settings) -> dict[str, str]:
+    """Decrypt config loaded from the database back into usable plaintext."""
+    from . import secretbox
+
+    return secretbox.decrypt_config(values, encryption_key(settings))
 
 
 def apply_stored(settings: Settings, stored: dict[str, str]) -> None:

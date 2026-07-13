@@ -36,36 +36,76 @@ tells you what it found before anything is saved.
 | Setting | Where it goes |
 | --- | --- |
 | Proxmox host / port / node / scheme | `config` table in the state DB |
-| Proxmox token id + **secret** | `config` table in the state DB |
+| Proxmox token id | `config` table in the state DB |
+| Proxmox token **secret** | `config` table — **encrypted** (never plaintext) |
 | Proxmox cert fingerprint | `config` table in the state DB |
-| Session signing secret | generated automatically if unset |
+| Session signing secret | generated automatically if unset — also encrypted |
 | Admin + first user accounts | `users` table (argon2id hashes, never plaintext) |
 
-## Where secrets live, honestly
+## Where the API key lives
 
-The token secret is stored in the SQLite state DB (`hlidskjalf.sqlite3`). The DB
-file is created `0600` and its directory `0700`, so it is readable only by the
-user the panel runs as — the same protection a root-only `EnvironmentFile` gets.
-The secret is never returned by any API (`/api/debug/config` redacts it), and it
-is never logged.
+You can place the Proxmox token in one of three ways. They can all be true at
+once; **the environment always wins** over anything stored.
 
-It is **not encrypted at rest**, and deliberately so: an encryption key stored on
-the same disk, readable by the same user, protects against nothing. Anyone who can
-read the DB file can read the key. Encrypting it would look reassuring without
-being reassuring, and this project would rather tell you the truth.
+| Where | How | Good for |
+| --- | --- | --- |
+| **The wizard** | Type it in on first run | Getting started. It is encrypted before it touches disk. |
+| **An env var** | `HLIDSKJALF_PVE_TOKEN_SECRET=...` | Declarative deploys (NixOS module, compose). Nothing is persisted. |
+| **A file** | `HLIDSKJALF_PVE_TOKEN_SECRET_FILE=/run/secrets/token` | **Secret managers.** systemd `LoadCredential=`, Docker/Compose secrets and Kubernetes all hand you a *file*, not an env var. |
 
-**If you want the secret out of the database entirely, put it in the environment.**
-Environment variables always take precedence over anything the wizard stored:
+Prefer the `_FILE` form over the plain env var where you can: an environment
+variable is visible in `/proc`, and it has a habit of turning up in logs, crash
+dumps and `docker inspect`. Every secret the panel takes has a `_FILE` twin
+(`HLIDSKJALF_SESSION_SECRET_FILE`, `HLIDSKJALF_SWITCH_PASSWORD_FILE`, …).
+
+## How it is held at rest
+
+**The token is never written to the database in plaintext.** Secrets in the state
+DB are encrypted (Fernet/AES-CBC+HMAC), and the panel refuses to start rather than
+run with secrets it cannot decrypt. Non-secret config (host, node, port) stays
+readable, so the DB is still debuggable.
+
+The only question is where the *encryption key* comes from, and that is what
+decides how much this is actually worth:
+
+**1. You supply the key — the mode to want.**
 
 ```bash
-HLIDSKJALF_PVE_TOKEN_SECRET=...   # from agenix / sops-nix / systemd-creds / Docker secret
+HLIDSKJALF_SECRET_KEY_FILE=/run/credentials/hlidskjalf.service/secret_key
+# or: HLIDSKJALF_SECRET_KEY=<32-byte urlsafe-base64, or any high-entropy string>
 ```
 
-Set that, and the panel uses it and ignores the stored copy. This is the
-recommended path for the NixOS module (`nix/module.nix` already takes an
-`EnvironmentFile`), and it means your secret lives wherever you already manage
-secrets. The wizard exists so that people *without* that setup can get running in
-two minutes — not to replace it.
+Feed it from systemd `LoadCredential=`/`systemd-creds` (the key materialises in a
+tmpfs only the service can read, unsealed from the TPM), a Docker/Kubernetes
+secret, or a KMS. The key never rests on the panel's disk.
+
+*Protects against:* a stolen disk image, a leaked backup, a volume snapshot,
+someone walking off with the state directory. They get ciphertext.
+
+**2. You supply nothing — the default.**
+
+The panel generates `<state_dir>/secret.key` (`0600`) on first run, in **its own
+file, separate from the database**.
+
+*Protects against:* the realistic accident — someone copies, backs up, `scp`s, or
+attaches just the `.sqlite3`. That is how these things actually leak.
+
+*Does **not** protect against:* an attacker who can already read the state
+directory as the service user or as root. They can read the key too. A key sitting
+next to its own ciphertext does not stop local root, and this project is not going
+to pretend otherwise. If that is in your threat model, use option 1.
+
+**3. Keep it out of the panel's storage entirely** — set
+`HLIDSKJALF_PVE_TOKEN_SECRET(_FILE)`. Env wins, so nothing is ever persisted.
+
+Whichever you choose: the secret is never returned by any API
+(`/api/debug/config` redacts it), and it is never logged.
+
+### Rotating the token
+
+Change it wherever you placed it — a new env var / secret file and a restart. There
+is deliberately **no way to read the stored token back out** of the running panel,
+so a rotation is a write, never a read-modify-write.
 
 ## Once setup is done, it is done
 

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — secrets at rest
+- **The Proxmox API token is never written to the database in plaintext.** New
+  `secretbox.py` encrypts stored secrets (Fernet / AES-CBC+HMAC); non-secret config
+  (host, node, port) stays readable so the DB is still debuggable. A database whose
+  secrets cannot be decrypted makes the panel **refuse to start** rather than run on
+  garbage.
+- The encryption key comes from, in order:
+  1. `HLIDSKJALF_SECRET_KEY` / `HLIDSKJALF_SECRET_KEY_FILE` — fed by systemd
+     `LoadCredential=`/`systemd-creds`, a Docker/Kubernetes secret, or a KMS. The key
+     never rests on the panel's disk, so a stolen disk image, a leaked backup or a
+     volume snapshot yields ciphertext. **This is the mode to want.**
+  2. Otherwise a generated `<state_dir>/secret.key` (0600, `O_EXCL`), kept in its own
+     file *separate from the database*. This protects the realistic accident — someone
+     copies/backs up/`scp`s just the `.sqlite3`. It does **not** protect against an
+     attacker who can already read the state dir as the service user or root: they can
+     read the key too. `docs/setup.md` says exactly this rather than overselling it.
+- **`*_FILE` indirection for every secret** (`HLIDSKJALF_PVE_TOKEN_SECRET_FILE`,
+  `…_SESSION_SECRET_FILE`, `…_SWITCH_PASSWORD_FILE`, `…_PROMETHEUS_TOKEN_FILE`, …).
+  Secret managers hand you a *file*, not an environment variable — and an env var is
+  visible in `/proc` and leaks into logs, crash dumps and `docker inspect`.
+- Tests read the raw sqlite file off disk and assert the token does not appear in it.
+- `cryptography` moved from a test extra to a runtime dependency.
+
+
 ## [v0.3.6-alpha] - 2026-07-13
 
 The release that makes Hlidskjalf a thing **other people can run.** It shipped

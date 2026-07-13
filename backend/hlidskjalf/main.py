@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import auth
 from .accumulator import Accumulator
-from .config import apply_stored, get_settings
+from .config import apply_stored, get_settings, unseal
 
 # Always import debug router (endpoints are admin-only protected via require_admin_user).
 # The debug features (buffers, verbose errors) activate when settings.debug or log_level=DEBUG.
@@ -58,7 +58,8 @@ async def lifespan(app: FastAPI):
 
     # Overlay any configuration written by the first-run setup wizard. Env always
     # wins (see config.apply_stored), so this cannot override an ops-managed deploy.
-    apply_stored(settings, await app.state.db.get_config())
+    # Stored secrets are encrypted at rest (secretbox.py) — decrypt on the way in.
+    apply_stored(settings, unseal(await app.state.db.get_config(), settings))
 
     # Bootstrap initial admin user from env if this is a fresh DB (dev + first remote deploy)
     await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)
