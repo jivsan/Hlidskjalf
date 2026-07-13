@@ -188,9 +188,8 @@ export interface SetupPveConnection {
   scheme: "https" | "http";
   token_id: string;
   token_secret: string;
-  /** Optional SHA-256 cert pin; "" means "don't pin". */
+  /** SHA-256 cert pin — required with https (there is no unpinned https); "" only with http. */
   fingerprint: string;
-  verify_tls: boolean;
 }
 
 export interface SetupAccount {
