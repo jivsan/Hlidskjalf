@@ -1,18 +1,32 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { restoreSession, type SessionInfo } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { ToastProvider } from "./components/Toast";
 import { LoadingState } from "./components/ui";
-import { Fleet } from "./pages/Fleet";
 import { Login } from "./pages/Login";
-import { NodePage } from "./pages/NodePage";
-import { Provision } from "./pages/Provision";
-import { SwitchPage } from "./pages/Switch";
-import { UsersPage } from "./pages/Users";
-import { VmDetailPage } from "./pages/VmDetail";
-import { Debug } from "./pages/Debug";
+
+// Everything behind the auth wall is code-split per route: the entry chunk only
+// carries the shell (router + Layout + Login). Recharts in particular is heavy
+// and only reachable from NodePage / the VM graphs + overview tabs, so it lands
+// in its own async chunk instead of first paint.
+const Fleet = lazy(() => import("./pages/Fleet").then((m) => ({ default: m.Fleet })));
+const NodePage = lazy(() => import("./pages/NodePage").then((m) => ({ default: m.NodePage })));
+const Provision = lazy(() => import("./pages/Provision").then((m) => ({ default: m.Provision })));
+const SwitchPage = lazy(() => import("./pages/Switch").then((m) => ({ default: m.SwitchPage })));
+const UsersPage = lazy(() => import("./pages/Users").then((m) => ({ default: m.UsersPage })));
+const VmDetailPage = lazy(() =>
+  import("./pages/VmDetail").then((m) => ({ default: m.VmDetailPage })),
+);
+const Debug = lazy(() => import("./pages/Debug").then((m) => ({ default: m.Debug })));
+
+// Suspense sits *inside* the Layout outlet, so the chrome (nav/header) never
+// unmounts while a route chunk loads — the page body shows the same
+// <LoadingState/> these pages already show while their first poll is in flight.
+function Page({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
+}
 
 export interface CurrentUser {
   username: string;
@@ -62,17 +76,17 @@ export function App() {
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           {authed && currentUser ? (
             <Route element={<Layout currentUser={currentUser} onLogout={() => { setAuthed(false); setCurrentUser(null); }} />}>
-              <Route path="/switch" element={<SwitchPage />} />
-              <Route path="/vm/:vmid" element={<VmDetailPage currentRole={currentUser.role} myVmid={currentUser.vmid} />} />
+              <Route path="/switch" element={<Page><SwitchPage /></Page>} />
+              <Route path="/vm/:vmid" element={<Page><VmDetailPage currentRole={currentUser.role} myVmid={currentUser.vmid} /></Page>} />
               {/* Admin-only sections */}
-              {isAdmin && <Route path="/new" element={<Provision />} />}
-              {isAdmin && <Route path="/node" element={<NodePage />} />}
-              {isAdmin && <Route path="/users" element={<UsersPage />} />}
-              {isAdmin && <Route path="/debug" element={<Debug />} />}
+              {isAdmin && <Route path="/new" element={<Page><Provision /></Page>} />}
+              {isAdmin && <Route path="/node" element={<Page><NodePage /></Page>} />}
+              {isAdmin && <Route path="/users" element={<Page><UsersPage /></Page>} />}
+              {isAdmin && <Route path="/debug" element={<Page><Debug /></Page>} />}
               {/* Home: users go to their VM, admins go to fleet */}
               <Route path="/" element={
                 isAdmin
-                  ? <Fleet />
+                  ? <Page><Fleet /></Page>
                   : (currentUser.vmid ? <Navigate to={`/vm/${currentUser.vmid}`} replace /> : <div className="p-6">No VM assigned. Contact admin.</div>)
               } />
               <Route path="*" element={<Navigate to="/" replace />} />
