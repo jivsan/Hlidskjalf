@@ -252,6 +252,10 @@ NEEDED_PRIVILEGES: tuple[tuple[frozenset[str], str], ...] = (
     (frozenset({"VM.Config.Disk"}), "provision (resize), reinstall"),
     (frozenset({"VM.Allocate"}), "provision (clone), destroy, reinstall"),
     (frozenset({"VM.Clone"}), "provision (clone from template)"),
+    (frozenset({"SDN.Use"}),
+     "provision: attach a NIC to a bridge/VLAN — PVE 9 checks SDN.Use on "
+     "/sdn/zones/<zone>/<bridge>/<vlan>. PVEAuditor grants only SDN.Audit (read); "
+     "add the PVESDNUser role or every clone fails with 'Permission check failed'"),
 )
 
 

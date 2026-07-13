@@ -34,7 +34,10 @@ guard rails that a mistake at 1am doesn't cost you a VM.
 
 ```bash
 pveum user add hlidskjalf@pve
-pveum acl modify / --users hlidskjalf@pve --roles PVEVMAdmin,PVEDatastoreUser,PVEAuditor
+pveum acl modify /vms       --users hlidskjalf@pve --roles PVEVMAdmin       # guests
+pveum acl modify /storage   --users hlidskjalf@pve --roles PVEDatastoreUser # clone disks
+pveum acl modify /          --users hlidskjalf@pve --roles PVEAuditor       # GET /nodes, tasks
+pveum acl modify /sdn/zones --users hlidskjalf@pve --roles PVESDNUser       # NIC -> bridge/VLAN (PVE 9)
 pveum user token add hlidskjalf@pve panel --privsep 0    # prints the secret ONCE
 ```
 
@@ -46,6 +49,9 @@ everything:
 - **`PVEAuditor` alone is not enough.** It grants no `VM.Console`, `VM.PowerMgmt` or
   `VM.Allocate`/`VM.Clone` — so console, power and provisioning would all 403. The
   role list above is the minimum that actually works.
+- **`PVESDNUser` is not optional on Proxmox 9.** Attaching a NIC to a bridge/VLAN
+  needs `SDN.Use`, and `PVEAuditor` grants only `SDN.Audit` (read). Without it every
+  clone dies with `Permission check failed (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)`.
 
 The panel **pins** the Proxmox certificate, so grab its fingerprint:
 

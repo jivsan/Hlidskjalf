@@ -57,8 +57,12 @@ QEMU disk usage (#34, mock now honest). The rest are environment facts (below).
   153 nixos-services, 154 heimdall-nix, 155 homeassistant, **201
   dev-debian-homelab (the dev VM itself)** →
   `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201`.
-- Token `hlidskjalf@pve!panel` (PVEVMAdmin+PVEDatastoreUser+PVEAuditor,
-  privsep 0) holds every privilege the panel needs on PVE 9. **The secret was
+- Token `hlidskjalf@pve!panel` needs **four** roles, not three:
+  `PVEVMAdmin,PVEDatastoreUser,PVEAuditor,PVESDNUser` (privsep 0). Without
+  **PVESDNUser** every clone dies with `Permission check failed
+  (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)` — PVE 9 gates attaching a NIC to a
+  bridge/VLAN behind `SDN.Use`, and PVEAuditor grants only `SDN.Audit`. Fix on the
+  host: `pveum acl modify /sdn/zones/localnetwork --users hlidskjalf@pve --roles PVESDNUser`. **The secret was
   pasted into a chat once on 2026-07-13 — rotate it** (`pveum user token remove
   hlidskjalf@pve panel` + re-add) before anything long-lived uses it.
 - The repo is now **public** (that unlocked branch protection: ruleset

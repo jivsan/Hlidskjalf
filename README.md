@@ -92,21 +92,40 @@ Setting up a scratch Debian VM to develop against your real Proxmox (fast reload
 safety rails, and what to expect to break first):
 **[docs/dev-against-real-proxmox.md](docs/dev-against-real-proxmox.md)**.
 
-## Local development (no Proxmox needed)
+## Starting it
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ./backend python-multipart
 
-# 1. mock PVE on :18006
-cd dev && ../.venv/bin/uvicorn mock_pve:app --port 18006 &
-
-# 2. backend on :8787 (dev.env points it at the mock; login christina/devpass)
-cd backend && set -a && source ../dev/dev.env && set +a \
-  && ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787 --reload &
-
-# 3. frontend dev server on :5173, proxying /api and /ws to :8787
-cd frontend && npm ci && npm run dev
+./scripts/dev.sh --mock      # no Proxmox needed: starts dev/mock_pve.py too
+./scripts/dev.sh             # against a real Proxmox, using dev/dev.env
+./scripts/dev.sh --reload    # + restart the backend on every save
+./scripts/dev.sh --vite      # + Vite on :5173 with hot reload (open THAT url)
 ```
+
+The panel is then on <http://localhost:8787> — one service, one port; the backend
+serves the built SPA. First run builds the SPA automatically. The script warns if
+`HLIDSKJALF_PROTECTED_VMIDS` is empty, because then *nothing* is safe from destroy —
+including the machine the panel runs on.
+
+`scripts/dev.sh` is a **development** launcher. It is not how the panel runs in
+production: Docker has its own entrypoint (`docs/docker.md`), the NixOS module runs
+it under systemd (`nix/module.nix`), and a plain install runs the `hlidskjalf`
+console script — or `uvicorn hlidskjalf.main:app` — under a systemd unit
+(`docs/dev-against-real-proxmox.md` §7). What all of them share is the environment:
+every setting is an `HLIDSKJALF_*` env var, and every secret also takes a `*_FILE`
+twin so a secret manager can hand it a file instead.
+
+<details>
+<summary>The same thing by hand, if you'd rather</summary>
+
+```bash
+cd dev     && ../.venv/bin/uvicorn mock_pve:app --port 18006 &     # optional mock
+cd backend && set -a && source ../dev/dev.env && set +a \
+           && ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787 --reload
+cd frontend && npm ci && npm run dev        # :5173, proxies /api and /ws to :8787
+```
+</details>
 
 ## Deployment (heimdall, NixOS)
 
