@@ -12,8 +12,12 @@ import type { PowerAction, VmDetail } from "../types";
 const ConsoleTab = lazy(() =>
   import("./vm/ConsoleTab").then((m) => ({ default: m.ConsoleTab })),
 );
-import { GraphsTab } from "./vm/GraphsTab";
-import { OverviewTab } from "./vm/OverviewTab";
+// Same deal for the two tabs that pull in recharts (graphs + overview
+// sparklines): keep the charting library out of every other tab's payload.
+const GraphsTab = lazy(() => import("./vm/GraphsTab").then((m) => ({ default: m.GraphsTab })));
+const OverviewTab = lazy(() =>
+  import("./vm/OverviewTab").then((m) => ({ default: m.OverviewTab })),
+);
 import { RescueTab } from "./vm/RescueTab";
 import { TasksTab } from "./vm/TasksTab";
 
@@ -196,8 +200,16 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab vm={vm} onChanged={detail.refresh} isAdmin={isAdmin} />}
-      {tab === "graphs" && <GraphsTab vm={vm} />}
+      {tab === "overview" && (
+        <Suspense fallback={<LoadingState />}>
+          <OverviewTab vm={vm} onChanged={detail.refresh} isAdmin={isAdmin} />
+        </Suspense>
+      )}
+      {tab === "graphs" && (
+        <Suspense fallback={<LoadingState />}>
+          <GraphsTab vm={vm} />
+        </Suspense>
+      )}
       {tab === "console" && (
         <Suspense fallback={<LoadingState message="loading console…" />}>
           <ConsoleTab vmid={vm.vmid} />
