@@ -1,8 +1,38 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-12 (security/robustness batch merged — PRs #16–#19; main green, 98 backend tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-13 (v0.3.4-alpha frontend robustness + design pass). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## ⚡ Current state — security hardening batch landed
+## ⚡ Current state — v0.3.4-alpha (frontend-only pass)
+
+Branch `feat/frontend-v0.3.4-alpha` (PR pending merge at time of writing; if you
+see this on `main` it merged). **Frontend only** per Christian's request:
+
+- **Robustness/security**: reusable `ErrorBoundary` (app-level + per-page reset-on-nav
+  + faceplate), Users page rewritten (no `prompt()` — modals for assign/reset-pw/
+  **delete user**, role select, validation, retry state), api.ts 20 s AbortController
+  timeout + network-vs-timeout errors, `/vm/:vmid` param validation, `watchTask`
+  15-min cap, toast cap (5), ConfirmDialog Escape/Enter + aria, login input
+  hardening, `referrer no-referrer` + `noindex` metas, hidden admin-only danger
+  zone for regular users (server already enforced 403; UI showed dead buttons).
+- **Visual fix**: deduped a legacy CSS block that was squashing the switch faceplate
+  ports into the chassis corner — ports now span full width (2×24), verified
+  against v0.3.2 screenshots side by side.
+- **Design**: login redesign (gradient accent + glow), sidebar accent nav + role
+  badges + tagline, focus-visible rings, spinner LoadingState, reduced-motion
+  support, button/input transitions.
+- **Docs**: `docs/screenshots/v0.3.4-alpha/` gallery (10 live captures incl. debug
+  page + login + both roles) with README + generic capture.js; CHANGELOG v0.3.4-alpha
+  section; main/screenshots READMEs point at v0.3.4-alpha; frontend version bumped.
+- Verified: `tsc --noEmit` + `npm run build` clean; backend suite untouched (98
+  passing on main); full dev-stack visual pass in Chromium (screenshots ARE that pass).
+- **Dev-stack gotcha discovered**: since PR #18 the switch eAPI client verifies TLS,
+  so `mock_switch` must run with its TLS cert and the backend needs the pin:
+  `uvicorn mock_switch:app --port 18080 --ssl-certfile mock_switch.crt --ssl-keyfile mock_switch.key`
+  and `HLIDSKJALF_SWITCH_FINGERPRINT=$(openssl x509 -in dev/mock_switch.crt -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-F' 'a-f')`.
+  Also `HLIDSKJALF_COOKIE_SECURE=false` for http dev. Screenshot gallery for the
+  never-captured v0.3.3.3 is superseded by v0.3.4-alpha.
+
+## Previous state — security hardening batch landed
 
 `main` (post-merge) is GREEN: **98 backend tests pass**, `tsc`/`build` clean. Merged this batch:
 - **PR #16** — fixed a CSRF bug that made every authenticated mutation 403 (and had been merged RED, 16 failing tests). One-line fix; suite restored.
@@ -12,10 +42,10 @@ _Last updated: 2026-07-12 (security/robustness batch merged — PRs #16–#19; m
 - Post-merge test-only fix on main: `test_authz_scoping` used vmid 105 which `test_access_control` already assigns in the session-scoped DB → moved it to vmid 120 (they collided only when run together).
 
 ### Still TODO (next session)
-1. **Screenshots gallery `docs/screenshots/v0.3.3.3-alpha/`** — the screenshots agent (branch `docs/screenshots-v0.3.3.3`) died in the VPS crash with NOTHING captured; re-run it. It must bring up the full stack (mock_pve on a spare port + mock_switch + backend serving built frontend), log in as admin AND a demo user, and shoot: admin fleet/provision/users/switch/node/**debug** (run backend with `HLIDSKJALF_DEBUG=true`) + user my-vm/switch. Mirror `docs/screenshots/v0.3.2-alpha/` (has a `capture.js` template). Chromium at `/usr/bin/chromium`.
+1. ~~Screenshots gallery~~ **DONE** — `docs/screenshots/v0.3.4-alpha/` supersedes the never-captured v0.3.3.3 gallery.
 2. **Branch protection is NOT available** on this private repo without GitHub Pro — both the classic branch-protection API and the Rulesets API return "Upgrade to GitHub Pro or make this repository public." Options: pay for Pro, make the repo public (NOT recommended — plan.md exposes homelab IPs/hostnames), or keep the current discipline (I verify local pytest green + scope before every merge). Nothing was applied.
 3. Stale remote branches to prune (all merged/abandoned): `feat/switch-*` (many), `feat/debug-section`, `feat/normalize-pve-shapes`, `feat/v0.3.2-alpha-multi-user`.
-4. Optional follow-ups: `/api/tasks/{upid}/status` is unscoped (low-sensitivity IDOR); frontend robustness pass (error boundary + defensive rendering on Users/Debug/Switch) was never done.
+4. Optional follow-ups: `/api/tasks/{upid}/status` is unscoped (low-sensitivity IDOR — backend, deferred from the frontend-only session); ~~frontend robustness pass~~ **DONE in v0.3.4-alpha**; consider code-splitting recharts (main JS chunk is ~630 kB min / 183 kB gz).
 
 ## Previous state (v0.3.2-alpha)
 

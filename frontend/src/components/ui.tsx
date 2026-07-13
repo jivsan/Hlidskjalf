@@ -40,7 +40,12 @@ export function EmptyState({ message }: { message: string }) {
 }
 
 export function LoadingState({ message = "loading…" }: { message?: string }) {
-  return <div className="p-6 text-center text-muted text-sm animate-pulse">{message}</div>;
+  return (
+    <div className="p-6 flex items-center justify-center gap-2 text-muted text-sm" role="status">
+      <span className="spinner" aria-hidden="true" />
+      {message}
+    </div>
+  );
 }
 
 export function StatusDot({ status }: { status: string }) {

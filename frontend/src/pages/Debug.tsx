@@ -46,8 +46,9 @@ export function Debug() {
         ) : health.data ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm font-mono">
             {Object.entries(health.data).map(([k, v]) => (
-              <div key={k}>
-                <span className="text-muted">{k}:</span> {String(v)}
+              <div key={k} className="break-all">
+                <span className="text-muted">{k}:</span>{" "}
+                {typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}
               </div>
             ))}
           </div>

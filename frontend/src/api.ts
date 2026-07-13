@@ -22,6 +22,11 @@ function redirectToLogin() {
   }
 }
 
+// Requests that exceed this are aborted so a hung backend/proxy can't wedge
+// spinners forever. Long-running work (provision, power) is tracked via task
+// UPIDs, so no legitimate API call should take anywhere near this.
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
@@ -32,12 +37,25 @@ async function request<T>(
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET" && csrfToken) headers["X-Hlidskjalf-CSRF"] = csrfToken;
 
-  const res = await fetch(path, {
-    method,
-    headers,
-    credentials: "same-origin",
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ApiError(0, "request timed out — backend unreachable?");
+    }
+    throw new ApiError(0, "network error — backend unreachable?");
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   if (res.status === 401 && !opts?.skipAuthRedirect) {
     redirectToLogin();
@@ -57,7 +75,12 @@ async function request<T>(
     throw new ApiError(res.status, detail);
   }
 
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    // 204s / empty bodies — callers treat this as "no payload".
+    return undefined as T;
+  }
 }
 
 export const api = {

@@ -10,7 +10,16 @@ import { formatBytes, formatPercent, formatRate } from "../../lib/format";
 import { taskResultMessage, watchTask } from "../../lib/tasks";
 import type { TemplateInfo, VmDetail, VmMetricPoint } from "../../types";
 
-export function OverviewTab({ vm, onChanged }: { vm: VmDetail; onChanged: () => void }) {
+export function OverviewTab({
+  vm,
+  onChanged,
+  isAdmin = false,
+}: {
+  vm: VmDetail;
+  onChanged: () => void;
+  /** Reinstall/destroy are admin-only server-side; hide the dead UI otherwise. */
+  isAdmin?: boolean;
+}) {
   const metrics = usePoll(
     () => api.get<VmMetricPoint[]>(`/api/vms/${vm.vmid}/metrics?timeframe=hour&cf=AVERAGE`),
     30000,
@@ -127,7 +136,7 @@ export function OverviewTab({ vm, onChanged }: { vm: VmDetail; onChanged: () => 
         )}
       </Card>
 
-      <DangerZone vm={vm} onChanged={onChanged} />
+      {isAdmin && <DangerZone vm={vm} onChanged={onChanged} />}
     </div>
   );
 }

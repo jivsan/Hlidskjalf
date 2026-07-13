@@ -42,7 +42,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((kind: ToastKind, message: string) => {
     const id = nextId.current++;
-    setToasts((ts) => [...ts, { id, kind, message }]);
+    // Cap the stack: a poll loop erroring every few seconds must not fill the
+    // screen — drop the oldest beyond 5.
+    setToasts((ts) => [...ts, { id, kind, message }].slice(-5));
     window.setTimeout(() => {
       setToasts((ts) => ts.filter((t) => t.id !== id));
     }, 5000);

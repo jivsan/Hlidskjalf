@@ -18,15 +18,17 @@ setup on hella.
 ```
   [ CYAN / PINK SERVER ROOM FEEDS ]
   ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.2-alpha ║
+  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.4-alpha ║
   ╚════════════════════════════════════════════════════╝
 ```
 
 Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
 
-**Current (v0.3.2-alpha - Multi-user admin + user (VPS) panels, one VM per user, scoped views, user management):**  
-[v0.3.2-alpha/README.md](docs/screenshots/v0.3.2-alpha/README.md)  
+**Current (v0.3.4-alpha - frontend robustness + design pass: redesigned login, error boundaries, rewritten Users admin, faceplate layout fix):**  
+[v0.3.4-alpha/README.md](docs/screenshots/v0.3.4-alpha/README.md)  
 (Real captured screenshots after merges)
+
+**Previous (v0.3.2-alpha multi-user panels):** [v0.3.2-alpha/README.md](docs/screenshots/v0.3.2-alpha/README.md)
 
 **Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
 

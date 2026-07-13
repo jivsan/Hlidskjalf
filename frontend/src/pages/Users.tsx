@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
-import { Card, LoadingState } from "../components/ui";
+import { Card, EmptyState, ErrorState, LoadingState } from "../components/ui";
+import type { VmListItem } from "../types";
 
 interface UserRow {
   id: number;
@@ -10,110 +12,360 @@ interface UserRow {
   vmid: number | null;
 }
 
+const USERNAME_RE = /^[a-z0-9]([a-z0-9._-]{0,30}[a-z0-9])?$/;
+const MIN_PASSWORD_LEN = 8;
+
 export function UsersPage() {
   const toast = useToast();
   const [users, setUsers] = useState<UserRow[] | null>(null);
-  const [vms, setVms] = useState<any[] | null>(null);
+  const [vms, setVms] = useState<VmListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [newUser, setNewUser] = useState({ username: "", password: "", vmid: "" as string | number });
+  const [newUser, setNewUser] = useState({ username: "", password: "", role: "user", vmid: "" });
+  const [creating, setCreating] = useState(false);
+
+  // Per-row modal state
+  const [assignFor, setAssignFor] = useState<UserRow | null>(null);
+  const [assignVmid, setAssignVmid] = useState<string>("");
+  const [pwFor, setPwFor] = useState<UserRow | null>(null);
+  const [pwDraft, setPwDraft] = useState("");
+  const [deleteFor, setDeleteFor] = useState<UserRow | null>(null);
+  const [rowBusy, setRowBusy] = useState(false);
 
   async function load() {
-    setLoading(true);
+    setLoadError(null);
     try {
       const [u, v] = await Promise.all([
         api.get<UserRow[]>("/api/users"),
-        api.get<any[]>("/api/vms"),
+        api.get<VmListItem[]>("/api/vms"),
       ]);
       setUsers(u);
       setVms(v);
     } catch (e) {
-      toast.error("Failed to load users");
+      setLoadError(e instanceof Error ? e.message : "failed to load users");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
-  async function createUser(e: React.FormEvent) {
+  const usernameOk = USERNAME_RE.test(newUser.username);
+  const passwordOk = newUser.password.length >= MIN_PASSWORD_LEN;
+  const createOk = usernameOk && passwordOk;
+
+  async function createUser(e: FormEvent) {
     e.preventDefault();
+    if (!createOk) return;
+    setCreating(true);
     try {
       await api.post("/api/users", {
         username: newUser.username,
         password: newUser.password,
-        role: "user",
+        role: newUser.role,
         vmid: newUser.vmid ? Number(newUser.vmid) : null,
       });
-      toast.success("User created");
-      setNewUser({ username: "", password: "", vmid: "" });
+      toast.success(`user ${newUser.username} created`);
+      setNewUser({ username: "", password: "", role: "user", vmid: "" });
       await load();
-    } catch (err: any) {
-      toast.error(err.message || "Create failed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "create failed");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function saveAssign() {
+    if (!assignFor) return;
+    setRowBusy(true);
+    try {
+      const vmid = assignVmid === "" ? null : Number(assignVmid);
+      await api.post(`/api/users/${encodeURIComponent(assignFor.username)}/assign`, { vmid });
+      toast.success(
+        vmid == null
+          ? `${assignFor.username}: VM unassigned`
+          : `${assignFor.username} → vm ${vmid}`,
+      );
+      setAssignFor(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "assign failed");
+    } finally {
+      setRowBusy(false);
+    }
+  }
+
+  async function savePassword() {
+    if (!pwFor || pwDraft.length < MIN_PASSWORD_LEN) return;
+    setRowBusy(true);
+    try {
+      await api.post(`/api/users/${encodeURIComponent(pwFor.username)}/password`, {
+        password: pwDraft,
+      });
+      toast.success(`password updated for ${pwFor.username}`);
+      setPwFor(null);
+      setPwDraft("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "password update failed");
+    } finally {
+      setRowBusy(false);
+    }
+  }
+
+  async function deleteUser() {
+    if (!deleteFor) return;
+    setRowBusy(true);
+    try {
+      await api.del(`/api/users/${encodeURIComponent(deleteFor.username)}`);
+      toast.success(`user ${deleteFor.username} deleted`);
+      setDeleteFor(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "delete failed");
+    } finally {
+      setRowBusy(false);
     }
   }
 
   if (loading) return <LoadingState />;
+  if (loadError && !users) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-lg">Users</h1>
+        <ErrorState message={loadError} />
+        <button className="btn-plain" onClick={() => { setLoading(true); void load(); }}>
+          retry
+        </button>
+      </div>
+    );
+  }
 
-  const assignedVmids = new Set((users || []).map(u => u.vmid).filter(Boolean));
+  const list = users ?? [];
+  const vmList = vms ?? [];
+  const assignedVmids = new Set(list.map((u) => u.vmid).filter((v): v is number => v != null));
+  const vmName = (vmid: number | null) =>
+    vmid == null ? null : (vmList.find((v) => v.vmid === vmid)?.name ?? null);
+
+  // VM options for a select: free VMs + (optionally) the one currently held by `keep`.
+  const vmOptions = (keep?: number | null) =>
+    vmList.filter((v) => !assignedVmids.has(v.vmid) || v.vmid === keep);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Users</h1>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="text-lg">Users</h1>
+        <div className="text-xs text-muted metric">
+          {list.length} users · {assignedVmids.size} VMs assigned
+        </div>
+      </div>
 
-      <Card className="p-4">
-        <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input className="input" placeholder="username" value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} required />
-          <input className="input" type="password" placeholder="temp password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} required />
-          <select className="input" value={newUser.vmid} onChange={e => setNewUser({ ...newUser, vmid: e.target.value })}>
-            <option value="">No VM assigned</option>
-            {vms?.map(v => (
-              <option key={v.vmid} value={v.vmid} disabled={assignedVmids.has(v.vmid)}>
+      {loadError && <ErrorState message={loadError} />}
+
+      <Card title="Create user">
+        <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <input
+            className="input"
+            placeholder="username"
+            value={newUser.username}
+            onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase().trim() })}
+            autoComplete="off"
+            spellCheck={false}
+            required
+          />
+          <input
+            className="input"
+            type="password"
+            placeholder={`password (min ${MIN_PASSWORD_LEN})`}
+            value={newUser.password}
+            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+            autoComplete="new-password"
+            required
+          />
+          <select
+            className="input"
+            value={newUser.role}
+            onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+            aria-label="role"
+          >
+            <option value="user">user (one VM)</option>
+            <option value="admin">admin (full access)</option>
+          </select>
+          <select
+            className="input"
+            value={newUser.vmid}
+            onChange={(e) => setNewUser({ ...newUser, vmid: e.target.value })}
+            aria-label="assigned VM"
+            disabled={newUser.role === "admin"}
+          >
+            <option value="">no VM assigned</option>
+            {vmOptions().map((v) => (
+              <option key={v.vmid} value={v.vmid}>
                 {v.vmid} — {v.name}
               </option>
             ))}
           </select>
-          <button type="submit" className="btn-pink">Create user</button>
+          <button type="submit" className="btn-pink" disabled={!createOk || creating}>
+            {creating ? "creating…" : "create user"}
+          </button>
         </form>
-        <p className="text-xs text-muted mt-2">Regular users can only access their assigned VM (power, graphs, console, bandwidth). Admins have full access.</p>
+        <div className="text-xs text-muted mt-2 space-y-0.5">
+          {newUser.username && !usernameOk && (
+            <p className="text-red">username: lowercase letters/digits (dots, dashes, underscores inside)</p>
+          )}
+          {newUser.password && !passwordOk && (
+            <p className="text-red">password must be at least {MIN_PASSWORD_LEN} characters</p>
+          )}
+          <p>Regular users see only their assigned VM (power, graphs, console, bandwidth, rescue). Admins manage everything.</p>
+        </div>
       </Card>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted border-b border-border-token">
-            <tr>
-              <th className="p-3">Username</th>
-              <th className="p-3">Role</th>
-              <th className="p-3">Assigned VM</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users?.map(u => (
-              <tr key={u.id} className="border-b border-border-token last:border-none">
-                <td className="p-3 font-mono">{u.username}</td>
-                <td className="p-3"><span className={u.role === "admin" ? "text-pink" : ""}>{u.role}</span></td>
-                <td className="p-3">{u.vmid ?? <span className="text-muted">—</span>}</td>
-                <td className="p-3 text-xs space-x-2">
-                  <button className="text-cyan hover:underline" onClick={async () => {
-                    const v = prompt("Assign VMID (empty to unassign)", u.vmid?.toString() || "");
-                    const vmid = v === "" || v === null ? null : Number(v);
-                    await api.post(`/api/users/${u.username}/assign`, { vmid });
-                    await load();
-                  }}>assign</button>
-                  <button className="text-cyan hover:underline" onClick={async () => {
-                    const pw = prompt(`New password for ${u.username}`);
-                    if (pw) {
-                      await api.post(`/api/users/${u.username}/password`, { password: pw });
-                      toast.success("Password updated");
-                    }
-                  }}>reset pw</button>
-                </td>
+      {list.length === 0 ? (
+        <EmptyState message="no users yet" />
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted uppercase tracking-wider border-b border-border-token">
+              <tr>
+                <th className="px-3 py-2">Username</th>
+                <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Assigned VM</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map((u) => (
+                <tr key={u.id} className="border-b border-border-token/50 last:border-0">
+                  <td className="px-3 py-2.5 font-mono text-fg">{u.username}</td>
+                  <td className="px-3 py-2.5">
+                    <span
+                      className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                        u.role === "admin"
+                          ? "text-pink border-pink/40 bg-pink/5"
+                          : "text-cyan border-cyan/30 bg-cyan/5"
+                      }`}
+                    >
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 metric">
+                    {u.vmid != null ? (
+                      <>
+                        {u.vmid}
+                        {vmName(u.vmid) && <span className="text-muted"> — {vmName(u.vmid)}</span>}
+                      </>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap space-x-1">
+                    {u.role !== "admin" && (
+                      <button
+                        className="btn-plain px-2 py-0.5 text-xs"
+                        onClick={() => {
+                          setAssignFor(u);
+                          setAssignVmid(u.vmid != null ? String(u.vmid) : "");
+                        }}
+                      >
+                        assign VM
+                      </button>
+                    )}
+                    <button
+                      className="btn-plain px-2 py-0.5 text-xs"
+                      onClick={() => {
+                        setPwFor(u);
+                        setPwDraft("");
+                      }}
+                    >
+                      reset pw
+                    </button>
+                    <button
+                      className="btn-red px-2 py-0.5 text-xs"
+                      onClick={() => setDeleteFor(u)}
+                    >
+                      delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Assign VM modal */}
+      <ConfirmDialog
+        open={assignFor != null}
+        title={`Assign VM — ${assignFor?.username ?? ""}`}
+        confirmLabel="save"
+        confirmClass="btn-cyan"
+        busy={rowBusy}
+        onConfirm={() => void saveAssign()}
+        onCancel={() => setAssignFor(null)}
+      >
+        <p>Each regular user is tied to exactly one VM.</p>
+        <select
+          className="input"
+          value={assignVmid}
+          onChange={(e) => setAssignVmid(e.target.value)}
+          aria-label="VM to assign"
+        >
+          <option value="">no VM (unassign)</option>
+          {vmOptions(assignFor?.vmid).map((v) => (
+            <option key={v.vmid} value={v.vmid}>
+              {v.vmid} — {v.name}
+            </option>
+          ))}
+        </select>
+      </ConfirmDialog>
+
+      {/* Reset password modal */}
+      <ConfirmDialog
+        open={pwFor != null}
+        title={`Reset password — ${pwFor?.username ?? ""}`}
+        confirmLabel="set password"
+        confirmClass="btn-cyan"
+        busy={rowBusy}
+        onConfirm={() => void savePassword()}
+        onCancel={() => {
+          setPwFor(null);
+          setPwDraft("");
+        }}
+      >
+        <p>The user will need this new password on their next login.</p>
+        <input
+          className="input"
+          type="password"
+          placeholder={`new password (min ${MIN_PASSWORD_LEN})`}
+          value={pwDraft}
+          onChange={(e) => setPwDraft(e.target.value)}
+          autoComplete="new-password"
+          autoFocus
+        />
+        {pwDraft.length > 0 && pwDraft.length < MIN_PASSWORD_LEN && (
+          <p className="text-red text-xs">at least {MIN_PASSWORD_LEN} characters</p>
+        )}
+      </ConfirmDialog>
+
+      {/* Delete user confirm */}
+      <ConfirmDialog
+        open={deleteFor != null}
+        title={`Delete user — ${deleteFor?.username ?? ""}`}
+        confirmLabel="delete user"
+        confirmClass="btn-red"
+        requireText={deleteFor?.username}
+        busy={rowBusy}
+        onConfirm={() => void deleteUser()}
+        onCancel={() => setDeleteFor(null)}
+      >
+        <p>
+          <span className="text-red">{deleteFor?.username}</span> loses access immediately.
+          Their VM is not touched — it just becomes unassigned. The last admin cannot be
+          deleted.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 }
