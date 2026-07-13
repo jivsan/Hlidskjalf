@@ -20,6 +20,7 @@ const VmDetailPage = lazy(() =>
   import("./pages/VmDetail").then((m) => ({ default: m.VmDetailPage })),
 );
 const Debug = lazy(() => import("./pages/Debug").then((m) => ({ default: m.Debug })));
+const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
 // The wizard is reachable exactly once in a deployment's life — never make the
 // other 99.99% of loads pay for it.
 const Setup = lazy(() => import("./pages/Setup").then((m) => ({ default: m.Setup })));
@@ -124,6 +125,7 @@ export function App() {
           {authed && currentUser ? (
             <Route element={<Layout currentUser={currentUser} onLogout={() => { setAuthed(false); setCurrentUser(null); }} />}>
               <Route path="/switch" element={<Page><SwitchPage /></Page>} />
+              <Route path="/profile" element={<Page><Profile currentUser={currentUser} /></Page>} />
               <Route path="/vm/:vmid" element={<Page><VmDetailPage currentRole={currentUser.role} myVmid={currentUser.vmid} /></Page>} />
               {/* Admin-only sections */}
               {isAdmin && <Route path="/new" element={<Page><Provision /></Page>} />}
