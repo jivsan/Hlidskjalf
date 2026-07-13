@@ -215,6 +215,40 @@ class Pve:
         return await self.call("POST", path, data={k: v for k, v in data.items() if v is not None})
 
 
+# --------------------------------------------------------------------------- #
+# Privileges the panel actually needs
+# --------------------------------------------------------------------------- #
+# Each requirement is a set of acceptable privileges — holding ANY ONE of them
+# satisfies it. Alternatives exist because Proxmox renames privileges between
+# major versions: PVE 9 split guest-agent access out of `VM.Monitor` into the
+# `VM.GuestAgent.*` family, so `agent/network-get-interfaces` (the only agent
+# call the panel makes, routes/vms.py) needs VM.GuestAgent.Audit on PVE 9+ but
+# VM.Monitor on PVE 8.
+
+NEEDED_PRIVILEGES: tuple[tuple[frozenset[str], str], ...] = (
+    (frozenset({"VM.Audit"}), "list VMs, read config (/api/vms)"),
+    (frozenset({"Sys.Audit"}), "GET /nodes, node status, task log (setup wizard + admin views)"),
+    (frozenset({"Datastore.Audit"}), "GET /nodes/<node>/storage"),
+    (frozenset({"VM.Console"}), "noVNC console (POST vncproxy)"),
+    (frozenset({"VM.GuestAgent.Audit", "VM.Monitor"}),
+     "QEMU guest-agent IP discovery (VM.Monitor on PVE 8, VM.GuestAgent.Audit on PVE 9+)"),
+    (frozenset({"VM.PowerMgmt"}), "start / stop / reboot"),
+    (frozenset({"VM.Config.Disk"}), "provision (resize), reinstall"),
+    (frozenset({"VM.Allocate"}), "provision (clone), destroy, reinstall"),
+    (frozenset({"VM.Clone"}), "provision (clone from template)"),
+)
+
+
+def unmet_requirements(held: set[str]) -> list[tuple[frozenset[str], str]]:
+    """The (alternatives, reason) requirements NOT satisfied by `held`.
+
+    A requirement is satisfied when the token holds any one of its acceptable
+    privileges. Pure and importable — unit-tested in backend/tests/test_validator_privs.py.
+    """
+    held = set(held)
+    return [(alts, why) for alts, why in NEEDED_PRIVILEGES if not (alts & held)]
+
+
 def missing_keys(obj: dict, keys: tuple[str, ...]) -> list[str]:
     return [k for k in keys if k not in obj]
 
@@ -334,20 +368,10 @@ async def check_auth(pve: Pve, rep: Report) -> None:
     scope = ", ".join(f"{p} ({len(v)} privs)" for p, v in list(perms.items())[:4])
     rep.add(INFO, "auth/permissions", f"token holds privileges on: {scope}")
 
-    # What each panel feature actually needs.
-    needed = {
-        "VM.Audit": "list VMs, read config (/api/vms)",
-        "Sys.Audit": "GET /nodes, node status, task log (setup wizard + admin views)",
-        "Datastore.Audit": "GET /nodes/<node>/storage",
-        "VM.Console": "noVNC console (POST vncproxy)",
-        "VM.Monitor": "QEMU guest-agent IP discovery",
-        "VM.PowerMgmt": "start / stop / reboot",
-        "VM.Config.Disk": "provision (resize), reinstall",
-        "VM.Allocate": "provision (clone), destroy, reinstall",
-        "VM.Clone": "provision (clone from template)",
-    }
+    # What each panel feature actually needs (NEEDED_PRIVILEGES, module level).
     have = {p for scope_perms in perms.values() for p, v in (scope_perms or {}).items() if v}
-    lacking = [f"{p} [{why}]" for p, why in needed.items() if p not in have]
+    lacking = [f"{' or '.join(sorted(alts))} [{why}]"
+               for alts, why in unmet_requirements(have)]
     if lacking:
         rep.add(WARN, "auth/privileges", "token lacks: " + "; ".join(lacking),
                 "Panel features depending on these will 403 at runtime. "
