@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(nothing yet)
+### Added
+- **Prometheus metrics datasource** (plan.md §8, phase 2): `datasources/prometheus.py`
+  now implements the `MetricsSource` protocol against heimdall's Prometheus HTTP API
+  (`/api/v1/query_range`) with prometheus-pve-exporter's series, as a drop-in
+  alternative to rrddata — `HLIDSKJALF_METRICS_SOURCE=prometheus` (`rrd` stays the
+  default; a deployment that sets none of the new vars is unchanged). Same row shapes,
+  same timeframe windows, but finer long-range steps (month 12h → 1h, year 1w → 1d),
+  which was the whole point. Counters (`netin`/`netout`/`diskread`/`diskwrite`) are
+  `rate()`d back into the bytes/sec rrddata reports; gauges are consolidated over the
+  step (`avg_over_time` / `max_over_time` for `cf=AVERAGE|MAX`). Prometheus being down
+  degrades to `null` fields / empty series instead of failing the metrics endpoint.
+  New env: `HLIDSKJALF_PROMETHEUS_URL` (+ optional token / basic auth / TLS pinning /
+  timeout / `HLIDSKJALF_PROMETHEUS_NODE_QUERIES`). See `docs/prometheus.md`.
+- `dev/mock_prometheus.py` — offline mock of the Prometheus HTTP API for dev + tests.
 
 ## [v0.3.5-alpha] - 2026-07-13
 
