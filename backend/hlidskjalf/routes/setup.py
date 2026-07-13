@@ -187,9 +187,12 @@ async def setup_commit(
     except Exception:
         raise HTTPException(409, "Setup has already been completed")
 
-    await db.set_config(stored)
-    from ..config import apply_stored
+    # The Proxmox token and the session key are encrypted at rest (secretbox.py);
+    # they are never written to the database in plaintext. The in-memory settings
+    # keep the plaintext, which is what actually talks to Proxmox.
+    from ..config import apply_stored, seal
 
+    await db.set_config(seal(stored, settings))
     apply_stored(settings, stored)
 
     if body.user:
