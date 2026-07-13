@@ -230,19 +230,28 @@ export function Provision() {
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <label className="label" htmlFor="p-vlan">VLAN</label>
-              <select
-                id="p-vlan"
-                className="input"
-                value={vlan}
-                onChange={(e) => onVlanChange(e.target.value)}
-                required
-              >
-                {defaults.vlans.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+              {defaults.vlans.length === 0 ? (
+                <p className="text-amber text-xs mt-1">
+                  no VLANs configured —{" "}
+                  <Link to="/settings" className="text-cyan hover:underline">
+                    add them in settings
+                  </Link>
+                </p>
+              ) : (
+                <select
+                  id="p-vlan"
+                  className="input"
+                  value={vlan}
+                  onChange={(e) => onVlanChange(e.target.value)}
+                  required
+                >
+                  {defaults.vlans.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="label" htmlFor="p-ip">static IP (CIDR)</label>

@@ -27,6 +27,7 @@ from .routes import (
     metrics,
     provision,
     rescue,
+    settings as settings_route,
     setup as setup_route,
     switch,
     users as users_route,
@@ -359,6 +360,7 @@ app.include_router(rescue.router)
 app.include_router(console.router)
 app.include_router(switch.router)
 app.include_router(users_route.router)  # new user management (admin only)
+app.include_router(settings_route.router)  # /api/settings/* (admin only)
 app.include_router(setup_route.router)  # /api/setup/* — closes forever once a user exists
 
 app.include_router(debug_module.router, prefix="/api/debug")  # /api/debug/* (admin protected)

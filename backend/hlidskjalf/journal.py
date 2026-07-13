@@ -40,6 +40,8 @@ USER_ASSIGN = "user.assign"
 
 SWITCH_NOTE = "switch.note"
 
+SETTINGS_UPDATE = "settings.update"
+
 
 def client_ip(request: Request | None) -> str:
     if request is None or request.client is None:

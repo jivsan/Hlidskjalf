@@ -14,6 +14,7 @@ function getNavForRole(user: CurrentUser | null) {
       { to: "/new", label: "Provision" },
       { to: "/node", label: "Node" },
       { to: "/users", label: "Users" },
+      { to: "/settings", label: "Settings" },
       { to: "/debug", label: "Debug" },
     ];
   }

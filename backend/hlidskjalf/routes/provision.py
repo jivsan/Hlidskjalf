@@ -4,7 +4,9 @@ Safety rails (non-negotiable, enforced here server-side):
 - protected VMIDs refuse destroy/reinstall outright
 - destroy/reinstall require confirm_name == exact VM name
 - every net0 the panel ever writes hardcodes firewall=0 (VLAN tags silently
-  break through the firewall bridge on hella with firewall=1 — fleet-wide bug)
+  break through the firewall bridge on hella with firewall=1 — fleet-wide bug).
+  The bridge itself comes from settings.pve_bridge (admin-editable in Settings);
+  only firewall=0 stays hardcoded.
 """
 
 import re
@@ -28,7 +30,7 @@ MIN_VMID = 200
 
 def _net0(vlan: str | int, mac: str | None = None) -> str:
     model = f"virtio={mac}" if mac else "virtio"
-    return f"{model},bridge=vmbr0,tag={vlan},firewall=0"
+    return f"{model},bridge={settings().pve_bridge},tag={vlan},firewall=0"
 
 
 @router.get("/api/templates")
