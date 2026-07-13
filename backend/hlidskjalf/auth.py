@@ -75,6 +75,11 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+def new_session_secret() -> str:
+    """A fresh signing secret, minted on first run when none was configured."""
+    return secrets.token_urlsafe(48)
+
+
 # A real argon2 hash, verified against when the username does not exist so that
 # "no such user" costs the same wall-clock time as "wrong password". Without it,
 # login latency is a username-enumeration oracle.

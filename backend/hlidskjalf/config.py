@@ -137,3 +137,50 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Settings the first-run wizard is allowed to write. Deliberately a strict
+# allowlist: the setup endpoint is unauthenticated (before setup completes), so it
+# must never be able to reach anything outside this set.
+SETUP_WRITABLE = frozenset(
+    {
+        "pve_host",
+        "pve_port",
+        "pve_node",
+        "pve_scheme",
+        "pve_token_id",
+        "pve_token_secret",
+        "pve_fingerprint",
+        "session_secret",
+    }
+)
+
+
+def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
+    """Overlay config persisted by the setup wizard onto `settings`, in place.
+
+    **Environment always wins.** A field explicitly provided via env lands in
+    ``model_fields_set``, and we skip those — so an operator keeping secrets in
+    agenix / sops / systemd-creds is never overridden by whatever is in the DB.
+    """
+    for key, raw in stored.items():
+        if key not in SETUP_WRITABLE:
+            continue  # ignore anything not on the allowlist
+        if key in settings.model_fields_set and getattr(settings, key, None) not in ("", None):
+            # Set to a real value in the environment — leave it alone. An env var
+            # defined but EMPTY (common in .env / compose files) is not a
+            # configuration choice, so we let the stored value through instead of
+            # leaving the panel permanently unconfigured.
+            continue
+        field = Settings.model_fields.get(key)
+        if field is None:
+            continue
+        value: object = raw
+        if field.annotation is int:
+            try:
+                value = int(raw)
+            except ValueError:
+                continue
+        elif field.annotation is bool:
+            value = raw.strip().lower() in ("1", "true", "yes", "on")
+        object.__setattr__(settings, key, value)

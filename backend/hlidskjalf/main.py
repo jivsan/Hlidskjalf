@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from . import auth
 from .accumulator import Accumulator
-from .config import get_settings
+from .config import apply_stored, get_settings
 
 # Always import debug router (endpoints are admin-only protected via require_admin_user).
 # The debug features (buffers, verbose errors) activate when settings.debug or log_level=DEBUG.
@@ -21,7 +21,17 @@ from .routes import debug as debug_module
 from .datasources.rrd import RRDSource
 from .db import Db
 from .pve import PveClient, PveError
-from .routes import bandwidth, console, metrics, provision, rescue, switch, users as users_route, vms
+from .routes import (
+    bandwidth,
+    console,
+    metrics,
+    provision,
+    rescue,
+    setup as setup_route,
+    switch,
+    users as users_route,
+    vms,
+)
 
 log = logging.getLogger("hlidskjalf")
 
@@ -46,9 +56,37 @@ async def lifespan(app: FastAPI):
     app.state.db = Db(settings.db_path)
     await app.state.db.open()
 
+    # Overlay any configuration written by the first-run setup wizard. Env always
+    # wins (see config.apply_stored), so this cannot override an ops-managed deploy.
+    apply_stored(settings, await app.state.db.get_config())
+
     # Bootstrap initial admin user from env if this is a fresh DB (dev + first remote deploy)
     await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)
 
+    # An unconfigured panel must still boot — it has to serve the setup wizard.
+    # (PveClient refuses https without a fingerprint, so constructing it here on a
+    # fresh install would crash the app before anyone could configure it.)
+    if settings.pve_host:
+        await start_pve_stack(app, settings)
+        log.info("hlidskjalf up — watching %s from the high seat", settings.pve_node)
+    else:
+        app.state.pve = None
+        app.state.metrics = None
+        app.state.accumulator = None
+        log.warning("Proxmox is not configured — serving the first-run setup wizard")
+    try:
+        yield
+    finally:
+        await stop_pve_stack(app)
+        await app.state.db.close()
+
+
+async def start_pve_stack(app: FastAPI, settings) -> None:
+    """Build the PVE client, metrics source and accumulator for a configured panel.
+
+    Called at startup, and again by the setup wizard once it commits a working
+    connection — so a freshly-configured panel works without a restart.
+    """
     app.state.pve = PveClient(settings)
     # Metrics datasource — rrd (PVE rrddata) is the default; prometheus is the
     # drop-in long-range alternative (same MetricsSource protocol, same rows).
@@ -68,16 +106,16 @@ async def lifespan(app: FastAPI):
         )
     app.state.accumulator = Accumulator(app.state.pve, app.state.db)
     await app.state.accumulator.start()
-    log.info("hlidskjalf up — watching %s from the high seat", settings.pve_node)
-    try:
-        yield
-    finally:
+
+
+async def stop_pve_stack(app: FastAPI) -> None:
+    if getattr(app.state, "accumulator", None):
         await app.state.accumulator.stop()
-        closer = getattr(app.state.metrics, "aclose", None)  # prometheus holds an httpx client
-        if closer:
-            await closer()
+    closer = getattr(app.state.metrics, "aclose", None)  # prometheus holds an httpx client
+    if closer:
+        await closer()
+    if getattr(app.state, "pve", None):
         await app.state.pve.aclose()
-        await app.state.db.close()
 
 
 app = FastAPI(title="Hlidskjalf", lifespan=lifespan)
@@ -286,6 +324,7 @@ app.include_router(rescue.router)
 app.include_router(console.router)
 app.include_router(switch.router)
 app.include_router(users_route.router)  # new user management (admin only)
+app.include_router(setup_route.router)  # /api/setup/* — closes forever once a user exists
 
 app.include_router(debug_module.router, prefix="/api/debug")  # /api/debug/* (admin protected)
 

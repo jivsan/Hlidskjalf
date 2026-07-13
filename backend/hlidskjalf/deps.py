@@ -9,7 +9,11 @@ from .switch import AristaClient, get_switch_client
 
 
 def get_pve(request: Request) -> PveClient:
-    return request.app.state.pve
+    pve = request.app.state.pve
+    if pve is None:
+        # Unconfigured panel (fresh install, setup wizard not finished yet).
+        raise HTTPException(503, "Proxmox is not configured yet — finish setup first")
+    return pve
 
 
 def get_db(request: Request) -> Db:

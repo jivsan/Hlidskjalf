@@ -1,17 +1,36 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> **CYBERPUNK SERVER ROOM EDITION** — cyan & pink neon in the rack. v0.2-alpha
+> v0.3.6-alpha
 
-A self-hosted, single-admin VPS control panel for the **hella** Proxmox host:
-fleet overview, live graphs, per-VM bandwidth accounting with monthly charts and
-quotas, provisioning from cloud-init templates, reinstall, SystemRescue boot,
-and a noVNC console — all through a **non-root, scoped PVE API token** with the
-API TLS cert pinned by SHA-256 fingerprint.
+A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live
+graphs, per-VM bandwidth accounting with monthly charts and quotas, provisioning
+from cloud-init templates, reinstall, SystemRescue boot, and a noVNC console —
+all through a **non-root, scoped PVE API token**, with the API TLS certificate
+pinned by SHA-256 fingerprint.
 
-FastAPI backend serving a React SPA (Tokyo Night, all-mono), one service, one
-port. See `plan.md` for the full design and `docs/bootstrap.md` for the one-time
-setup on hella.
+Each regular user is scoped to exactly one VM (the VPS model); admins see the
+whole fleet. FastAPI backend serving a React SPA — one service, one port.
+
+## Getting started
+
+The panel ships **unconfigured**. Start it and open it in a browser: it serves a
+**setup wizard** where you point it at your Proxmox, paste an API token (checked
+with a live call before anything is saved), create the admin account, and
+optionally create a first user. No env file required.
+
+```bash
+docker compose up -d      # or: pip install -e backend && hlidskjalf
+# open http://localhost:8787
+```
+
+Full walkthrough — including how to mint the scoped Proxmox token, and exactly
+where the secret is stored — in **[docs/setup.md](docs/setup.md)**.
+
+Prefer to configure everything declaratively? Set the environment variables
+instead (`hlidskjalf.env.example`) and the wizard never appears — env always wins
+over anything the wizard stored, so secrets can live in agenix/sops/systemd-creds.
+See `plan.md` for the full design and `docs/bootstrap.md` for the Proxmox-side setup.
 
 ## Screenshots
 

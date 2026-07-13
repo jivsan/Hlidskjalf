@@ -7,9 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [v0.3.6-alpha] - 2026-07-13
+
+The release that makes Hlidskjalf a thing **other people can run.** It shipped
+wired to one specific homelab; now it ships unconfigured, sets itself up in a
+browser, and does not leak its owner's network into anyone else's deployment.
+
+### Added — first-run setup wizard
+- **The panel now configures itself in the browser.** Start it with no env file:
+  it serves a setup wizard where you point it at your Proxmox, paste an API token
+  (validated with a **live call before anything is saved**), create the admin, and
+  optionally create a first regular user — then you're signed straight in. See
+  `docs/setup.md`.
+- **The gate is the whole design.** The setup endpoints are unauthenticated (nobody
+  has credentials yet), so they are available *iff the users table is empty*. The
+  moment an admin exists they return `409` forever — there is no flag to re-open
+  them, because that would be an unauthenticated takeover backdoor on every
+  deployment. The commit path re-checks the gate inside the write, and username
+  uniqueness makes two racing setups resolve to a single winner.
+- Config persists to a `config` table in the state DB, but **environment variables
+  always win** — an operator using agenix/sops-nix/systemd-creds is never overridden
+  and can keep the token secret out of the DB entirely. A defined-but-*empty* env var
+  is treated as unset (compose/`.env` files routinely define empty vars, and the panel
+  would otherwise persist config and then ignore it).
+- A `SETUP_WRITABLE` allowlist means the unauthenticated endpoint can only ever write
+  the Proxmox connection and a generated session secret — never arbitrary settings.
+- The state DB is forced to `0600` and its directory to `0700` (it holds argon2
+  password hashes and, after setup, the token secret). `docs/setup.md` is honest that
+  this secret is *not* encrypted at rest — a key on the same disk readable by the same
+  user protects nothing — and points at the env/secret-manager path instead.
+- **Fixed a fatal bootstrap bug** found while building this: `PveClient` refuses https
+  without a pinned fingerprint, so an unconfigured install **crashed on startup** and
+  could never be configured at all. The PVE stack now starts only when configured, and
+  the wizard brings it up on commit — no restart needed.
+
+### Security (audit)
+A full audit of every route, the auth/session model and the config. Patched:
+- **Sessions survived a password change** (HIGH). The cookie carried only a signed
+  username, so resetting a compromised account's password did *not* evict whoever held
+  the stolen cookie. Cookies are now bound to an epoch derived from the current password
+  hash: any password change invalidates every session issued before it. The person who
+  changes their own password is re-issued a cookie, so they aren't the one logged out.
+- **Self-service password change required no current password** (HIGH). A stolen session
+  (cookie + CSRF) could be silently upgraded into permanent credentials, locking the
+  owner out. Changing your own password now requires proving the current one; an admin
+  resetting *another* account remains the recovery path.
+- **`/api/tasks/{upid}/status` was unscoped** (MEDIUM, IDOR). Any logged-in tenant could
+  poll any UPID and learn other tenants' task type, target vmid, initiating PVE user and
+  exit status. Now scoped to the guest the UPID belongs to; node-level tasks are admin-only.
+- **Console WS one-time key was not bound to its minter** (MEDIUM). The key travels in a
+  URL query string (proxy logs, browser history), so a leaked key let a *different*
+  logged-in tenant redeem someone else's console. The key now records its owner.
+- **No security headers** (MEDIUM). Added CSP (`frame-ancestors 'none'`, `object-src
+  'none'`), `nosniff`, `X-Frame-Options`, `Referrer-Policy`, COOP, Permissions-Policy,
+  HSTS when `cookie_secure`, and `Cache-Control: no-store` on `/api/*`.
+- **Login leaked whether a username existed** via timing (LOW) — a missing user skipped
+  argon2 entirely. It now verifies against a dummy hash.
+- Password minimum raised 6 → 8, matching what the UI already enforced.
+- Audited and found clean: SQL (fully parameterized), SPA path traversal, the
+  traceback-leak handler, and the protected-VMID guards.
+
+### Changed — deployable by anyone
+- **Config ships neutral.** `pve_host` is required (was `10.0.20.10`), `pve_node`
+  defaults to Proxmox's own `pve` (was `hella`), `admin_user` is `admin` (was a person's
+  name), and `protected_vmids` / `vlan_gateways` / `switch_host` now default empty. An
+  unset switch simply hides the Switch page.
+- **The UI no longer hardcodes a host.** `/api/login` and `/api/session` return the node
+  name and the UI renders that. The login screen names no host at all — it renders
+  pre-auth, and the node a panel watches isn't something to hand to strangers.
+- The test suite now states its own network explicitly instead of leaning on a homelab
+  default — exactly the bug this pass existed to catch.
+- `hlidskjalf.env.example` rewritten around required vs optional settings.
+
+### Performance
+- **Frontend bundle code-split: first paint 633 kB → 182 kB raw (−71%), 183 → 60 kB
+  gzip (−67%).** Every page had been shipping the charting library whether or not it
+  drew a chart. Routes behind the auth wall are now `React.lazy`, recharts + d3 are
+  pinned into a shared `charts-vendor` chunk loaded only on chart routes, and noVNC
+  stays on the console tab. Verified by DOM-diffing every route against the old build —
+  byte-identical. The >500 kB warning is gone, and was fixed rather than silenced.
+
+### Added — Prometheus metrics datasource (Phase 2)
 - **Prometheus metrics datasource** (plan.md §8, phase 2): `datasources/prometheus.py`
-  now implements the `MetricsSource` protocol against heimdall's Prometheus HTTP API
+  now implements the `MetricsSource` protocol against a Prometheus HTTP API
   (`/api/v1/query_range`) with prometheus-pve-exporter's series, as a drop-in
   alternative to rrddata — `HLIDSKJALF_METRICS_SOURCE=prometheus` (`rrd` stays the
   default; a deployment that sets none of the new vars is unchanged). Same row shapes,
@@ -21,6 +101,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   New env: `HLIDSKJALF_PROMETHEUS_URL` (+ optional token / basic auth / TLS pinning /
   timeout / `HLIDSKJALF_PROMETHEUS_NODE_QUERIES`). See `docs/prometheus.md`.
 - `dev/mock_prometheus.py` — offline mock of the Prometheus HTTP API for dev + tests.
+
+### Housekeeping
+- Pruned 11 stale merged/abandoned remote branches; `.claude/` is now gitignored.
+- Backend + frontend versions bumped to 0.3.6-alpha.
 
 ## [v0.3.5-alpha] - 2026-07-13
 
