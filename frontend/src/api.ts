@@ -175,6 +175,22 @@ export async function logout(): Promise<void> {
   }
 }
 
+/**
+ * Change your OWN password (the backend requires proof of the current one).
+ * On success the server re-issues the session cookie, so the caller stays
+ * signed in here while every other session is invalidated.
+ */
+export async function changeOwnPassword(
+  username: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await api.post(`/api/users/${encodeURIComponent(username)}/password`, {
+    password: newPassword,
+    current_password: currentPassword,
+  });
+}
+
 // --- First-run setup ------------------------------------------------------
 // The panel ships unconfigured: until a user exists, these three unauthenticated
 // endpoints are the only way in. They all refuse once setup has completed (409),

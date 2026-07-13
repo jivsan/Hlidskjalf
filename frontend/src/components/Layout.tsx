@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getNodeName, logout } from "../api";
 import type { CurrentUser } from "../App";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -121,9 +121,13 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
         {/* Watcher */}
         <div className="reveal pt-3 mt-2 border-t border-border-token" style={{ ["--step" as string]: 2 }}>
           <div className="flex items-center gap-2 px-2 mb-2">
-            <span className="text-sm text-fg truncate" title={currentUser.username}>
+            <Link
+              to="/profile"
+              className="text-sm text-fg truncate hover:text-cyan transition-colors"
+              title="your account"
+            >
               {currentUser.username}
-            </span>
+            </Link>
             <RoleBadge role={currentUser.role} />
           </div>
           {currentUser.role === "user" && currentUser.vmid != null && (
@@ -160,7 +164,15 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
             leave the seat
           </button>
           <div className="px-3 py-1 flex items-center gap-2 text-[11px] text-muted">
-            {currentUser.username} <RoleBadge role={currentUser.role} />
+            <Link
+              to="/profile"
+              className="hover:text-fg transition-colors"
+              title="your account"
+              onClick={() => setMenuOpen(false)}
+            >
+              {currentUser.username}
+            </Link>{" "}
+            <RoleBadge role={currentUser.role} />
           </div>
         </nav>
       )}
