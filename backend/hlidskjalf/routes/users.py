@@ -4,7 +4,7 @@ Regular users get exactly one VM (like a VPS customer).
 Admins can create users, assign VMs, reset passwords, etc.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 import secrets
@@ -17,15 +17,21 @@ from ..deps import get_db
 router = APIRouter()
 
 
+MIN_PASSWORD_LEN = 8
+
+
 class CreateUserBody(BaseModel):
     username: str = Field(min_length=2, max_length=64)
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LEN)
     role: str = "user"  # "admin" or "user"
     vmid: int | None = None
 
 
 class PasswordBody(BaseModel):
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LEN)
+    # Required when changing your OWN password; ignored for an admin resetting
+    # someone else's.
+    current_password: str | None = None
 
 
 class AssignVmidBody(BaseModel):
@@ -74,19 +80,38 @@ async def create_user(
 async def set_password(
     target: str,
     body: PasswordBody,
+    response: Response,
     db: Db = Depends(get_db),
     _csrf=Depends(require_csrf),
     username: str = Depends(require_session),
 ):
     me = await get_current_user(username, db)
-    if not is_admin(me) and not secrets.compare_digest(target, username):
+    is_self = secrets.compare_digest(target, username)
+    if not is_admin(me) and not is_self:
         raise HTTPException(403, "Can only change your own password (or be admin)")
 
-    if not await db.get_user_by_username(target):
+    target_user = await db.get_user_by_username(target)
+    if not target_user:
         raise HTTPException(404, f"No user named '{target}'")
+
+    # Changing your own password requires proving you know the current one.
+    # Otherwise a stolen session (cookie + CSRF) could be silently upgraded into
+    # permanent credentials, and lock the real owner out. An admin resetting
+    # *another* account is the legitimate recovery path and is exempt.
+    if is_self:
+        if not body.current_password or not auth.verify_password(
+            target_user["password_hash"], body.current_password
+        ):
+            raise HTTPException(403, "Current password is incorrect")
 
     new_hash = auth.hash_password(body.password)
     await db.update_user_password(target, new_hash)
+    # The password hash is the session epoch, so every session issued under the
+    # old password (including any an attacker holds) is now invalid. Re-issue a
+    # cookie for the caller when they changed their own password, so the person
+    # who did the right thing isn't the one who gets logged out.
+    if is_self:
+        auth.start_session(response, username, auth.session_epoch(new_hash))
     return {"ok": True}
 
 

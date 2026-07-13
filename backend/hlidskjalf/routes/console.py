@@ -32,9 +32,12 @@ from .vms import _ensure_vm_access
 log = logging.getLogger("hlidskjalf.console")
 router = APIRouter()
 
-# one-time key -> (vmid, port, ticket, created_at); keys expire fast, the PVE
-# vncticket itself is only valid for a short window anyway
-_pending: dict[str, tuple[int, str, str, float]] = {}
+# one-time key -> (vmid, port, ticket, created_at, owner); keys expire fast, the
+# PVE vncticket itself is only valid for a short window anyway. `owner` binds the
+# key to the user who minted it: the key travels in a URL query string (which
+# lands in proxy/access logs and browser history), so a valid key alone must not
+# be enough for a *different* authenticated user to redeem someone's console.
+_pending: dict[str, tuple[int, str, str, float, str]] = {}
 KEY_TTL = 60.0
 
 
@@ -64,7 +67,7 @@ async def console_ticket(
     data = await pve.post(f"/nodes/{pve.node}/{kind}/{vmid}/vncproxy", websocket=1)
     _reap()
     key = secrets.token_urlsafe(24)
-    _pending[key] = (vmid, str(data["port"]), data["ticket"], time.monotonic())
+    _pending[key] = (vmid, str(data["port"]), data["ticket"], time.monotonic(), username)
     return {
         "ws_path": f"/ws/console/{vmid}?key={key}",
         "password": data["ticket"],
@@ -74,26 +77,34 @@ async def console_ticket(
 
 @router.websocket("/ws/console/{vmid}")
 async def console_ws(websocket: WebSocket, vmid: int, key: str = ""):
-    # No per-user VM scoping is repeated here: the one-time `key` this handler
-    # redeems is ONLY ever minted by console_ticket above, which is now
-    # ownership-scoped via _ensure_vm_access. A holder of a valid key therefore
-    # already passed that check for this exact vmid, so redeeming it is safe.
+    # The one-time `key` is only ever minted by console_ticket above, which is
+    # ownership-scoped via _ensure_vm_access — so a key already encodes "this
+    # user may reach this vmid". We still re-check the session here AND require
+    # that the redeeming session is the same user who minted the key: the key is
+    # carried in a URL query string, so leaking it (logs, history, a shared
+    # screen) must not let another logged-in tenant open the console.
     # Accept the handshake *before* the auth/key checks so a rejection can send
     # a real WebSocket close code (4401/4403) to the browser. Closing before
     # accept makes uvicorn reject the handshake with a bare HTTP 403 and the
     # code never reaches the client (noVNC would only see a generic 1006).
     # noVNC always offers the "binary" subprotocol.
     await websocket.accept(subprotocol="binary")
+    db: Db = websocket.app.state.db
     try:
-        session_from_request(websocket)  # cookie check; raises HTTPException
+        username = await session_from_request(websocket, db)
     except HTTPException:
         await websocket.close(code=4401)
         return
     entry = _pending.pop(key, None)
-    if not entry or entry[0] != vmid or time.monotonic() - entry[3] > KEY_TTL:
+    if (
+        not entry
+        or entry[0] != vmid
+        or time.monotonic() - entry[3] > KEY_TTL
+        or not secrets.compare_digest(entry[4], username)
+    ):
         await websocket.close(code=4403)
         return
-    _, port, ticket, _ = entry
+    _, port, ticket, _, _ = entry
 
     pve: PveClient = websocket.app.state.pve
     settings = pve.settings

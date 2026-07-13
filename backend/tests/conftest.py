@@ -58,6 +58,9 @@ os.environ.update(
         "HLIDSKJALF_PROTECTED_VMIDS": "101,151",
         "HLIDSKJALF_RESCUE_ISO": "local:iso/systemrescue-12.01-amd64.iso",
         "HLIDSKJALF_BANDWIDTH_QUOTAS": '{"115": 500}',
+        # Site-specific settings now default to empty (the panel ships neutral, not
+        # wired to one homelab), so the suite states its own network explicitly.
+        "HLIDSKJALF_VLAN_GATEWAYS": '{"20": "10.0.20.1", "30": "", "50": "10.0.50.1"}',
         "HLIDSKJALF_STATE_DIR": STATE_DIR,
         "HLIDSKJALF_STATIC_DIR": "",
         # cookie_secure defaults to True (production). Starlette's TestClient runs

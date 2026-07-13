@@ -70,6 +70,49 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Hlidskjalf", lifespan=lifespan)
 
 
+# --- middleware: security headers ------------------------------------------
+
+# The SPA is self-hosted and pulls nothing from third parties, so the policy can
+# be strict. 'unsafe-inline' is needed for style-src only: Vite injects the
+# stylesheet and a few components set inline style attributes (chart colours,
+# meter widths). connect-src allows the same-origin WebSocket for the console.
+CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'none'; "
+    "form-action 'self'; "
+    "object-src 'none'"
+)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy", CSP)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")  # legacy peer of frame-ancestors
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    if get_settings().cookie_secure:
+        # Only meaningful over TLS; the panel is expected to sit behind Traefik.
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    # API answers carry tenant data (and the console ticket) — never let a proxy
+    # or the browser cache them.
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
 # --- middleware: request logging (method, path, status, duration, client) ---
 
 @app.middleware("http")
@@ -176,13 +219,17 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
             "vmid": None,
         }
 
-    csrf = auth.start_session(response, body.username)
+    # Bind the session to the password it was issued under, so a later password
+    # change invalidates it (see auth.session_epoch).
+    epoch = await auth.current_epoch(body.username, db)
+    csrf = auth.start_session(response, body.username, epoch)
     return {
         "ok": True,
         "csrf": csrf,
         "user": user["username"],
         "role": user.get("role", "admin"),
         "vmid": user.get("vmid"),
+        "node": get_settings().pve_node,
     }
 
 
@@ -200,6 +247,9 @@ async def session(value: str = Depends(auth.require_session), db: Db = Depends(g
         "role": user.get("role", "admin"),
         "vmid": user.get("vmid"),
         "csrf": auth.csrf_for(value),
+        # The node the panel watches. The UI renders this instead of hardcoding a
+        # host name, so any deployment shows its own node.
+        "node": get_settings().pve_node,
     }
 
 

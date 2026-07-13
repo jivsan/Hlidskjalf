@@ -1,6 +1,6 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, getNodeName } from "../api";
 import { useToast } from "../components/Toast";
 import { EmptyState, ErrorState, KindBadge, LoadingState, PageHeader, StatusDot } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
@@ -123,7 +123,7 @@ export function Fleet() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="guests on hella"
+        eyebrow={`guests on ${getNodeName() || "this node"}`}
         title="Fleet"
         sub={
           <>
@@ -144,7 +144,7 @@ export function Fleet() {
       {vms.error && <ErrorState message={vms.error} />}
 
       {list.length === 0 ? (
-        <EmptyState message="no guests found on hella" />
+        <EmptyState message={`no guests found on ${getNodeName() || "this node"}`} />
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">

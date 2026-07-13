@@ -33,8 +33,10 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
         <div className="reveal text-center mb-8" style={{ ["--step" as string]: 0 }}>
           <div className="eyebrow justify-center mb-4">Proxmox control</div>
           <Wordmark className="text-[44px] leading-none" />
+          {/* Deliberately names no host: this renders before authentication, and
+              the node a panel watches is not something to hand out to strangers. */}
           <p className="text-muted text-sm mt-4 max-w-xs mx-auto leading-relaxed">
-            The high seat. From it, one watches over every realm running on hella.
+            The high seat. From it, one watches over every guest in the fleet.
           </p>
         </div>
 
@@ -88,7 +90,7 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
           className="reveal text-center text-[10px] text-muted uppercase tracking-eyebrow mt-6"
           style={{ ["--step" as string]: 2 }}
         >
-          watching hella
+          Proxmox control panel
         </p>
       </div>
     </div>

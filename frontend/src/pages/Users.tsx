@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api } from "../api";
+import { api, getCurrentUsername } from "../api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from "../components/ui";
@@ -30,6 +30,9 @@ export function UsersPage() {
   const [assignVmid, setAssignVmid] = useState<string>("");
   const [pwFor, setPwFor] = useState<UserRow | null>(null);
   const [pwDraft, setPwDraft] = useState("");
+  // Changing your OWN password requires proving you know the current one (an
+  // admin resetting someone else's does not).
+  const [pwCurrent, setPwCurrent] = useState("");
   const [deleteFor, setDeleteFor] = useState<UserRow | null>(null);
   const [rowBusy, setRowBusy] = useState(false);
 
@@ -100,14 +103,22 @@ export function UsersPage() {
 
   async function savePassword() {
     if (!pwFor || pwDraft.length < MIN_PASSWORD_LEN) return;
+    const self = pwFor.username === getCurrentUsername();
+    if (self && !pwCurrent) return;
     setRowBusy(true);
     try {
       await api.post(`/api/users/${encodeURIComponent(pwFor.username)}/password`, {
         password: pwDraft,
+        ...(self ? { current_password: pwCurrent } : {}),
       });
-      toast.success(`password updated for ${pwFor.username}`);
+      toast.success(
+        self
+          ? "password changed — your other sessions were signed out"
+          : `password reset for ${pwFor.username} — their sessions were signed out`,
+      );
       setPwFor(null);
       setPwDraft("");
+      setPwCurrent("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "password update failed");
     } finally {
@@ -328,7 +339,11 @@ export function UsersPage() {
       {/* Reset password modal */}
       <ConfirmDialog
         open={pwFor != null}
-        title={`Reset password — ${pwFor?.username ?? ""}`}
+        title={
+          pwFor?.username === getCurrentUsername()
+            ? "Change your password"
+            : `Reset password — ${pwFor?.username ?? ""}`
+        }
         confirmLabel="set password"
         confirmClass="btn-cyan"
         busy={rowBusy}
@@ -336,9 +351,31 @@ export function UsersPage() {
         onCancel={() => {
           setPwFor(null);
           setPwDraft("");
+          setPwCurrent("");
         }}
       >
-        <p>The user will need this new password on their next login.</p>
+        {pwFor?.username === getCurrentUsername() ? (
+          <>
+            <p>
+              Confirm your current password to change it. Every other session signed in as
+              you will be signed out.
+            </p>
+            <input
+              className="input"
+              type="password"
+              placeholder="current password"
+              value={pwCurrent}
+              onChange={(e) => setPwCurrent(e.target.value)}
+              autoComplete="current-password"
+              autoFocus
+            />
+          </>
+        ) : (
+          <p>
+            The user will need this new password on their next login. Their existing
+            sessions will be signed out.
+          </p>
+        )}
         <input
           className="input"
           type="password"
@@ -346,7 +383,7 @@ export function UsersPage() {
           value={pwDraft}
           onChange={(e) => setPwDraft(e.target.value)}
           autoComplete="new-password"
-          autoFocus
+          autoFocus={pwFor?.username !== getCurrentUsername()}
         />
         {pwDraft.length > 0 && pwDraft.length < MIN_PASSWORD_LEN && (
           <p className="text-red text-xs">at least {MIN_PASSWORD_LEN} characters</p>

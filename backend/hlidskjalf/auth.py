@@ -75,10 +75,21 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+# A real argon2 hash, verified against when the username does not exist so that
+# "no such user" costs the same wall-clock time as "wrong password". Without it,
+# login latency is a username-enumeration oracle.
+_DUMMY_HASH = _hasher.hash("hlidskjalf-timing-equalisation-dummy")
+
+
 async def verify_user(db: Db, username: str, password: str) -> dict | None:
     """Return user dict (without hash) if password matches, else None."""
     user = await db.get_user_by_username(username)
     if not user:
+        # Burn the same argon2 work an existing user would (see _DUMMY_HASH).
+        try:
+            _hasher.verify(_DUMMY_HASH, password)
+        except VerifyMismatchError:
+            pass
         return None
     try:
         if _hasher.verify(user["password_hash"], password):
@@ -87,6 +98,38 @@ async def verify_user(db: Db, username: str, password: str) -> dict | None:
     except VerifyMismatchError:
         pass
     return None
+
+
+def verify_password(password_hash: str, password: str) -> bool:
+    """Constant-ish password check against a stored argon2 hash."""
+    try:
+        return _hasher.verify(password_hash, password)
+    except VerifyMismatchError:
+        return False
+
+
+# --- Session binding ---------------------------------------------------------
+#
+# The session cookie carries "<username>|<epoch>", where epoch is derived from
+# the user's *current* password hash. Changing a password changes the epoch,
+# which invalidates every session issued under the old password — otherwise a
+# stolen cookie would outlive the password reset meant to evict it.
+
+
+def session_epoch(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+async def current_epoch(username: str, db: Db) -> str:
+    """The epoch a valid session for `username` must currently carry."""
+    user = await db.get_user_by_username(username)
+    if user:
+        return session_epoch(user["password_hash"])
+    # Fresh-bootstrap env admin (no DB row yet).
+    s = get_settings()
+    if s.admin_password_hash and secrets.compare_digest(username, s.admin_user):
+        return session_epoch(s.admin_password_hash)
+    raise HTTPException(401, "User no longer exists")
 
 
 # Back-compat for very first bootstrap before DB users exist (dev)
@@ -102,10 +145,13 @@ def _legacy_verify(username: str, password: str) -> bool:
         return False
 
 
-def start_session(response: Response, username: str) -> str:
-    """Set the session cookie containing the username; return the CSRF token."""
-    # We sign the username directly. On use we re-validate against DB.
-    signed = _signer().sign(username).decode()
+def start_session(response: Response, username: str, epoch: str) -> str:
+    """Set the session cookie ("<username>|<epoch>"); return the CSRF token.
+
+    `epoch` binds the session to the password it was issued under — get it from
+    `current_epoch(username, db)`.
+    """
+    signed = _signer().sign(f"{username}|{epoch}").decode()
     response.set_cookie(
         COOKIE_NAME,
         signed,
@@ -116,8 +162,8 @@ def start_session(response: Response, username: str) -> str:
         path="/",
     )
     # CSRF must be derived from the same value require_csrf / /api/session use,
-    # which is the *username* (the unsigned cookie value). Deriving it from the
-    # signed cookie here would hand out a token that never matches on mutations.
+    # which is the *username*. Deriving it from the signed cookie here would hand
+    # out a token that never matches on mutations.
     return csrf_for(username)
 
 
@@ -125,37 +171,54 @@ def end_session(response: Response) -> None:
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
-def _unsign(cookie: str | None) -> str:
-    """Returns the username stored in the signed session cookie."""
+def _unsign(cookie: str | None) -> tuple[str, str]:
+    """Returns (username, epoch) from the signed session cookie."""
     if not cookie:
         raise HTTPException(401, "Not logged in")
     try:
-        return _signer().unsign(cookie, max_age=get_settings().session_max_age).decode()
+        raw = _signer().unsign(cookie, max_age=get_settings().session_max_age).decode()
     except BadSignature:
         raise HTTPException(401, "Session invalid or expired")
+    username, sep, epoch = raw.partition("|")
+    if not sep or not epoch:
+        # Pre-epoch cookie format (or tampering): refuse it. Upgrading the panel
+        # therefore forces one fresh login, which is the intended behaviour.
+        raise HTTPException(401, "Session invalid or expired")
+    return username, epoch
+
+
+async def validate_session(cookie: str | None, db: Db) -> str:
+    """Unsign the cookie and confirm it was issued under the *current* password."""
+    username, epoch = _unsign(cookie)
+    expected = await current_epoch(username, db)
+    if not hmac.compare_digest(epoch, expected):
+        raise HTTPException(401, "Session expired — password changed")
+    return username
 
 
 async def require_session(
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    db: Db = Depends(get_db),
 ) -> str:
-    """Dependency: returns the username from the session cookie."""
-    return _unsign(session)
+    """Dependency: returns the username from a valid, current session cookie."""
+    return await validate_session(session, db)
 
 
 async def require_csrf(
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
     csrf: str | None = Header(default=None, alias=CSRF_HEADER),
+    db: Db = Depends(get_db),
 ) -> str:
-    """Mutating: validates CSRF and returns username."""
-    value = _unsign(session)
-    if not csrf or not hmac.compare_digest(csrf, csrf_for(value)):
+    """Mutating: validates the session + CSRF and returns username."""
+    username = await validate_session(session, db)
+    if not csrf or not hmac.compare_digest(csrf, csrf_for(username)):
         raise HTTPException(403, f"Missing or bad {CSRF_HEADER} header")
-    return value
+    return username
 
 
-def session_from_request(request: Request) -> str:
-    """WebSocket: returns username."""
-    return _unsign(request.cookies.get(COOKIE_NAME))
+async def session_from_request(request: Request, db: Db) -> str:
+    """WebSocket: returns username from a valid, current session cookie."""
+    return await validate_session(request.cookies.get(COOKIE_NAME), db)
 
 
 # --- User + role helpers (call from handlers: user = await get_current_user(username, db)) ---

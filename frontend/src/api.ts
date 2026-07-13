@@ -99,12 +99,35 @@ export interface SessionInfo {
   role?: "admin" | "user";
   vmid?: number | null;
   csrf: string;
+  /** The Proxmox node this panel watches. Rendered instead of a hardcoded host. */
+  node?: string;
+}
+
+// Session-scoped facts the whole UI reads. Populated before the app renders (the
+// session is restored first), so plain getters are enough — no context needed.
+let nodeName = "";
+let currentUsername = "";
+
+/** The Proxmox node name, e.g. "pve". Empty until the session is known. */
+export function getNodeName(): string {
+  return nodeName;
+}
+
+/** The logged-in username. Empty when signed out. */
+export function getCurrentUsername(): string {
+  return currentUsername;
+}
+
+function remember(s: { user?: string; node?: string }) {
+  if (s.node) nodeName = s.node;
+  if (s.user) currentUsername = s.user;
 }
 
 export async function restoreSession(): Promise<SessionInfo | null> {
   try {
     const s = await api.get<SessionInfo>("/api/session", { skipAuthRedirect: true });
     setCsrf(s.csrf);
+    remember(s);
     return s;
   } catch {
     return null;
@@ -112,13 +135,23 @@ export async function restoreSession(): Promise<SessionInfo | null> {
 }
 
 export async function login(username: string, password: string): Promise<SessionInfo> {
-  const res = await api.post<{ ok: boolean; csrf: string; user: string; role?: string; vmid?: number | null }>(
-    "/api/login",
-    { username, password },
-    { skipAuthRedirect: true },
-  );
+  const res = await api.post<{
+    ok: boolean;
+    csrf: string;
+    user: string;
+    role?: string;
+    vmid?: number | null;
+    node?: string;
+  }>("/api/login", { username, password }, { skipAuthRedirect: true });
   setCsrf(res.csrf);
-  return { user: res.user, role: res.role as any, vmid: res.vmid, csrf: res.csrf };
+  remember(res);
+  return {
+    user: res.user,
+    role: res.role as SessionInfo["role"],
+    vmid: res.vmid,
+    csrf: res.csrf,
+    node: res.node,
+  };
 }
 
 export async function logout(): Promise<void> {
@@ -126,6 +159,7 @@ export async function logout(): Promise<void> {
     await api.post<{ ok: boolean }>("/api/logout");
   } finally {
     setCsrf(null);
+    currentUsername = "";
   }
 }
 
