@@ -6,9 +6,11 @@ the panel's sqlite so it survives restarts; the UI shows an amber RESCUE MODE
 banner for any vmid present in the stash.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..auth import require_csrf, require_session
+from .. import journal
+
+from ..auth import rate_limited, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..pve import PveClient
@@ -43,9 +45,10 @@ async def _power_cycle(pve: PveClient, vmid: int, running: bool) -> list[str]:
 @router.post("/api/vms/{vmid}/rescue")
 async def enter_rescue(
     vmid: int,
+    request: Request,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.rescue", 10, 3600.0)),
     _=Depends(require_csrf),
 ):
     # Authorize: owner or admin only. Rescue power-cycles the VM into an ISO, so
@@ -78,15 +81,17 @@ async def enter_rescue(
         **{slot: f"{iso},media=cdrom", "boot": f"order={slot}"},
     )
     upids = await _power_cycle(pve, vmid, resource.get("status") == "running")
+    await journal.record(db, request, username, journal.VM_RESCUE_ENTER, vmid, f"slot={slot}")
     return {"rescue": True, "slot": slot, "upids": upids}
 
 
 @router.delete("/api/vms/{vmid}/rescue")
 async def exit_rescue(
     vmid: int,
+    request: Request,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.rescue", 10, 3600.0)),
     _=Depends(require_csrf),
 ):
     # Authorize exit too (owner or admin). No guard_protected here: a protected
@@ -115,4 +120,5 @@ async def exit_rescue(
     await pve.put(f"/nodes/{pve.node}/qemu/{vmid}/config", **config)
     await db.rescue_clear(vmid)
     upids = await _power_cycle(pve, vmid, resource.get("status") == "running")
+    await journal.record(db, request, username, journal.VM_RESCUE_EXIT, vmid)
     return {"rescue": False, "upids": upids}

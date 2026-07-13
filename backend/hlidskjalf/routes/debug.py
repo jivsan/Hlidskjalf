@@ -18,8 +18,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from .. import secretbox
 from ..auth import require_admin_user
-from ..config import get_settings
+from ..config import FILE_BACKED, get_settings
 from ..db import Db
 from ..deps import get_db
 
@@ -50,17 +51,32 @@ class InMemoryLogHandler(logging.Handler):
             self.handleError(record)
 
 
+# Redaction is driven by the declared secret sets, NOT by guessing from the name.
+# A keyword denylist ("does it contain 'secret'?") silently leaks the first secret
+# someone adds whose name doesn't happen to match — the keyword list is a guess
+# about the future, and it will eventually be wrong. The keyword pass is kept only
+# as a belt-and-braces second net.
+_KEYWORD_NET = ("token", "secret", "password", "hash", "key")
+
+
+def _is_sensitive(name: str) -> bool:
+    if name in secretbox.SECRET_KEYS or name in FILE_BACKED:
+        return True
+    return any(word in name.lower() for word in _KEYWORD_NET)
+
+
 @router.get("/config")
 async def debug_config(_: dict = Depends(require_admin_user)):
     s = get_settings()
     data = s.model_dump() if hasattr(s, "model_dump") else s.__dict__.copy()
-    # Redact secrets
     for k in list(data.keys()):
-        kl = k.lower()
-        if any(x in kl for x in ("token", "secret", "password", "hash", "fingerprint", "key", "username")):
+        if _is_sensitive(k):
             data[k] = "***REDACTED***"
     data["pve_base_url"] = getattr(s, "pve_base_url", None)
     data["db_path"] = str(getattr(s, "db_path", ""))
+    # Surfaced because the default is now EMPTY: nothing is protected, which means
+    # an admin can destroy the VM that is running this panel.
+    data["protected_vmids_empty"] = not s.protected_vmids
     return data
 
 
@@ -103,3 +119,20 @@ async def debug_accumulator(request: Request, _: dict = Depends(require_admin_us
 # Helper for main.py global handler
 def append_error(entry: dict) -> None:
     _append_recent(recent_errors, entry)
+
+
+@router.get("/audit")
+async def debug_audit(
+    limit: int = 200,
+    actor: str | None = None,
+    action: str | None = None,
+    _: dict = Depends(require_admin_user),
+    db: Db = Depends(get_db),
+):
+    """The durable audit trail: who did what, to which guest, from where.
+
+    Unlike /logs and /errors (in-memory ring buffers that die on restart), this is
+    persisted — it is the record you go to after someone destroys a VM. Refused
+    actions are in here too.
+    """
+    return await db.audit_recent(limit=limit, actor=actor, action=action)

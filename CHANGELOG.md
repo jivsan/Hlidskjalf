@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — hardening from a self-audit
+A pass over the gaps the v0.3.6 audit did not cover. Each of these was real:
+
+- **Logout now actually revokes.** `end_session` only deleted the cookie — it asked
+  the *browser* to forget it. A signed session cookie somebody had copied stayed valid
+  until it expired, however many times you pressed log out. Sessions now carry a random
+  `sid`, and logging out parks it in `revoked_sessions` until its natural expiry.
+  Revocation is per-session: signing out on your laptop does not sign you out on your
+  phone.
+- **The dangerous verbs are rate limited.** Only *login* was throttled — `destroy`,
+  `reinstall`, `provision`, power and rescue were wide open, so one stolen session could
+  hammer the Proxmox API flat. Now per-**user** buckets (power 30/min, provision 10/h,
+  reinstall + destroy 5/h), so one tenant cannot throttle everybody else either.
+- **The CSRF token rotates.** It was `HMAC(secret, username)` — a permanent constant.
+  Leak it once (a log, a screenshot, a stray XSS) and it stayed valid for the life of
+  the account. It is now bound to the password epoch as well, so it rotates whenever the
+  password does.
+- **A durable audit log.** The panel can permanently destroy other people's machines and
+  kept no record of who did it beyond an in-memory ring buffer that died on restart. Now
+  a persisted `audit` table: when, who, what, which target, from which IP, and whether it
+  succeeded — **including refusals**, because a denied destroy is exactly what you want
+  to find later. Admin-only at `GET /api/debug/audit`.
+- **Redaction is no longer a guess.** `/api/debug/config` redacted anything whose *name*
+  contained "secret"/"token"/… — a denylist that silently leaks the first secret someone
+  adds whose name doesn't match. It is now driven by the declared `SECRET_KEYS` /
+  `FILE_BACKED` sets, with the keyword pass kept only as a second net.
+- **"Nothing is protected" is now impossible to miss.** `protected_vmids` defaults to
+  empty (so the panel ships neutral rather than wired to one homelab) — which means a
+  fresh deployment can destroy the VM running the panel itself. The backend warns loudly
+  at startup and the Fleet page shows a banner when no guest is guarded.
+
+### Added — schema migrations + automatic backups
+- Versioned, ordered, append-only migrations (`migrations.py`) replacing the pile of
+  `CREATE TABLE IF NOT EXISTS`. Fine for adding a table, useless for changing one, and
+  it left no way to know what shape an existing database was in.
+- **Any database that already holds data is copied aside before it is touched**
+  (`hlidskjalf.sqlite3.bak-v<from>-<ts>`). Note a database written before this existed
+  reports version 0 and looks exactly like a fresh install — backing up on version alone
+  would have skipped precisely the databases that most need it, so we detect real data.
+- An older build refuses to open a database a newer build has already migrated, rather
+  than silently corrupting it.
+- This is the prerequisite for the requested GitHub self-update feature (see `handoff.md`).
+
+### Added — a working brief for Claude Code (`CLAUDE.md`)
+- Auto-loaded standing brief, so an instance running on the LAN (with real Proxmox
+  access) gets the safety rails immediately: never touch a VM you did not create, use a
+  scratch VMID ≥ 900, protect the panel's own host first, scoped non-root token only —
+  plus the list of assumptions most likely to be wrong against real hardware.
+
+182 backend tests.
+
+
 ### Security — secrets at rest
 - **The Proxmox API token is never written to the database in plaintext.** New
   `secretbox.py` encrypts stored secrets (Fernet / AES-CBC+HMAC); non-secret config

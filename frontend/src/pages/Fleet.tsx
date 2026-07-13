@@ -143,6 +143,25 @@ export function Fleet() {
 
       {vms.error && <ErrorState message={vms.error} />}
 
+      {/* Nothing is guarded unless HLIDSKJALF_PROTECTED_VMIDS says so — and the
+          default is empty, so a fresh deployment can destroy the VM running this
+          very panel. The fleet already knows which guests are protected, so this
+          needs no extra API call. */}
+      {list.length > 0 && !list.some((v) => v.protected) && (
+        <div
+          className="card border-amber/50 bg-amber/5 px-4 py-3 text-sm text-amber"
+          role="alert"
+        >
+          <span className="font-medium">No guest is protected.</span>{" "}
+          <span className="text-fg">
+            Destructive actions are allowed on every VM here — including the one running
+            this panel. Set{" "}
+            <span className="metric text-amber">HLIDSKJALF_PROTECTED_VMIDS</span> to the
+            VMIDs you cannot afford to lose, then restart.
+          </span>
+        </div>
+      )}
+
       {list.length === 0 ? (
         <EmptyState message={`no guests found on ${getNodeName() || "this node"}`} />
       ) : (

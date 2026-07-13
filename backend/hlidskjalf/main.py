@@ -11,7 +11,7 @@ from .deps import get_db
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth
+from . import auth, journal
 from .accumulator import Accumulator
 from .config import apply_stored, get_settings, unseal
 
@@ -70,6 +70,15 @@ async def lifespan(app: FastAPI):
     if settings.pve_host:
         await start_pve_stack(app, settings)
         log.info("hlidskjalf up — watching %s from the high seat", settings.pve_node)
+        if not settings.protected_vmids:
+            # The default is empty so the panel ships neutral rather than wired to
+            # one homelab — but that means nothing is guarded, including the VM
+            # this process is running on.
+            log.warning(
+                "HLIDSKJALF_PROTECTED_VMIDS is empty — NOTHING is protected. An admin "
+                "can stop, reinstall or DESTROY any guest, including the VM running "
+                "this panel. Set it to the VMIDs you cannot afford to lose."
+            )
     else:
         app.state.pve = None
         app.state.metrics = None
@@ -263,6 +272,9 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
         # an accepted login path — otherwise a stale/weak env hash would be a
         # permanent backdoor even after the admin password is changed in the DB.
         if await db.list_users() or not auth._legacy_verify(body.username, body.password):
+            await journal.record(
+                db, request, body.username, journal.LOGIN_FAILED, ok=False
+            )
             raise HTTPException(401, "Bad username or password")
         # On legacy success, make sure the bootstrap user exists now
         user = await db.get_user_by_username(body.username) or {
@@ -275,6 +287,7 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
     # change invalidates it (see auth.session_epoch).
     epoch = await auth.current_epoch(body.username, db)
     csrf = auth.start_session(response, body.username, epoch)
+    await journal.record(db, request, body.username, journal.LOGIN)
     return {
         "ok": True,
         "csrf": csrf,
@@ -286,19 +299,40 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
 
 
 @app.post("/api/logout")
-async def logout(response: Response, _=Depends(auth.require_session)):
+async def logout(
+    request: Request,
+    response: Response,
+    session: tuple[str, str, str] = Depends(auth.require_session_full),
+    db: Db = Depends(get_db),
+):
+    """Log out — and actually mean it.
+
+    Deleting the cookie only asks the *browser* to forget it. A signed session
+    cookie that someone else copied stayed valid until it expired, however many
+    times you pressed log out. The session id is now parked in `revoked_sessions`
+    until its natural expiry, so the cookie is dead everywhere.
+    """
+    username, _epoch, sid = session
+    expires_at = time.time() + get_settings().session_max_age
+    await db.revoke_session(sid, expires_at)
+    await db.prune_revoked_sessions(time.time())
     auth.end_session(response)
+    await journal.record(db, request, username, journal.LOGOUT)
     return {"ok": True}
 
 
 @app.get("/api/session")
-async def session(value: str = Depends(auth.require_session), db: Db = Depends(get_db)):
-    user = await auth.get_current_user(value, db)
+async def session(
+    session: tuple[str, str, str] = Depends(auth.require_session_full),
+    db: Db = Depends(get_db),
+):
+    username, epoch, _sid = session
+    user = await auth.get_current_user(username, db)
     return {
         "user": user["username"],
         "role": user.get("role", "admin"),
         "vmid": user.get("vmid"),
-        "csrf": auth.csrf_for(value),
+        "csrf": auth.csrf_for(username, epoch),
         # The node the panel watches. The UI renders this instead of hardcoding a
         # host name, so any deployment shows its own node.
         "node": get_settings().pve_node,

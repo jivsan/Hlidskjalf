@@ -32,6 +32,33 @@ _login_attempts: dict[str, deque[float]] = {}
 LOGIN_RATE = 5          # attempts
 LOGIN_WINDOW = 60.0     # seconds
 
+# Generic buckets for everything else. Keyed "<action>:<who>" — usually the
+# username, so one tenant hammering the API cannot throttle everybody else.
+# Until now only login was limited: a compromised session could fire destroy or
+# provision in a loop and drive the whole Proxmox API into the ground.
+_action_buckets: dict[str, deque[float]] = {}
+
+
+def check_rate(bucket: str, limit: int, window: float) -> None:
+    """Sliding-window rate limit. Raises 429 when `bucket` exceeds `limit`/`window`."""
+    now = time.monotonic()
+    for key in list(_action_buckets.keys()):
+        dq = _action_buckets[key]
+        while dq and now - dq[0] > window:
+            dq.popleft()
+        if not dq:
+            del _action_buckets[key]
+
+    dq = _action_buckets.setdefault(bucket, deque())
+    if len(dq) >= limit:
+        raise HTTPException(429, "Too many requests — slow down")
+    dq.append(now)
+
+
+def reset_rates() -> None:
+    """Clear every action bucket (test/ops helper)."""
+    _action_buckets.clear()
+
 
 def _signer() -> TimestampSigner:
     secret = get_settings().session_secret
@@ -40,9 +67,16 @@ def _signer() -> TimestampSigner:
     return TimestampSigner(secret, salt="hlidskjalf-session")
 
 
-def csrf_for(session_value: str) -> str:
+def csrf_for(username: str, epoch: str = "") -> str:
+    """CSRF token for a session.
+
+    Bound to the password epoch as well as the username, so the token rotates
+    whenever the password does. Deriving it from the username alone made it a
+    permanent constant: leak it once (a log, a screenshot, an XSS) and it stayed
+    valid forever.
+    """
     key = get_settings().session_secret.encode()
-    return hmac.new(key, f"csrf:{session_value}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(key, f"csrf:{username}|{epoch}".encode(), hashlib.sha256).hexdigest()
 
 
 def check_login_rate(client_ip: str) -> None:
@@ -151,12 +185,15 @@ def _legacy_verify(username: str, password: str) -> bool:
 
 
 def start_session(response: Response, username: str, epoch: str) -> str:
-    """Set the session cookie ("<username>|<epoch>"); return the CSRF token.
+    """Set the session cookie ("<username>|<epoch>|<sid>"); return the CSRF token.
 
-    `epoch` binds the session to the password it was issued under — get it from
-    `current_epoch(username, db)`.
+    `epoch` binds the session to the password it was issued under (a password
+    change invalidates it). `sid` identifies this one session so that logging out
+    can revoke *it* — a signed stateless cookie is otherwise valid until it
+    expires, no matter how many times you press "log out".
     """
-    signed = _signer().sign(f"{username}|{epoch}").decode()
+    sid = secrets.token_urlsafe(16)
+    signed = _signer().sign(f"{username}|{epoch}|{sid}").decode()
     response.set_cookie(
         COOKIE_NAME,
         signed,
@@ -166,39 +203,42 @@ def start_session(response: Response, username: str, epoch: str) -> str:
         secure=get_settings().cookie_secure,
         path="/",
     )
-    # CSRF must be derived from the same value require_csrf / /api/session use,
-    # which is the *username*. Deriving it from the signed cookie here would hand
-    # out a token that never matches on mutations.
-    return csrf_for(username)
+    return csrf_for(username, epoch)
 
 
 def end_session(response: Response) -> None:
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
-def _unsign(cookie: str | None) -> tuple[str, str]:
-    """Returns (username, epoch) from the signed session cookie."""
+def _unsign(cookie: str | None) -> tuple[str, str, str]:
+    """Returns (username, epoch, sid) from the signed session cookie."""
     if not cookie:
         raise HTTPException(401, "Not logged in")
     try:
         raw = _signer().unsign(cookie, max_age=get_settings().session_max_age).decode()
     except BadSignature:
         raise HTTPException(401, "Session invalid or expired")
-    username, sep, epoch = raw.partition("|")
-    if not sep or not epoch:
-        # Pre-epoch cookie format (or tampering): refuse it. Upgrading the panel
+    parts = raw.split("|")
+    if len(parts) != 3 or not all(parts):
+        # An older cookie format (or tampering): refuse it. Upgrading the panel
         # therefore forces one fresh login, which is the intended behaviour.
         raise HTTPException(401, "Session invalid or expired")
-    return username, epoch
+    return parts[0], parts[1], parts[2]
 
 
-async def validate_session(cookie: str | None, db: Db) -> str:
-    """Unsign the cookie and confirm it was issued under the *current* password."""
-    username, epoch = _unsign(cookie)
+async def validate_session(cookie: str | None, db: Db) -> tuple[str, str, str]:
+    """Full session check. Returns (username, epoch, sid).
+
+    A session is valid only if it is signed, was issued under the user's *current*
+    password, and has not been revoked by a logout.
+    """
+    username, epoch, sid = _unsign(cookie)
     expected = await current_epoch(username, db)
     if not hmac.compare_digest(epoch, expected):
         raise HTTPException(401, "Session expired — password changed")
-    return username
+    if await db.is_session_revoked(sid):
+        raise HTTPException(401, "Session was logged out")
+    return username, epoch, sid
 
 
 async def require_session(
@@ -206,6 +246,15 @@ async def require_session(
     db: Db = Depends(get_db),
 ) -> str:
     """Dependency: returns the username from a valid, current session cookie."""
+    username, _epoch, _sid = await validate_session(session, db)
+    return username
+
+
+async def require_session_full(
+    session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    db: Db = Depends(get_db),
+) -> tuple[str, str, str]:
+    """Like `require_session`, but hands back (username, epoch, sid) — used by logout."""
     return await validate_session(session, db)
 
 
@@ -215,15 +264,16 @@ async def require_csrf(
     db: Db = Depends(get_db),
 ) -> str:
     """Mutating: validates the session + CSRF and returns username."""
-    username = await validate_session(session, db)
-    if not csrf or not hmac.compare_digest(csrf, csrf_for(username)):
+    username, epoch, _sid = await validate_session(session, db)
+    if not csrf or not hmac.compare_digest(csrf, csrf_for(username, epoch)):
         raise HTTPException(403, f"Missing or bad {CSRF_HEADER} header")
     return username
 
 
 async def session_from_request(request: Request, db: Db) -> str:
     """WebSocket: returns username from a valid, current session cookie."""
-    return await validate_session(request.cookies.get(COOKIE_NAME), db)
+    username, _epoch, _sid = await validate_session(request.cookies.get(COOKIE_NAME), db)
+    return username
 
 
 # --- User + role helpers (call from handlers: user = await get_current_user(username, db)) ---
@@ -241,6 +291,20 @@ async def get_current_user(username: str, db: Db) -> dict:
 
 def is_admin(user: dict) -> bool:
     return (user or {}).get("role") == "admin"
+
+
+def rate_limited(action: str, limit: int, window: float):
+    """Dependency factory: throttle `action` per user.
+
+    Keyed on the username, so one tenant hammering destroy cannot throttle anyone
+    else — and cannot drive the Proxmox API into the ground on their own either.
+    """
+
+    async def dep(username: str = Depends(require_session)) -> str:
+        check_rate(f"{action}:{username}", limit, window)
+        return username
+
+    return dep
 
 
 async def require_admin_user(

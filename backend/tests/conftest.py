@@ -145,8 +145,10 @@ def _reset_login_rate_limit():
     from hlidskjalf import auth
 
     auth.reset_login_rate()
+    auth.reset_rates()  # per-user buckets for power/provision/destroy/user actions
     yield
     auth.reset_login_rate()
+    auth.reset_rates()
 
 
 @pytest.fixture()

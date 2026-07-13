@@ -7,56 +7,12 @@ from pathlib import Path
 
 import aiosqlite
 
+from .migrations import migrate
+
 log = logging.getLogger("hlidskjalf.db")
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS bandwidth (
-    vmid      INTEGER NOT NULL,
-    date      TEXT    NOT NULL,          -- UTC YYYY-MM-DD
-    bytes_in  INTEGER NOT NULL DEFAULT 0,
-    bytes_out INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (vmid, date)
-);
-CREATE TABLE IF NOT EXISTS counters (
-    vmid       INTEGER PRIMARY KEY,
-    netin      INTEGER NOT NULL,
-    netout     INTEGER NOT NULL,
-    updated_at TEXT    NOT NULL
-);
-CREATE TABLE IF NOT EXISTS rescue (
-    vmid       INTEGER PRIMARY KEY,
-    boot       TEXT,                     -- original boot order value ('' = unset)
-    slot       TEXT    NOT NULL,         -- ide slot used for the rescue ISO
-    slot_prev  TEXT,                     -- original value of that slot ('' = unset)
-    entered_at TEXT    NOT NULL
-);
-CREATE TABLE IF NOT EXISTS switch_port_notes (
-    name       TEXT PRIMARY KEY,
-    note       TEXT    NOT NULL,
-    updated_at TEXT    NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY,
-    username      TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'user',   -- 'admin' | 'user'
-    vmid          INTEGER,                        -- assigned VM for regular users (unique)
-    created_at    TEXT NOT NULL
-);
-
--- ensure at most one user per vmid (for non-admin users)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_vmid ON users(vmid) WHERE vmid IS NOT NULL;
-
--- Runtime configuration written by the first-run setup wizard. Environment
--- variables always take precedence over these rows (see config.apply_stored),
--- so an operator using agenix/sops/systemd-creds keeps secrets out of the DB.
-CREATE TABLE IF NOT EXISTS config (
-    key        TEXT PRIMARY KEY,
-    value      TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-"""
+# NOTE: the schema now lives in migrations.py (v1 is the baseline). Adding a
+# table means appending a migration, not editing a blob here.
 
 
 class Db:
@@ -68,7 +24,9 @@ class Db:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
-        await self._conn.executescript(SCHEMA)
+        # Versioned, ordered migrations — and a backup of any database that
+        # already holds data before we touch its shape. See migrations.py.
+        self.schema_version = await migrate(self._conn, self.path)
         await self._conn.commit()
         # The DB holds password hashes and (after the setup wizard) the Proxmox
         # token secret, so it must not be world/group readable.
@@ -198,6 +156,80 @@ class Db:
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
             [(k, v, now) for k, v in values.items()],
         )
+        await self.conn.commit()
+
+    # --- audit log ------------------------------------------------------------
+
+    async def audit(
+        self,
+        actor: str,
+        action: str,
+        target: str | None = None,
+        detail: str | None = None,
+        client: str | None = None,
+        ok: bool = True,
+    ) -> None:
+        """Record who did what. Never pass a secret in `detail`."""
+        await self.conn.execute(
+            "INSERT INTO audit (ts, actor, action, target, detail, client, ok) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                datetime.now(timezone.utc).isoformat(),
+                actor or "-",
+                action,
+                target,
+                detail,
+                client,
+                1 if ok else 0,
+            ),
+        )
+        await self.conn.commit()
+
+    async def audit_recent(
+        self, limit: int = 200, actor: str | None = None, action: str | None = None
+    ) -> list[dict]:
+        sql = "SELECT * FROM audit"
+        where, args = [], []
+        if actor:
+            where.append("actor = ?")
+            args.append(actor)
+        if action:
+            where.append("action LIKE ?")
+            args.append(f"{action}%")
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY id DESC LIMIT ?"
+        args.append(max(1, min(limit, 1000)))
+        cur = await self.conn.execute(sql, args)
+        return [dict(r) for r in await cur.fetchall()]
+
+    async def audit_prune(self, keep: int = 20000) -> None:
+        """Cap the log so it cannot grow without bound on a busy panel."""
+        await self.conn.execute(
+            "DELETE FROM audit WHERE id <= "
+            "(SELECT MAX(id) FROM audit) - ?",
+            (keep,),
+        )
+        await self.conn.commit()
+
+    # --- session revocation ---------------------------------------------------
+
+    async def revoke_session(self, sid: str, expires_at: float) -> None:
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO revoked_sessions (sid, expires_at) VALUES (?, ?)",
+            (sid, expires_at),
+        )
+        await self.conn.commit()
+
+    async def is_session_revoked(self, sid: str) -> bool:
+        cur = await self.conn.execute(
+            "SELECT 1 FROM revoked_sessions WHERE sid = ? LIMIT 1", (sid,)
+        )
+        return await cur.fetchone() is not None
+
+    async def prune_revoked_sessions(self, now: float) -> None:
+        """A revoked session only needs remembering until it would have expired."""
+        await self.conn.execute("DELETE FROM revoked_sessions WHERE expires_at < ?", (now,))
         await self.conn.commit()
 
     # --- users (multi-user + roles) -------------------------------------------

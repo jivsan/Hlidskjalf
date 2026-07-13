@@ -10,10 +10,12 @@ Safety rails (non-negotiable, enforced here server-side):
 import re
 import urllib.parse
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+
+from .. import journal
 from pydantic import BaseModel, Field
 
-from ..auth import get_current_user, is_admin, require_csrf, require_session
+from ..auth import get_current_user, is_admin, rate_limited, require_csrf, require_session
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..db import Db
 from ..pve import PveClient
@@ -137,13 +139,16 @@ def _validate_create(body: CreateVm) -> None:
 @router.post("/api/vms", status_code=201)
 async def create_vm(
     body: CreateVm,
+    request: Request,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.provision", 10, 3600.0)),
     _=Depends(require_csrf),
 ):
     user = await get_current_user(username, db)
     if not is_admin(user):
+        await journal.record(db, request, username, journal.VM_PROVISION,
+                             body.name, "refused: not an admin", ok=False)
         raise HTTPException(403, "Only admins can create VMs")
     _validate_create(body)
     resources = await pve.cluster_resources()
@@ -169,6 +174,7 @@ async def create_vm(
     upids.append(clone_upid)
     await pve.wait_task(clone_upid, timeout=600)
     upids.extend(await _apply_cloudinit_and_size(pve, new_vmid, body))
+    await journal.record(db, request, username, journal.VM_PROVISION, new_vmid, body.name)
     return {"vmid": new_vmid, "upids": upids}
 
 
@@ -181,15 +187,21 @@ class Reinstall(BaseModel):
 async def reinstall_vm(
     vmid: int,
     body: Reinstall,
+    request: Request,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.reinstall", 5, 3600.0)),
     _=Depends(require_csrf),
 ):
     user = await get_current_user(username, db)
-    if not is_admin(user):
-        raise HTTPException(403, "Only admins can reinstall VMs")
-    guard_protected(vmid, "reinstall")
+    try:
+        if not is_admin(user):
+            raise HTTPException(403, "Only admins can reinstall VMs")
+        guard_protected(vmid, "reinstall")
+    except HTTPException as e:
+        await journal.record(db, request, username, journal.VM_REINSTALL, vmid,
+                             f"refused: {e.detail}", ok=False)
+        raise
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -247,22 +259,30 @@ async def reinstall_vm(
     if not ip_m:
         recreate.start = False  # no static IP recorded — configure before boot
     upids.extend(await _apply_cloudinit_and_size(pve, vmid, recreate, mac=mac))
+    await journal.record(db, request, username, journal.VM_REINSTALL, vmid,
+                         f"template {body.template_vmid}")
     return {"vmid": vmid, "upids": upids}
 
 
 @router.delete("/api/vms/{vmid}")
 async def destroy_vm(
     vmid: int,
+    request: Request,
     confirm_name: str = Body(embed=True),
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("vm.destroy", 5, 3600.0)),
     _=Depends(require_csrf),
 ):
     user = await get_current_user(username, db)
-    if not is_admin(user):
-        raise HTTPException(403, "Only admins can destroy VMs")
-    guard_protected(vmid, "destroy")
+    try:
+        if not is_admin(user):
+            raise HTTPException(403, "Only admins can destroy VMs")
+        guard_protected(vmid, "destroy")
+    except HTTPException as e:
+        await journal.record(db, request, username, journal.VM_DESTROY, vmid,
+                             f"refused: {e.detail}", ok=False)
+        raise
     resource = await pve.find_resource(vmid)
     if not resource:
         raise HTTPException(404, f"No guest with VMID {vmid}")
@@ -281,4 +301,5 @@ async def destroy_vm(
         purge=1, **{"destroy-unreferenced-disks": 1},
     )
     upids.append(upid)
+    await journal.record(db, request, username, journal.VM_DESTROY, vmid, f"name={name}")
     return {"upids": upids}

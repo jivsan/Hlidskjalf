@@ -4,13 +4,15 @@ Regular users get exactly one VM (like a VPS customer).
 Admins can create users, assign VMs, reset passwords, etc.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+
+from .. import journal
 from pydantic import BaseModel, Field
 
 import secrets
 
 from .. import auth
-from ..auth import get_current_user, is_admin, require_csrf, require_session
+from ..auth import get_current_user, is_admin, rate_limited, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db
 
@@ -52,9 +54,10 @@ async def list_users(
 @router.post("/api/users", status_code=201)
 async def create_user(
     body: CreateUserBody,
+    request: Request,
     db: Db = Depends(get_db),
     _csrf=Depends(require_csrf),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("user.create", 20, 3600.0)),
 ):
     me = await get_current_user(username, db)
     if not is_admin(me):
@@ -73,6 +76,8 @@ async def create_user(
     pw_hash = auth.hash_password(body.password)
     role = body.role if body.role in ("admin", "user") else "user"
     uid = await db.create_user(body.username, pw_hash, role, body.vmid)
+    await journal.record(db, request, username, journal.USER_CREATE, body.username,
+                         f"role={role} vmid={body.vmid}")
     return {"id": uid, "username": body.username, "role": role, "vmid": body.vmid}
 
 
@@ -80,10 +85,11 @@ async def create_user(
 async def set_password(
     target: str,
     body: PasswordBody,
+    request: Request,
     response: Response,
     db: Db = Depends(get_db),
     _csrf=Depends(require_csrf),
-    username: str = Depends(require_session),
+    username: str = Depends(rate_limited("user.password", 20, 3600.0)),
 ):
     me = await get_current_user(username, db)
     is_self = secrets.compare_digest(target, username)
@@ -112,6 +118,8 @@ async def set_password(
     # who did the right thing isn't the one who gets logged out.
     if is_self:
         auth.start_session(response, username, auth.session_epoch(new_hash))
+    await journal.record(db, request, username, journal.USER_PASSWORD, target,
+                         "self" if is_self else "admin reset")
     return {"ok": True}
 
 
@@ -119,6 +127,7 @@ async def set_password(
 async def assign_vmid(
     target: str,
     body: AssignVmidBody,
+    request: Request,
     db: Db = Depends(get_db),
     _csrf=Depends(require_csrf),
     username: str = Depends(require_session),
@@ -136,12 +145,14 @@ async def assign_vmid(
             raise HTTPException(409, f"VM {body.vmid} already assigned")
 
     await db.update_user_vmid(target, body.vmid)
+    await journal.record(db, request, username, journal.USER_ASSIGN, target, f"vmid={body.vmid}")
     return {"ok": True, "username": target, "vmid": body.vmid}
 
 
 @router.delete("/api/users/{target}")
 async def delete_user(
     target: str,
+    request: Request,
     db: Db = Depends(get_db),
     _csrf=Depends(require_csrf),
     username: str = Depends(require_session),
@@ -166,4 +177,5 @@ async def delete_user(
         raise HTTPException(400, "Cannot delete yourself")
 
     await db.delete_user(target)
+    await journal.record(db, request, username, journal.USER_DELETE, target)
     return {"ok": True}
