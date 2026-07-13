@@ -1,10 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   getProvisionSettings,
   putProvisionSettings,
   type ProvisionSettings,
 } from "../api";
 import { ErrorState, LoadingState, PageHeader } from "../components/ui";
+
+const UpdatesTab = lazy(() =>
+  import("./settings/UpdatesTab").then((m) => ({ default: m.UpdatesTab })),
+);
 
 const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
 
@@ -63,7 +68,51 @@ function LockedNote() {
   return <p className="text-xs text-muted mt-1">set by environment — locked</p>;
 }
 
+const TABS = ["provisioning", "updates"] as const;
+type Tab = (typeof TABS)[number];
+
+/** Settings is the panel's own config surface: what provisioning offers, and
+ *  whether the code you are running is the code that is published. */
 export function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const raw = searchParams.get("tab");
+  const tab: Tab = (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "provisioning";
+  const setTab = (t: Tab) =>
+    setSearchParams(t === "provisioning" ? {} : { tab: t }, { replace: true });
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <PageHeader eyebrow="panel configuration" title="Settings" />
+
+      <div className="border-b border-border-token flex gap-1 overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px ${
+              tab === t ? "border-pink text-pink" : "border-transparent text-muted hover:text-fg"
+            }`}
+            style={{ transition: "border-color 150ms ease, color 150ms ease" }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === "provisioning" ? (
+        <ProvisioningTab />
+      ) : (
+        <Suspense fallback={<LoadingState />}>
+          <UpdatesTab />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function ProvisioningTab() {
   const [loaded, setLoaded] = useState<ProvisionSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -141,9 +190,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <PageHeader eyebrow="panel configuration" title="Settings" />
-
+    <div className="space-y-6">
       {loaded.warning && (
         <div className="card border-amber/40 p-3 text-amber text-xs">
           could not query the node for live options — values are accepted

@@ -5,7 +5,55 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0-alpha] — 2026-07-13
+
+**The release where the panel met a real Proxmox host — and the mock stopped
+being the only witness.** Everything below was found by running against real
+hardware (Proxmox VE 9.2.3), not by reasoning about it. Two of the four bugs
+were in code that had been "green" for months.
+
+### Added — update detection (Settings → Updates)
+- `GET /api/version` (admin-only) compares the commit this panel is running with
+  the tip of `main` on GitHub and reports how many commits it is behind, with the
+  commit list. Push to `main`, and the panel notices.
+- **Fail-soft by contract**: no network, rate-limited, no GitHub → the panel
+  simply does not offer an update. It never blocks, never 500s, never nags. It
+  never phones home with anything identifying — an anonymous GET of a public repo.
+- **It refuses to lie**: a checkout that is *ahead* (unpushed work) is not "behind",
+  and an unknown commit says so rather than claiming "up to date".
+- **Deployment-aware**: it prints the honest command for *this* install (docker
+  compose pull / nixos-rebuild / git pull + rebuild + restart). The panel does not
+  update itself — an endpoint that runs new code on demand is a bigger hole than
+  anything it protects. Configurable: `HLIDSKJALF_UPDATE_{CHECK_ENABLED,REPO,BRANCH}`.
+
+### Added — admin Settings page
+- **Provisioning is configurable from the panel.** VLAN tags → gateways, the clone
+  storage, and the bridge, all editable in the UI, with storage and bridge options
+  read from what the node *actually* reports. Before this, provisioning could not
+  work at all without hand-written env vars: `vlan_gateways` defaulted to empty, so
+  **every** create was rejected.
+- Env still wins (agenix/sops/systemd-creds users are never overridden); env-locked
+  keys are shown locked and refuse edits, with a separate `ADMIN_WRITABLE` allowlist
+  so the unauthenticated setup allowlist does not grow.
+
+### Added — profile page
+- Click your username → `/profile` → change your own password (current password
+  required, min 8). Every *other* session is signed out; yours survives.
+
+### Fixed — the console (it was broken in two different ways, on real hardware)
+- **Containers never had a console, and could not have had one.** An LXC guest's
+  `vncproxy` completes the RFB handshake, authenticates — and then hangs forever at
+  ClientInit. Verified against real PVE with the panel removed from the path
+  entirely. That is why Proxmox's own UI drives containers through **termproxy**.
+  Containers now open a real xterm.js terminal; the panel performs termproxy's
+  `<user>:<ticket>` auth **upstream itself**, so a container's ticket never reaches
+  the browser at all.
+- **Every VM console died on arrival** — black screen, "connection lost
+  unexpectedly". RFC 6455 §4.1: a client MUST fail the connection if the server
+  selects a subprotocol it did not offer. The panel answered `binary`
+  unconditionally; **noVNC ≥1.5 offers none**. The panel now negotiates. (The
+  terminal asked for `binary` explicitly — which is precisely why containers worked
+  and VMs did not, and why this hid for so long.)
 
 ### Fixed — first contact with real hardware (Phase 1, 2026-07-13)
 `scripts/validate-proxmox.py` ran read-only against a real Proxmox VE 9.2.3 host
@@ -34,8 +82,17 @@ what the panel normalises. Each finding got its own PR:
   `dev/mock_pve.py` invented 45% of maxdisk. The mock now matches reality, with
   parity + pass-through tests; the UI already handled 0 honestly.
 
-193 backend tests. Also: branch protection (ruleset `protect-main`) — PRs
-required, force-push/deletion blocked, `backend`+`frontend` CI checks required.
+**219 backend tests**, `tsc` + `vite build` clean. Branch protection (ruleset
+`protect-main`): PRs required, force-push/deletion blocked, `backend` + `frontend`
+CI checks required.
+
+### The mock, three times a liar
+Every bug above hid behind a green suite, because `dev/mock_pve.py` is a mock we
+wrote ourselves — it reflects our assumptions back at us. It has now been caught
+lying three times: 8-field UPIDs (real PVE emits 9), fabricated QEMU disk usage
+(real PVE reports 0), and a single echo websocket that made a container's console
+look identical to a VM's. Each fix includes the mock correction and the test that
+would have caught it. **A green suite here means "self-consistent", not "works".**
 
 ### Security — hardening from a self-audit
 A pass over the gaps the v0.3.6 audit did not cover. Each of these was real:

@@ -70,6 +70,15 @@ class Settings(BaseSettings):
     # (verified 2026-07-13: the first real host runs its guests on vmbr1).
     pve_bridge: str = "vmbr0"
 
+    # --- Update detection (routes/version.py) --------------------------------
+    # The panel compares its running commit with the tip of `update_branch` in
+    # `update_repo` on GitHub, and says so if it is behind. Detection only — it
+    # never applies anything. Fail-soft: no network, no update offer, no error.
+    # Nothing identifying is ever sent; it is an anonymous GET of a public repo.
+    update_check_enabled: bool = True
+    update_repo: str = "jivsan/Hlidskjalf"  # a fork can point this at itself
+    update_branch: str = "main"
+
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
     metrics_source: str = "rrd"

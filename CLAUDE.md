@@ -11,16 +11,20 @@ and is kept current every session. `CHANGELOG.md` is Keep-a-Changelog format.
 
 # ⚠️ READ THIS FIRST IF YOU ARE ON REAL HARDWARE
 
-**The panel process has never been run against a real Proxmox host.** (Phase 1 —
-the read-only `scripts/validate-proxmox.py` sweep — passed against a real PVE
-9.2.3 host on 2026-07-13: 35 pass, 0 FAIL. See `handoff.md` for results and the
-remaining Phases 2–4.)
+**v0.4.0-alpha has been tested against a real Proxmox VE 9.2.3 host** (2026-07-13,
+read-only validation + the panel itself, live, from a Debian dev VM on the LAN).
+The first-run wizard, fleet, node, graphs and **both consoles** work on real
+hardware. See `handoff.md` for what that run found — and it found plenty.
 
-All 193 backend tests pass — against `dev/mock_pve.py`, a mock **we wrote
+**The write paths are still unproven**: nothing has been provisioned, reinstalled,
+rescued or destroyed through the panel on real hardware. That is Phase 3.
+
+All 219 backend tests pass — against `dev/mock_pve.py`, a mock **we wrote
 ourselves**. It is our own assumptions reflected back at us. Green tests here mean
-"self-consistent", not "works". If you are running on Christian's LAN with access to
-the real Proxmox host, **you are the next contact with reality** and that is the
-whole point of you being there.
+"self-consistent", not "works". **The mock has now been caught lying three times**:
+8-field UPIDs (real PVE emits 9), fabricated QEMU disk usage (real PVE reports 0),
+and a single echo websocket that made a container's console look identical to a
+VM's — hiding the fact that neither console worked. Assume there are more.
 
 ## Hard safety rules — do not negotiate with these
 
@@ -47,28 +51,37 @@ whole point of you being there.
    gitignored — keep it that way. Never paste a token secret into a commit, a PR body,
    or a chat message.
 
-## The assumptions most likely to be wrong
+## Settled against real hardware (do not re-litigate)
 
-Prioritise these — they are where the mock is most likely lying to us:
+Confirmed on PVE 9.2.3, 2026-07-13 — these were the scary unknowns, and they held:
 
-- **UPID format — security-critical.** `routes/vms.py::_vmid_from_upid` parses
-  `UPID:node:pid:pstart:starttime:dtype:id:user:` and uses field 6 as the vmid to
-  authorise task-status reads. If real PVE's format differs, the panel either 403s
-  legitimate users **or fails open**. Verify against real UPIDs.
-- **The noVNC console byte-pump has never been exercised against a real VNC endpoint.**
-  The mock has no VNC. Open a console on a scratch VM and actually type in it.
-- **Can a scoped (non-root) token call `GET /nodes`?** The setup wizard depends on it.
-  If `PVEAuditor` doesn't grant it, first-run is broken for everyone.
-- **Single node vs cluster.** The panel assumes ONE node (`pve_node`). A cluster will
-  surface only that node. Confirm and report.
-- **QEMU guest agent absent** → the panel must degrade, not 500.
-- **rrddata / node-status shapes** (`memory` nested? `cpuinfo.cpus`?) — `routes/metrics.py`
-  normalises both, but only against the mock's idea of them.
-- **Cert pinning.** `pve.py` pins the PVE cert by SHA-256 and **refuses https without a
-  fingerprint**. Get it from the host:
+- **UPID format.** Real PVE emits 9 fields; `_vmid_from_upid` reads `parts[6]` and is
+  **correct** — task-status authorisation is sound. (The *mock* was the liar.)
+- **A scoped non-root token CAN call `GET /nodes`** → the setup wizard works.
+- **rrddata / node-status shapes** match what `routes/metrics.py` normalises.
+- **QEMU guest agent absent** → degrades correctly (500 from PVE, caught, falls back).
+- **Cert pinning works.** `pve.py` refuses https without a fingerprint, by design:
   ```bash
   openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
   ```
+- **Consoles differ by guest kind, and this is not negotiable:** QEMU → `vncproxy`
+  (noVNC/RFB). LXC → `termproxy` (xterm.js). A container's `vncproxy` completes the
+  RFB handshake and then **hangs forever at ClientInit** — that is Proxmox, not us.
+  Also: negotiate the websocket subprotocol, never assert it (noVNC offers none).
+
+## The assumptions still most likely to be wrong
+
+The write paths — nothing here has ever run against real hardware:
+
+- **`scsi0` is hardcoded** for template disk reads and resize (`routes/provision.py`).
+  A template on `virtio0`/`sata0` silently never resizes.
+- **`destroy-unreferenced-disks`** is passed for LXC destroy too; real PVE may 400 on
+  the unknown param. The mock ignores query params entirely.
+- **Reinstall must preserve MAC/IP**, and **rescue must restore boot order**.
+- **Bandwidth accumulator**: counters must not double-count across a panel restart or
+  go negative when a guest reboots.
+- **Single node vs cluster.** The panel assumes ONE node (`pve_node`); hella is single-
+  node, so the cluster path is still untested.
 
 ## What to do with what you find
 
@@ -141,10 +154,22 @@ cd frontend && npx tsc --noEmit && npm run build    # must be clean, no chunk wa
 - Setup endpoints are unauthenticated **only** while no user exists; they close forever
   after that. Do not add a way to re-open them.
 
+# Genericity — this ships to other people
+
+**Nothing site-specific belongs in code.** Christian's rule: the panel must work in
+anyone's setup. Hella's IPs, VMIDs, storage names, bridges and fingerprints live in
+env/config/docs — never in code defaults or tests. Config that used to be env-only
+(VLANs, clone storage, bridge) is now editable in **Settings**. The install bar is
+"install → paste the Proxmox API token → set credentials → done".
+
+The one sanctioned exception, for now: the **switch faceplate**, hardcoded to
+Christian's Arista DCS-7050TX-48.
+
 # Known limitations
 
 - **Single Proxmox node only** — a cluster shows just `pve_node`.
-- The switch faceplate is hardcoded to a 48-port + 4-QSFP Arista DCS-7050TX-48; it does
-  not render from what the switch actually reports. (The Switch page is optional —
-  leaving `switch_host` unset hides it.)
-- Provisioning is QEMU-only (LXC list/power works; LXC create does not).
+- The switch faceplate does not render from what the switch actually reports. (The
+  Switch page is optional — leaving `switch_host` unset hides it.)
+- Provisioning is QEMU-only (LXC list/power/console work; LXC create does not).
+- The panel **detects** updates (Settings → Updates) but does not apply them.
+- Provisioning always picks the next free VMID; you cannot choose one yet.
