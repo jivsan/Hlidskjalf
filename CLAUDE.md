@@ -38,7 +38,8 @@ whole point of you being there.
    pveum user token add hlidskjalf@pve panel --privsep 0     # prints the secret ONCE
    ```
 4. **Read-only first.** Run `scripts/validate-proxmox.py` (read-only by default) before
-   the panel touches anything. See `docs/real-hardware-validation.md`.
+   the panel touches anything. See `docs/real-hardware-validation.md`, and
+   `docs/dev-against-real-proxmox.md` for the dev-VM setup.
 5. **Never commit secrets.** `dev/dev.env`, tokens, fingerprints, and the state dir are
    gitignored — keep it that way. Never paste a token secret into a commit, a PR body,
    or a chat message.
