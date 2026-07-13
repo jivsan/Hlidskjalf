@@ -50,12 +50,22 @@ async def lifespan(app: FastAPI):
     await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)
 
     app.state.pve = PveClient(settings)
-    if settings.metrics_source != "rrd":
+    # Metrics datasource — rrd (PVE rrddata) is the default; prometheus is the
+    # drop-in long-range alternative (same MetricsSource protocol, same rows).
+    source = (settings.metrics_source or "rrd").lower()
+    if source == "prometheus":
         from .datasources.prometheus import PrometheusSource
 
-        app.state.metrics = PrometheusSource()
-    else:
+        # Raises a clear RuntimeError if prometheus_url is unset.
+        app.state.metrics = PrometheusSource(settings)
+        log.info("metrics source: prometheus (%s)", settings.prometheus_url)
+    elif source == "rrd":
         app.state.metrics = RRDSource(app.state.pve)
+    else:
+        raise RuntimeError(
+            f"HLIDSKJALF_METRICS_SOURCE={settings.metrics_source!r} is not valid "
+            "(expected 'rrd' or 'prometheus')"
+        )
     app.state.accumulator = Accumulator(app.state.pve, app.state.db)
     await app.state.accumulator.start()
     log.info("hlidskjalf up — watching %s from the high seat", settings.pve_node)
@@ -63,6 +73,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await app.state.accumulator.stop()
+        closer = getattr(app.state.metrics, "aclose", None)  # prometheus holds an httpx client
+        if closer:
+            await closer()
         await app.state.pve.aclose()
         await app.state.db.close()
 

@@ -49,7 +49,37 @@ class Settings(BaseSettings):
     # offered in the provision form.
     vlan_gateways: dict[str, str] = {}
     clone_storage: str = "local-lvm"  # Proxmox's usual default storage
-    metrics_source: str = "rrd"  # rrd | prometheus (phase 2)
+
+    # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
+    # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
+    metrics_source: str = "rrd"
+
+    # --- Prometheus datasource (only used with metrics_source=prometheus) ----
+    # Base URL of the Prometheus HTTP API, WITHOUT the /api/v1 suffix, e.g.
+    # "http://192.168.1.17:9090". Required when metrics_source=prometheus.
+    prometheus_url: str = ""
+    # Optional bearer token, sent as `Authorization: Bearer <token>` (for a
+    # Prometheus behind an auth proxy). Leave empty for an unauthenticated one.
+    prometheus_token: str = ""
+    # Optional HTTP basic auth (alternative to the bearer token).
+    prometheus_username: str = ""
+    prometheus_password: str = ""
+    # TLS for an https prometheus_url — same policy as the switch eAPI: pin the
+    # cert by SHA-256 fingerprint (colon-separated hex) if it is self-signed,
+    # else verify against system CAs (prometheus_verify=True, the default). Set
+    # prometheus_verify=False only to knowingly disable verification (warns once).
+    # Ignored for a plain-http URL (the common in-LAN case).
+    prometheus_fingerprint: str = ""
+    prometheus_verify: bool = True
+    # HTTP timeout (seconds) for a query_range call.
+    prometheus_timeout: float = 15.0
+    # Optional PromQL for the node-series fields prometheus-pve-exporter does NOT
+    # export (iowait, loadavg, netin, netout — PVE's /cluster/resources has no
+    # such node fields). JSON map of node field -> PromQL expression; `$node` and
+    # `$step` (the step in seconds) are substituted. Typically points at a
+    # node_exporter on the PVE host. Fields left out stay None. e.g.
+    #   {"loadavg": "node_load1{instance=\"pve:9100\"}"}
+    prometheus_node_queries: dict[str, str] = {}
 
     # Logging & debug
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR
@@ -88,7 +118,7 @@ class Settings(BaseSettings):
             return [int(x) for x in v.split(",") if x.strip()]
         return v
 
-    @field_validator("bandwidth_quotas", "vlan_gateways", mode="before")
+    @field_validator("bandwidth_quotas", "vlan_gateways", "prometheus_node_queries", mode="before")
     @classmethod
     def _parse_json(cls, v):
         if isinstance(v, str):
