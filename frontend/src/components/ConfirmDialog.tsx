@@ -28,6 +28,16 @@ export function ConfirmDialog({
     if (open) setTyped("");
   }, [open]);
 
+  // Escape closes the dialog (unless a confirm action is in flight).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onCancel]);
+
   if (!open) return null;
 
   const ok = requireText == null || typed === requireText;
@@ -35,12 +45,13 @@ export function ConfirmDialog({
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-bg/80 p-4"
-      onClick={onCancel}
+      onClick={busy ? undefined : onCancel}
     >
       <div
         className="card p-5 w-full max-w-md"
         role="dialog"
         aria-modal="true"
+        aria-label={title}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base mb-3">{title}</h2>
@@ -54,6 +65,9 @@ export function ConfirmDialog({
               className="input"
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && ok && !busy) onConfirm(typed);
+              }}
               autoFocus
               spellCheck={false}
               autoComplete="off"

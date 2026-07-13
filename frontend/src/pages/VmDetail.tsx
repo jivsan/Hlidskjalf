@@ -27,9 +27,11 @@ const TAB_LABELS: Record<Tab, string> = {
   tasks: "Tasks & Logs",
 };
 
-export function VmDetailPage({ currentRole: _role, myVmid: _myVmid }: { currentRole?: string; myVmid?: number | null }) {
+export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: string; myVmid?: number | null }) {
+  const isAdmin = currentRole === "admin";
   const { vmid: vmidParam } = useParams<{ vmid: string }>();
-  const vmid = vmidParam;
+  // Validate the URL param before it reaches any API path.
+  const vmid = /^\d{1,9}$/.test(vmidParam ?? "") ? Number(vmidParam) : null;
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
   const [busyAction, setBusyAction] = useState<PowerAction | null>(null);
@@ -46,7 +48,12 @@ export function VmDetailPage({ currentRole: _role, myVmid: _myVmid }: { currentR
   const detail = usePoll(
     () => api.get<VmDetail>(`/api/vms/${vmid}`),
     tab === "console" ? 60000 : 3000,
+    vmid != null,
   );
+
+  if (vmid == null) {
+    return <ErrorState message={`invalid VM id "${vmidParam ?? ""}" in URL`} />;
+  }
 
   const doAction = async (action: PowerAction) => {
     if (!detail.data) return;
@@ -182,7 +189,7 @@ export function VmDetailPage({ currentRole: _role, myVmid: _myVmid }: { currentR
         ))}
       </div>
 
-      {tab === "overview" && <OverviewTab vm={vm} onChanged={detail.refresh} />}
+      {tab === "overview" && <OverviewTab vm={vm} onChanged={detail.refresh} isAdmin={isAdmin} />}
       {tab === "graphs" && <GraphsTab vm={vm} />}
       {tab === "console" && (
         <Suspense fallback={<LoadingState message="loading console…" />}>

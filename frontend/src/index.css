@@ -24,7 +24,7 @@
   }
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-card border text-sm
-      disabled:opacity-40 disabled:cursor-not-allowed transition-none select-none;
+      disabled:opacity-40 disabled:cursor-not-allowed select-none transition-colors duration-100;
   }
   .btn-cyan {
     @apply btn border-cyan/50 text-cyan hover:bg-cyan/10;
@@ -43,7 +43,7 @@
   }
   .input {
     @apply bg-bg border border-border-token rounded-card px-3 py-1.5 text-sm text-fg w-full
-      placeholder:text-muted focus:outline-none focus:border-pink/70;
+      placeholder:text-muted focus:outline-none focus:border-pink/70 transition-colors duration-100;
   }
   .label {
     @apply block text-xs text-muted mb-1;
@@ -555,62 +555,66 @@
 /* Robust states inside faceplate */
 .faceplate-wrapper.loading .arista-chassis { opacity: 0.7; }
 .faceplate-wrapper.error .arista-chassis { opacity: 0.55; filter: saturate(0.6); }
-.port-rj45.down, .port-qsfp.down { opacity: 0.85; }
+.rj45-port.down { opacity: 0.85; }
 
-/* Legacy canvas class kept for compat but unused */
-.canvas-faceplate { display: none; }
-.svg-led { transition: fill 80ms ease; }
+/* NOTE: a duplicated "enhanced port styling" block used to live here and
+   silently overrode the responsive grid faceplate above with fixed pixel
+   sizes (flex + 11px ports). Removed in v0.3.4 — the grid layout above is
+   the single source of truth for port styling. */
 
-/* --- Enhanced realistic port styling for <Rj45Port> / <QsfpPort> (or inline render) --- */
-/* RJ45: dark metal body, deep recess jack, latch notch, 8 pin contacts, LED above with glass effect */
-.port-rj45, .rj45-port {
-  width: 11px; height: 9px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
-  background: linear-gradient(180deg, #1f2636 0%, #12171f 100%);
-  border: 1px solid #2c3344; border-radius: 1px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 1px rgba(0,0,0,0.6);
-  cursor: pointer; transition: transform 60ms ease, box-shadow 60ms ease, border-color 60ms;
-  margin: 0 0.5px; vertical-align: top;
-}
-.port-rj45:hover, .rj45-port:hover { transform: translateY(-0.5px); border-color: #4a5168; }
-.port-rj45.selected, .rj45-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3, inset 0 1px 0 rgba(255,255,255,0.06); }
-.port-rj45.up { background: linear-gradient(180deg, #21293a 0%, #141a24 100%); }
-.port-rj45 .port-body, .rj45-port .jack { position: relative; width: 9px; height: 7px; background: #0a0c14; border: 1px solid #181d28; border-radius: 0.5px; margin-top: 0.5px; }
-.port-rj45 .jack-hole, .rj45-port .recess { position: absolute; inset: 1px 1.5px 1px 1.5px; background: #05070d; border-radius: 0.5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.9); }
-.port-rj45 .contacts, .rj45-port .contacts { position: absolute; inset: 0.5px 1px; display: flex; justify-content: space-between; }
-.port-rj45 .contacts span, .rj45-port .contacts span { width: 0.6px; background: #252c3b; margin-top: 0.5px; }
-.port-rj45 .port-led, .rj45-port .port-led {
-  position: absolute; top: -2.5px; left: 50%; transform: translateX(-50%);
-  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.5);
-  box-shadow: 0 0 1px rgba(255,255,255,0.4) inset;
-  z-index: 2;
-}
-.port-rj45.up .port-led, .rj45-port.up .port-led { background: #22c55e; }
-.port-rj45.active .port-led, .rj45-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
-.port-rj45 .port-num, .rj45-port .port-num { font-size: 4.5px; color: #5f677f; margin-top: 0.5px; line-height: 1; }
+/* --- Shared UI polish (v0.3.4) ------------------------------------------- */
 
-/* QSFP cage: metal gradient, slotted interior, deeper recess */
-.port-qsfp, .qsfp-port {
-  width: 14px; height: 12px; position: relative; display: inline-flex; flex-direction: column; align-items: center;
-  background: linear-gradient(180deg, #1a1f2b 0%, #10141d 100%);
-  border: 1px solid #2a3040; border-radius: 1px;
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.5);
-  cursor: pointer; margin: 1px 0; transition: border-color 60ms, transform 60ms;
+/* Loading spinner (pairs with <LoadingState/>) */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid rgba(45, 226, 230, 0.25);
+  border-top-color: #2de2e6;
+  animation: spin 700ms linear infinite;
+  flex-shrink: 0;
 }
-.port-qsfp:hover, .qsfp-port:hover { border-color: #4a5168; }
-.port-qsfp.selected, .qsfp-port.selected { border-color: #ff4fa3; box-shadow: 0 0 0 1px #ff4fa3; }
-.port-qsfp .port-led, .qsfp-port .port-led {
-  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
-  width: 3px; height: 2px; border-radius: 50%; background: #f7768e; border: 0.5px solid rgba(0,0,0,0.4);
-  z-index: 2;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
-.port-qsfp.up .port-led, .qsfp-port.up .port-led { background: #22c55e; }
-.port-qsfp.active .port-led, .qsfp-port.active .port-led { animation: port-led-blink 520ms steps(2) infinite; }
-.port-qsfp .cage, .qsfp-port .cage { width: 12px; height: 9px; background: #07090f; border: 1px solid #1f2533; margin-top: 1px; position: relative; }
-.port-qsfp .lanes, .qsfp-port .lanes { position: absolute; inset: 1px; display: flex; justify-content: space-between; }
-.port-qsfp .lanes span, .qsfp-port .lanes span { width: 1px; background: #1f2533; }
-.port-qsfp .port-num, .qsfp-port .port-num { font-size: 4px; color: #4a516a; line-height: 1; }
-.port-qsfp .qsfp-speed, .qsfp-port .qsfp-speed { font-size: 3px; color: #3a4158; margin-top: -1px; }
 
-/* Row grid layout for ports in chassis */
-.ports-grid, .ports-grid-copper, .ports-grid-qsfp { display: flex; flex-wrap: nowrap; gap: 1px; }
-.ports-grid-qsfp { flex-direction: column; margin-left: 4px; }
+/* Login screen: quiet radial glow behind the card, hairline accent on top */
+.login-backdrop {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 38%, rgba(255, 79, 163, 0.06), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 62%, rgba(45, 226, 230, 0.05), transparent 70%);
+}
+.login-card {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+.login-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #ff4fa3 0%, #2de2e6 100%);
+  opacity: 0.8;
+}
+
+/* Keyboard-visible focus ring everywhere (kept off for mouse clicks) */
+:focus-visible {
+  outline: 2px solid rgba(45, 226, 230, 0.7);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* Motion sensitivity: stop the LED blinking + spinner rotation */
+@media (prefers-reduced-motion: reduce) {
+  .led-active,
+  .rj45-port.active .port-led,
+  .qsfp-port.active .port-led {
+    animation: none;
+  }
+  .spinner {
+    animation-duration: 2s;
+  }
+}

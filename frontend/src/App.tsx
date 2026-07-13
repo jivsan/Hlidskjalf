@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { restoreSession, type SessionInfo } from "./api";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { ToastProvider } from "./components/Toast";
 import { LoadingState } from "./components/ui";
@@ -54,8 +55,9 @@ export function App() {
   const isAdmin = currentUser?.role === "admin";
 
   return (
-    <ToastProvider>
-      <BrowserRouter>
+    <ErrorBoundary label="panel">
+      <ToastProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           {authed && currentUser ? (
@@ -79,7 +81,8 @@ export function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           )}
         </Routes>
-      </BrowserRouter>
-    </ToastProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

@@ -1,5 +1,6 @@
-import React, { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { api } from "../api";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useToast } from "../components/Toast";
 import { ErrorState, LoadingState } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
@@ -7,19 +8,6 @@ import type { SwitchPort, SwitchPortsResponse } from "../types";
 
 // Port alias for brevity (matches backend PortInfo serialized).
 type Port = SwitchPort;
-
-// Simple ErrorBoundary for faceplate (TS class component)
-class FaceplateErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) { super(props); this.state = { hasError: false }; }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: Error) { console.error("Faceplate render error:", error); }
-  render() {
-    if (this.state.hasError) {
-      return <div className="p-3 text-xs text-red border border-red/40 rounded">Faceplate error — showing last known port data in sidebar if available.</div>;
-    }
-    return this.props.children;
-  }
-}
 
 export function SwitchPage() {
   const toast = useToast();
@@ -258,7 +246,7 @@ export function SwitchPage() {
             SWITCH <span className="text-cyan">DCS-7050TX-48</span>
           </h1>
           <div className="text-xs text-muted metric">
-            10.0.20.2 • {connected} up • {data.length} reported • React+CSS physical faceplate
+            eAPI • {connected} up • {data.length} reported
           </div>
         </div>
         <div className="text-[10px] text-muted tracking-[2px] border border-border-token px-2 py-0.5 rounded">
@@ -285,11 +273,17 @@ export function SwitchPage() {
             <div className="rack-ear rack-ear-left" />
             <div className="rack-ear rack-ear-right" />
             <div className="rack-bezel">
-              <div className="faceplate-wrapper">
-                <FaceplateErrorBoundary>
-                  {renderReactFaceplate()}
-                </FaceplateErrorBoundary>
-              </div>
+              <ErrorBoundary
+                label="faceplate"
+                resetKey={data}
+                fallback={
+                  <div className="p-3 text-xs text-red border border-red/40 rounded">
+                    faceplate failed to render — port details remain available in the sidebar
+                  </div>
+                }
+              >
+                {renderReactFaceplate()}
+              </ErrorBoundary>
             </div>
           </div>
           <div className="mt-1.5 px-1 flex items-center justify-between text-[10px] text-muted tracking-widest">

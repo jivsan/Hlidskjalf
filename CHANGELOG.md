@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(nothing yet)
+
+## [v0.3.4-alpha] - 2026-07-13
+
+### Frontend robustness + security (frontend-only pass)
+- **Error boundaries**: new reusable `ErrorBoundary` component wraps the whole app
+  and every routed page (resets on navigation) — a render crash on one page no
+  longer blanks the entire SPA. The switch faceplate uses it too (replacing its
+  local one-off boundary).
+- **Users admin page rewritten**: browser `prompt()` dialogs are gone (passwords
+  were typed into plaintext prompts and API failures were silently unhandled).
+  Now: proper modals for assign-VM / reset-password / **delete user** (typed-name
+  confirm), role select (admin/user), free-VM filtering in assign dropdowns,
+  client-side validation (username charset, min password length), load-error
+  state with retry, VM names shown next to assigned vmids.
+- **API layer**: 20 s request timeout via `AbortController` (a hung backend can no
+  longer wedge spinners forever), distinct "network error / timed out" messages,
+  tolerant of empty response bodies.
+- **Role-aware danger zone**: reinstall/destroy controls are hidden from regular
+  users (they are admin-only server-side; the UI showed dead buttons that 403'd).
+- **Defensive rendering**: `/vm/:vmid` validates the URL param before issuing API
+  calls; `watchTask` gives up after 15 min instead of polling forever; toast stack
+  capped at 5; Debug page renders nested objects as JSON (was `[object Object]`);
+  ConfirmDialog closes on Escape, confirms on Enter, and is `aria-label`led.
+- **Login hardening**: username trimmed, autocapitalize/autocorrect/spellcheck off.
+- `index.html`: `referrer no-referrer` + `robots noindex` meta tags.
+- Removed the hardcoded switch management IP from the Switch page header.
+
+### Fixed (visual)
+- **Switch faceplate layout**: a duplicated legacy CSS block was overriding the
+  responsive grid with fixed 11-px flex ports, squashing all 48 ports into the
+  upper-left corner of the chassis. Deduped — ports now span the full faceplate
+  in 2×24 rows with port numbers, matching the real DCS-7050TX-48.
+
+### Changed (design)
+- Login page redesigned: gradient accent card, radial backdrop glow, larger
+  wordmark, footer tagline.
+- Sidebar: accent-bar active nav states, hover transitions, role badge
+  (pink admin / cyan user), "HIGH SEAT · HELLA" tagline, username truncation.
+- Buttons/inputs: subtle color transitions; keyboard `:focus-visible` ring
+  everywhere; spinner-based `LoadingState`; `prefers-reduced-motion` disables
+  LED blink animations.
+- New screenshot gallery `docs/screenshots/v0.3.4-alpha/` (login, admin
+  fleet/users/provision/node/switch/debug/vm-detail + user my-vm/switch),
+  captured live from the dev stack. READMEs updated to point at it.
+- Frontend version bumped to 0.3.4-alpha. `tsc` + `vite build` clean.
+
 ### Security (hardening batch — PRs #16–#19)
 - **Fixed CSRF login token that broke every mutation** (PR #16): `start_session`
   handed out `csrf_for(signed_cookie)` while `require_csrf`/`/api/session` expect
