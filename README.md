@@ -1,96 +1,103 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> v0.3.6-alpha
+> **v0.4.1-alpha** · tested against a real Proxmox VE 9.2.3 host
 
-A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live
-graphs, per-VM bandwidth accounting with monthly charts and quotas, provisioning
-from cloud-init templates, reinstall, SystemRescue boot, and a noVNC console —
-all through a **non-root, scoped PVE API token**, with the API TLS certificate
-pinned by SHA-256 fingerprint.
+A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live graphs,
+per-VM bandwidth accounting with monthly charts and quotas, provisioning from cloud-init
+templates, reinstall, SystemRescue boot, and a working console for both VMs and
+containers — all through a **non-root, scoped PVE API token**, with the Proxmox TLS
+certificate **pinned by SHA-256 fingerprint**.
 
-Each regular user is scoped to exactly one VM (the VPS model); admins see the
-whole fleet. FastAPI backend serving a React SPA — one service, one port.
+Each regular user is scoped to exactly one VM (the VPS model); admins see the whole
+fleet. FastAPI backend serving a React SPA — **one service, one port**.
 
-## Getting started
+---
 
-The panel ships **unconfigured**. Start it and open it in a browser: it serves a
-**setup wizard** where you point it at your Proxmox, paste an API token (checked
-with a live call before anything is saved), create the admin account, and
-optionally create a first user. No env file required.
+## Quick start
+
+The panel ships **unconfigured**. Start it, open it in a browser, and it serves a
+**setup wizard**: point it at your Proxmox, paste an API token (validated with a live
+call before anything is saved), create the admin account. No env file required.
 
 ```bash
-docker compose up -d      # or: pip install -e backend && hlidskjalf
+docker compose up -d           # or: pip install -e backend && hlidskjalf
 # open http://localhost:8787
 ```
 
-Full walkthrough — including how to mint the scoped Proxmox token, and exactly
-where the secret is stored — in **[docs/setup.md](docs/setup.md)**.
+### 1. Make a scoped Proxmox token
 
-Prefer to configure everything declaratively? Set the environment variables
-instead (`hlidskjalf.env.example`) and the wizard never appears — env always wins
-over anything the wizard stored, so secrets can live in agenix/sops/systemd-creds.
-See `plan.md` for the full design and `docs/bootstrap.md` for the Proxmox-side setup.
+Never `root@pam`, never a password, and never `PVEAdmin`. Four narrow roles, each on the
+path that needs it — **the wizard prints these commands for you**, generated from the
+token id you type:
 
-## Screenshots
+```bash
+pveum user add hlidskjalf@pve
 
-```
-  [ CYAN / PINK SERVER ROOM FEEDS ]
-  ╔════════════════════════════════════════════════════╗
-  ║  ACCESS: docs/screenshots/  |  CURRENT: v0.3.6-alpha ║
-  ╚════════════════════════════════════════════════════╝
-```
+pveum acl modify /vms       --users hlidskjalf@pve --roles PVEVMAdmin       # guests
+pveum acl modify /storage   --users hlidskjalf@pve --roles PVEDatastoreUser # clone disks
+pveum acl modify /          --users hlidskjalf@pve --roles PVEAuditor       # GET /nodes, tasks
+pveum acl modify /sdn/zones --users hlidskjalf@pve --roles PVESDNUser       # NIC → bridge/VLAN
 
-Enter the rack: **[docs/screenshots/](docs/screenshots/)**  
-
-**Current (v0.3.6-alpha - first-run setup wizard, security audit, no hardcoded host, Prometheus, −71% bundle):**  
-[v0.3.6-alpha/README.md](docs/screenshots/v0.3.6-alpha/README.md)  
-(Real captured screenshots after merges — includes the setup wizard)
-
-**Previous (v0.3.5-alpha design system):** [v0.3.5-alpha/README.md](docs/screenshots/v0.3.5-alpha/README.md)
-
-**Previous baseline:** [v0.2-alpha/README.md](docs/screenshots/v0.2-alpha/README.md)
-
-All shots captured against the development mock PVE (`dev/mock_pve.py`).
-
-> The control surface glows in the dark. Welcome to the server room.
-
-## Layout
-
-```
-backend/    Python package `hlidskjalf` (FastAPI, PVE client, bandwidth accumulator)
-frontend/   Vite + React + TS + Tailwind SPA (built at Nix build time)
-nix/        package.nix (frontend+backend build) and module.nix (services.hlidskjalf)
-dev/        mock_pve.py — fake PVE API so everything runs without touching hella
-docs/       bootstrap.md — manual one-time steps on hella (token, template, ISO)
-scripts/    validate-proxmox.py — check the panel's assumptions against a REAL host
+pveum user token add hlidskjalf@pve panel --privsep 0   # prints the secret ONCE
 ```
 
-## Real-hardware validation
+Three traps, each producing a token that authenticates and then fails everything:
 
-⚠️ **The panel has never been run against a real Proxmox host.** All 163 tests pass —
-against `dev/mock_pve.py`, a mock we wrote ourselves, so they prove self-consistency,
-not correctness.
+- **`--privsep 0` is mandatory** — otherwise the token carries its own empty ACL.
+- **`PVEAuditor` alone is not enough** — no console, no power, no provisioning.
+- **`PVESDNUser` is not optional on Proxmox 9** — attaching a NIC to a bridge/VLAN needs
+  `SDN.Use`, and without it *every* clone fails with `Permission check failed (…, SDN.Use)`.
 
-Before pointing this at a Proxmox you care about, run the read-only validator:
+The resulting token cannot reboot the host, change permissions, create users,
+reconfigure storage, or alter SDN zones.
+
+### 2. Get the certificate fingerprint
+
+The panel pins the Proxmox cert rather than trusting whatever answers on the wire:
+
+```bash
+openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
+```
+
+### 3. Validate before it touches anything
 
 ```bash
 python scripts/validate-proxmox.py --host <pve-host> --node <node> \
     --token-id 'hlidskjalf@pve!panel' --fingerprint AA:BB:...:FF
 ```
 
-It checks each assumption the panel is built on (token auth, cert pinning, `/nodes` with
-a scoped token, `/cluster/resources` shape, UPID parsing, rrddata, guest agent, console
-websocket) and prints PASS/FAIL with the observed value and the file each failure breaks.
-It is **read-only by default** and mutates nothing without `--allow-writes --vmid <>=900>`.
+Read-only by default (it mutates nothing without `--allow-writes --vmid <≥900>`). It
+checks every assumption the panel is built on — token privileges, cert pinning, `/nodes`
+with a scoped token, `/cluster/resources` shape, UPID parsing, rrddata, guest agent,
+console websocket — and prints PASS/FAIL with the observed value and the file each
+failure breaks.
 
-Full instructions, the token setup, and the manual checklist (open the console and type
-in it; power-cycle a scratch VM; confirm a protected VMID refuses destroy):
-**[docs/real-hardware-validation.md](docs/real-hardware-validation.md)**.
+Full walkthrough: **[docs/setup.md](docs/setup.md)**.
 
-Setting up a scratch Debian VM to develop against your real Proxmox (fast reload loop,
-safety rails, and what to expect to break first):
-**[docs/dev-against-real-proxmox.md](docs/dev-against-real-proxmox.md)**.
+Prefer to configure declaratively? Set the environment variables instead
+(`hlidskjalf.env.example`) and the wizard never appears — **env always wins** over
+anything the wizard stored, so secrets can live in agenix/sops/systemd-creds. Every
+secret also takes a `*_FILE` twin, because a secret manager hands you a file.
+
+---
+
+## What's in it
+
+| | |
+|---|---|
+| **Fleet** | every guest on the node, live status, quick power actions |
+| **VM detail** | overview, graphs, console, rescue, tasks — scoped per user |
+| **Console** | **noVNC** for VMs, **xterm.js** for containers (Proxmox serves no working VNC for LXC — its RFB handshake hangs at ClientInit, so containers go through `termproxy`) |
+| **Provision** | clone a cloud-init template, set cores/RAM/disk/VLAN/IP/SSH keys |
+| **Bandwidth** | daily/monthly per-VM accounting with quotas |
+| **Rescue** | boot a SystemRescue ISO, then restore the original boot order |
+| **Users** | admins manage tenants; each tenant sees exactly one VM |
+| **Settings** | VLANs → gateways, disk storage, network bridge — from what the node actually reports |
+| **Updates** | the panel notices when a new commit lands on GitHub, and can apply it (opt-in) |
+| **Profile** | change your own password (invalidates every other session) |
+
+---
 
 ## Starting it
 
@@ -103,18 +110,13 @@ python3 -m venv .venv && .venv/bin/pip install -e ./backend python-multipart
 ./scripts/dev.sh --vite      # + Vite on :5173 with hot reload (open THAT url)
 ```
 
-The panel is then on <http://localhost:8787> — one service, one port; the backend
-serves the built SPA. First run builds the SPA automatically. The script warns if
-`HLIDSKJALF_PROTECTED_VMIDS` is empty, because then *nothing* is safe from destroy —
-including the machine the panel runs on.
+The panel is then on <http://localhost:8787>. First run builds the SPA automatically.
+The script warns if `HLIDSKJALF_PROTECTED_VMIDS` is empty, because then **nothing** is
+safe from destroy — including the machine the panel runs on.
 
-`scripts/dev.sh` is a **development** launcher. It is not how the panel runs in
-production: Docker has its own entrypoint (`docs/docker.md`), the NixOS module runs
-it under systemd (`nix/module.nix`), and a plain install runs the `hlidskjalf`
-console script — or `uvicorn hlidskjalf.main:app` — under a systemd unit
-(`docs/dev-against-real-proxmox.md` §7). What all of them share is the environment:
-every setting is an `HLIDSKJALF_*` env var, and every secret also takes a `*_FILE`
-twin so a secret manager can hand it a file instead.
+`scripts/dev.sh` is a **development** launcher. Production is Docker
+(`docs/docker.md`), the NixOS module (`nix/module.nix`), or the `hlidskjalf` console
+script under systemd (`docs/dev-against-real-proxmox.md` §7).
 
 <details>
 <summary>The same thing by hand, if you'd rather</summary>
@@ -127,44 +129,114 @@ cd frontend && npm ci && npm run dev        # :5173, proxies /api and /ws to :87
 ```
 </details>
 
-## Deployment (heimdall, NixOS)
+---
 
-Flake input + module (see `docs/bootstrap.md` §4–5 for secrets and Traefik):
+## Updating
 
-```nix
-inputs.hlidskjalf.url = "github:jivsan/Hlidskjalf";
+**Settings → Updates** compares the commit the panel is running with the tip of `main`
+on GitHub and tells you how far behind you are, with the commit list. The check is
+**fail-soft** (no network → no update offered, no error, no nag) and sends nothing
+identifying — an anonymous GET of a public repo. Disable with
+`HLIDSKJALF_UPDATE_CHECK_ENABLED=false`.
 
-# hosts/heimdall/...
-imports = [ inputs.hlidskjalf.nixosModules.hlidskjalf ];
-services.hlidskjalf = {
-  enable = true;
-  environmentFile = "/etc/hlidskjalf/env";
-  settings = {
-    pveFingerprint = "AA:BB:...";          # docs/bootstrap.md §1
-    rescueIso = "local:iso/systemrescue-12.01-amd64.iso";
-    protectedVmids = [ 101 151 ];          # heimdall itself, hermes-agent, HAOS, PBS…
-    bandwidthQuotas = { "115" = 500; };    # GB/month, display-only
-  };
-};
+How you *apply* it depends on how you installed — and the panel does not pretend
+otherwise:
+
+| install | how it updates |
+|---|---|
+| **Docker** | `docker compose pull && docker compose up -d` |
+| **NixOS** | update the flake input, then `nixos-rebuild switch` |
+| **git + venv** | the panel can apply it itself — **opt-in** |
+
+A container cannot replace its own image and a Nix system updates from its flake, so for
+those the panel shows the command instead of pretending. For a git install:
+
+```bash
+HLIDSKJALF_ALLOW_SELF_UPDATE=true
 ```
 
-Before first `nix build`: set the real `npmDepsHash` in `nix/package.nix`
-(build once, copy the hash from the error).
+**Off by default, and it cannot be turned on from inside the panel** — it is remote code
+execution by design: it fetches code from GitHub and runs it. Even enabled, applying an
+update requires an admin session, CSRF, a typed confirmation, a **clean working tree**,
+an `origin` matching the configured repo, and a **fast-forward to exactly the commit you
+were shown**. It backs up the database first, **proves the new code imports before
+restarting**, and **rolls back** if anything fails. Every attempt — including every
+refusal — is audited.
 
-## Bandwidth accounting — known limits
+---
 
-PVE keeps no per-VM traffic history, so the panel samples the cumulative
-netin/netout counters every 60 s and books deltas into sqlite (UTC days).
-Counter resets on VM restart are handled; traffic while the panel itself is
-down is simply unaccounted. Numbers are for capacity awareness, not billing.
+## Real-hardware status
+
+**v0.4.1-alpha has been run against a real Proxmox VE 9.2.3 host.** The first-run
+wizard, fleet, node, graphs and both consoles work there. That run found five defects
+that months of green tests never did — see [`CHANGELOG.md`](CHANGELOG.md) and
+[`handoff.md`](handoff.md).
+
+**The write paths are still unproven**: nothing has been provisioned, reinstalled,
+rescued or destroyed through the panel on real hardware yet.
+
+All 242 backend tests pass — against `dev/mock_pve.py`, **a mock we wrote ourselves**.
+Green tests prove self-consistency, not correctness. That mock has been caught lying
+three times (8-field UPIDs where real PVE emits 9; fabricated QEMU disk usage where real
+PVE reports 0; one echo websocket that made a container's console look identical to a
+VM's). Assume there are more, and run the validator before trusting it with a Proxmox
+you care about:
+**[docs/real-hardware-validation.md](docs/real-hardware-validation.md)** ·
+**[docs/dev-against-real-proxmox.md](docs/dev-against-real-proxmox.md)**.
+
+---
 
 ## Safety rails
 
-- `protectedVmids`: destroy/reinstall/stop/reset are refused **server-side**;
-  shutdown/reboot stay allowed.
-- Destroy and reinstall require typing the exact VM name (checked server-side).
-- Every NIC the panel writes gets `firewall=0` — VLAN tags break through the
-  firewall bridge on hella otherwise (fleet-wide bug).
-- Session cookie is HttpOnly + SameSite=Strict; all mutations additionally
-  require the `X-Hlidskjalf-CSRF` header.
-- Never expose the panel publicly; it is designed for LAN + Traefik.
+- **`HLIDSKJALF_PROTECTED_VMIDS`** — destroy/reinstall/stop/reset are refused
+  **server-side** for these guests; shutdown/reboot stay allowed. It defaults to
+  **empty**, so *nothing* is protected until you set it. Put the panel's own host in it.
+- Destroy and reinstall require typing the **exact guest name**, checked server-side.
+- **Per-VM authorisation on every route** — a regular user sees exactly one VM, and task
+  status is scoped to the guest the UPID belongs to.
+- Sessions are signed cookies **bound to the password they were issued under**; changing
+  a password invalidates every older session. CSRF on every mutation. Logout revokes.
+- The PVE token is **encrypted at rest** and never returned by any API.
+- Every NIC the panel writes gets `firewall=0` — a VLAN-tagged NIC on a firewall bridge
+  silently drops traffic otherwise.
+- **Never expose the panel publicly.** It is designed for a LAN, behind a reverse proxy.
+
+---
+
+## Layout
+
+```
+backend/    Python package `hlidskjalf` (FastAPI, PVE client, bandwidth accumulator)
+frontend/   Vite + React + TS + Tailwind SPA (served by the backend as static files)
+nix/        package.nix (frontend+backend build) and module.nix (services.hlidskjalf)
+dev/        mock_pve.py — a fake PVE API, so everything runs without a real Proxmox
+docs/       setup.md, docker.md, real-hardware-validation.md, dev-against-real-proxmox.md
+scripts/    dev.sh (launcher) · validate-proxmox.py (check assumptions against a REAL host)
+```
+
+`plan.md` is the design source of truth. `handoff.md` is what's done and what's next.
+
+## Screenshots
+
+**[docs/screenshots/](docs/screenshots/)** — latest gallery is
+[v0.3.6-alpha](docs/screenshots/v0.3.6-alpha/README.md) (includes the setup wizard);
+[v0.3.5-alpha](docs/screenshots/v0.3.5-alpha/README.md) covers the design system. All
+captured against the development mock; the v0.4 pages (Settings, Updates, Profile, the
+container terminal) are not yet in the gallery.
+
+## Bandwidth accounting — known limits
+
+Proxmox keeps no per-VM traffic history, so the panel samples the cumulative
+`netin`/`netout` counters every 60 s and books deltas into sqlite (UTC days). Counter
+resets on guest restart are handled; traffic while the panel itself is down is simply
+unaccounted. The numbers are for capacity awareness, **not billing**.
+
+## Known limitations
+
+- **Single Proxmox node** — a cluster shows only the configured node.
+- Provisioning is **QEMU-only** (containers list, power and console fine; LXC *create*
+  is not implemented).
+- Provisioning always picks the next free VMID; you cannot choose one yet.
+- The switch faceplate is hardcoded to a 48-port Arista DCS-7050TX-48 and does not
+  render from what the switch reports. The Switch page is optional — leave
+  `switch_host` unset and it disappears.
