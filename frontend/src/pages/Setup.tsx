@@ -105,7 +105,6 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
   const [tokenId, setTokenId] = useState("hlidskjalf@pve!panel");
   const [tokenSecret, setTokenSecret] = useState("");
   const [fingerprint, setFingerprint] = useState("");
-  const [verifyTls, setVerifyTls] = useState(true);
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SetupTestResult | null>(null);
@@ -139,16 +138,18 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
     token_id: tokenId.trim(),
     token_secret: tokenSecret,
     fingerprint: fingerprint.trim(),
-    verify_tls: verifyTls,
   };
   const connSignature = JSON.stringify(conn);
   const tested = testedFor !== null && testedFor === connSignature;
 
   const portOk = port !== "" && port >= 1 && port <= 65535;
   const fingerprintOk = conn.fingerprint === "" || FINGERPRINT_RE.test(conn.fingerprint);
+  // The panel pins the certificate — there is no unpinned https, so with https
+  // the fingerprint is required, not optional.
+  const fingerprintFilled = scheme === "http" || conn.fingerprint !== "";
   const connFilled =
     conn.host !== "" && portOk && conn.node !== "" && conn.token_id !== "" &&
-    conn.token_secret !== "" && fingerprintOk;
+    conn.token_secret !== "" && fingerprintOk && fingerprintFilled;
 
   const adminPwShort = adminPw !== "" && adminPw.length < MIN_PASSWORD;
   const adminPwMismatch = adminPw2 !== "" && adminPw !== adminPw2;
@@ -279,15 +280,19 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
                   required
                 />
               </Field>
-              <Field id="s-scheme" label="scheme">
+              <Field
+                id="s-scheme"
+                label="protocol"
+                hint="the Proxmox API speaks https on port 8006 — keep https. http exists for development mocks only."
+              >
                 <select
                   id="s-scheme"
                   className="input"
                   value={scheme}
                   onChange={(e) => setScheme(e.target.value as "https" | "http")}
                 >
-                  <option value="https">https</option>
-                  <option value="http">http</option>
+                  <option value="https">https (Proxmox default)</option>
+                  <option value="http">http — dev mocks only</option>
                 </select>
               </Field>
             </div>
@@ -335,13 +340,25 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
 
             <Field
               id="s-fingerprint"
-              label="certificate fingerprint (optional)"
+              label={scheme === "https" ? "certificate fingerprint" : "certificate fingerprint (n/a over http)"}
               error={
                 fingerprint.trim() !== "" && !fingerprintOk
                   ? "expected a SHA-256 fingerprint — 64 hex characters, colons optional"
                   : null
               }
-              hint="pins the node's TLS certificate by SHA-256; leave empty to skip"
+              hint={
+                scheme === "https" ? (
+                  <>
+                    Proxmox certs are self-signed, so the panel pins this one exactly. Print it
+                    on the node's shell:{" "}
+                    <span className="metric text-fg break-all">
+                      openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
+                    </span>
+                  </>
+                ) : (
+                  "http carries no certificate to pin"
+                )
+              }
             >
               <input
                 id="s-fingerprint"
@@ -351,25 +368,10 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
                 placeholder="AB:CD:… or 64 hex chars"
                 autoComplete="off"
                 spellCheck={false}
+                disabled={scheme === "http"}
+                required={scheme === "https"}
               />
             </Field>
-
-            <label className="flex items-start gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={verifyTls}
-                onChange={(e) => setVerifyTls(e.target.checked)}
-                className="accent-pink mt-0.5"
-              />
-              <span>
-                verify TLS certificate
-                {!verifyTls && (
-                  <span className="block text-amber text-xs mt-0.5">
-                    off — the connection is encrypted but unauthenticated. Development only.
-                  </span>
-                )}
-              </span>
-            </label>
 
             <div className="hairline" />
 
@@ -648,9 +650,8 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
               <ReviewRow label="token secret" value="•••••••• (held, not shown)" />
               <ReviewRow
                 label="fingerprint"
-                value={conn.fingerprint === "" ? "not pinned" : conn.fingerprint}
+                value={conn.fingerprint === "" ? "none (http)" : conn.fingerprint}
               />
-              <ReviewRow label="verify TLS" value={conn.verify_tls ? "yes" : "no"} />
             </div>
 
             <div className="well p-3">

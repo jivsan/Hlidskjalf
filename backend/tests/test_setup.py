@@ -27,7 +27,6 @@ def _pve_conn() -> dict:
         "token_id": "hlidskjalf@pve!panel",
         "token_secret": "mock-secret",
         "fingerprint": "",
-        "verify_tls": True,
     }
 
 
@@ -135,6 +134,16 @@ def test_setup_test_rejects_an_unknown_node(fresh_app):
 
 def test_setup_test_requires_a_fingerprint_for_https(fresh_app):
     r = fresh_app.post("/api/setup/test", json=_pve_conn() | {"scheme": "https"})
+    assert r.status_code == 400
+    assert "fingerprint" in r.json()["detail"].lower()
+
+
+def test_setup_test_ignores_legacy_verify_tls_escape_hatch(fresh_app):
+    """The wizard once offered a 'verify TLS' checkbox, but pve.py has no
+    unpinned-https mode — unchecking it only produced a worse error later.
+    An https connection without a fingerprint must 400 regardless."""
+    conn = _pve_conn() | {"scheme": "https", "verify_tls": False}
+    r = fresh_app.post("/api/setup/test", json=conn)
     assert r.status_code == 400
     assert "fingerprint" in r.json()["detail"].lower()
 

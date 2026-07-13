@@ -40,7 +40,6 @@ class PveConn(BaseModel):
     token_id: str = Field(min_length=1)
     token_secret: str = Field(min_length=1)
     fingerprint: str = ""
-    verify_tls: bool = True
 
 
 class Account(BaseModel):
@@ -82,7 +81,8 @@ def _probe_settings(conn: PveConn):
 
 async def _probe(conn: PveConn) -> dict:
     """Talk to Proxmox with the supplied credentials. Raises HTTPException(400)."""
-    if conn.scheme == "https" and not conn.fingerprint and conn.verify_tls:
+    # There is no unpinned-https mode: pve.py accepts exactly one certificate.
+    if conn.scheme == "https" and not conn.fingerprint:
         # pve.py refuses https without a fingerprint (it pins by design). Say so
         # plainly rather than letting the client see an opaque startup error.
         raise HTTPException(
