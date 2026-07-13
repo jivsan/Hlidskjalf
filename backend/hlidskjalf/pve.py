@@ -2,11 +2,15 @@
 
 Auth via API token header; TLS verified against a pinned SHA-256 certificate
 fingerprint instead of a CA chain (hella's cert is self-signed). The pin is
-enforced inside the TLS handshake via a custom SSLObject subclass, so it works
-for both httpx (REST) and websockets (VNC proxy) with the same context.
+enforced inside the TLS handshake on BOTH of Python's handshake paths: a custom
+SSLObject subclass covers the memory-BIO path (`SSLContext.wrap_bio` — what
+httpx (REST) and websockets (VNC proxy) use), and a custom SSLSocket subclass
+covers the plain-socket path (`SSLContext.wrap_socket`), so no caller can
+bypass the pin by picking the other API.
 """
 
 import asyncio
+import hashlib
 import ssl
 from typing import Any
 
@@ -29,30 +33,45 @@ def _normalize_fp(fp: str) -> str:
     return fp.replace(":", "").replace(" ", "").lower()
 
 
+def _check_pinned_cert(der: bytes | None, expected: str) -> None:
+    """Raise FingerprintMismatch unless `der` hashes (SHA-256) to `expected`."""
+    if der is None or hashlib.sha256(der).hexdigest() != expected:
+        raise FingerprintMismatch(
+            "PVE certificate SHA-256 fingerprint does not match the pinned value"
+        )
+
+
 def make_pinned_ssl_context(fingerprint: str) -> ssl.SSLContext:
     """TLS context that accepts exactly one certificate: the pinned one.
 
     Chain/hostname verification is disabled (self-signed cert), and instead the
     peer cert's SHA-256 digest is compared during the handshake. A mismatch
     aborts the connection before any request data is sent.
-    """
-    import hashlib
 
+    The check is wired into BOTH handshake paths: `sslobject_class` covers the
+    memory-BIO path (`SSLContext.wrap_bio` — asyncio/httpx/websockets, i.e.
+    everything the panel does), and `sslsocket_class` covers the plain-socket
+    path (`SSLContext.wrap_socket`). `sslobject_class` alone does NOT apply to
+    `wrap_socket`, so without the second hook any future caller using it would
+    silently get an unpinned connection.
+    """
     expected = _normalize_fp(fingerprint)
 
     class PinnedSSLObject(ssl.SSLObject):
         def do_handshake(self) -> None:
             super().do_handshake()
-            der = self.getpeercert(binary_form=True)
-            if der is None or hashlib.sha256(der).hexdigest() != expected:
-                raise FingerprintMismatch(
-                    "PVE certificate SHA-256 fingerprint does not match the pinned value"
-                )
+            _check_pinned_cert(self.getpeercert(binary_form=True), expected)
+
+    class PinnedSSLSocket(ssl.SSLSocket):
+        def do_handshake(self, *args, **kwargs) -> None:
+            super().do_handshake(*args, **kwargs)
+            _check_pinned_cert(self.getpeercert(binary_form=True), expected)
 
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.sslobject_class = PinnedSSLObject
+    ctx.sslsocket_class = PinnedSSLSocket
     return ctx
 
 

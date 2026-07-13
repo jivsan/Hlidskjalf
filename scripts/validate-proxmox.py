@@ -125,23 +125,39 @@ def normalize_fp(fp: str) -> str:
     return fp.replace(":", "").replace(" ", "").lower()
 
 
+def check_pinned_cert(der: bytes | None, expected: str) -> None:
+    """Raise FingerprintMismatch unless `der` hashes (SHA-256) to `expected`."""
+    if der is None or hashlib.sha256(der).hexdigest() != expected:
+        raise FingerprintMismatch(
+            "PVE certificate SHA-256 fingerprint does not match the pinned value"
+        )
+
+
 def make_pinned_ssl_context(fingerprint: str) -> ssl.SSLContext:
-    """Byte-for-byte the same policy as pve.py: accept exactly one certificate."""
+    """Byte-for-byte the same policy as pve.py: accept exactly one certificate.
+
+    The pin is wired into BOTH handshake paths: `sslobject_class` for the
+    memory-BIO path (wrap_bio — asyncio/httpx/websockets, what the panel uses)
+    and `sslsocket_class` for the plain-socket path (wrap_socket), which
+    `sslobject_class` does NOT cover.
+    """
     expected = normalize_fp(fingerprint)
 
     class PinnedSSLObject(ssl.SSLObject):
         def do_handshake(self) -> None:  # type: ignore[override]
             super().do_handshake()
-            der = self.getpeercert(binary_form=True)
-            if der is None or hashlib.sha256(der).hexdigest() != expected:
-                raise FingerprintMismatch(
-                    "PVE certificate SHA-256 fingerprint does not match the pinned value"
-                )
+            check_pinned_cert(self.getpeercert(binary_form=True), expected)
+
+    class PinnedSSLSocket(ssl.SSLSocket):
+        def do_handshake(self, *args, **kwargs) -> None:  # type: ignore[override]
+            super().do_handshake(*args, **kwargs)
+            check_pinned_cert(self.getpeercert(binary_form=True), expected)
 
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     ctx.sslobject_class = PinnedSSLObject
+    ctx.sslsocket_class = PinnedSSLSocket
     return ctx
 
 
@@ -266,21 +282,52 @@ async def check_tls(pve: Pve, rep: Report) -> None:
         )
         return
 
-    # Negative test: a WRONG pin must abort the handshake. If this passes silently
-    # the pinning is decorative and any MITM sails through.
+    # Negative test: a WRONG pin must abort the handshake on BOTH handshake
+    # paths. (a) the memory-BIO path (wrap_bio via asyncio — what the panel and
+    # httpx actually use, enforced by sslobject_class) and (b) the plain-socket
+    # path (wrap_socket, enforced ONLY because sslsocket_class is set — the
+    # first real-hardware run proved sslobject_class alone does not cover it).
+    # If either completes, the pinning is decorative and a MITM sails through.
     bogus = "00" * 32
-    try:
-        ctx = make_pinned_ssl_context(bogus)
+    ctx = make_pinned_ssl_context(bogus)
+    completed: list[str] = []
+    inconclusive: list[str] = []
+
+    try:  # (a) async / memory-BIO — the panel's path
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(a.host, a.port, ssl=ctx), timeout=10
+        )
+        writer.close()
+        completed.append("wrap_bio (asyncio/httpx — the panel's path)")
+    except (FingerprintMismatch, ssl.SSLError):
+        pass  # refused, as designed
+    except Exception as e:
+        inconclusive.append(f"wrap_bio: {type(e).__name__}: {e}")
+
+    try:  # (b) sync / plain-socket
         with socket.create_connection((a.host, a.port), timeout=10) as s:
             with ctx.wrap_socket(s, server_hostname=a.host):
                 pass
-        rep.add(FAIL, "tls/pin-rejects-wrong",
-                "a deliberately WRONG fingerprint still completed the handshake",
-                "pve.py's pinning is not actually enforced — this is a MITM hole.")
+        completed.append("wrap_socket (plain-socket path)")
     except (FingerprintMismatch, ssl.SSLError):
-        rep.add(PASS, "tls/pin-rejects-wrong", "a wrong fingerprint aborts the handshake, as designed")
+        pass  # refused, as designed
     except Exception as e:
-        rep.add(WARN, "tls/pin-rejects-wrong", f"inconclusive — {type(e).__name__}: {e}")
+        inconclusive.append(f"wrap_socket: {type(e).__name__}: {e}")
+
+    if completed:
+        rep.add(FAIL, "tls/pin-rejects-wrong",
+                "a deliberately WRONG fingerprint still completed the handshake "
+                f"via {', '.join(completed)}",
+                "The pin is not actually enforced on that path — this is a MITM hole.\n"
+                "wrap_socket only pins because pve.py sets ctx.sslsocket_class; "
+                "sslobject_class alone does NOT cover it. A regression in either "
+                "hook silently disables pinning for every caller of that API.")
+    elif inconclusive:
+        rep.add(WARN, "tls/pin-rejects-wrong", "inconclusive — " + "; ".join(inconclusive))
+    else:
+        rep.add(PASS, "tls/pin-rejects-wrong",
+                "a wrong fingerprint aborts the handshake on both paths "
+                "(wrap_bio and wrap_socket), as designed")
 
 
 async def check_auth(pve: Pve, rep: Report) -> None:
