@@ -1,8 +1,52 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-13 (v0.3.5-alpha design-system pass). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-13 (v0.3.6-alpha — security audit, setup wizard, genericity, Prometheus, code-split). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
-## ⚡ Current state — v0.3.5-alpha (frontend design system)
+## ⚡ Current state — v0.3.6-alpha
+
+**The release that makes this runnable by other people.** It was wired to one
+homelab; now it ships unconfigured and sets itself up in a browser.
+`main` is green: **147 backend tests**, `tsc` + `vite build` clean, no chunk warnings.
+
+- **First-run setup wizard** (`routes/setup.py`, `docs/setup.md`). Start with no env
+  file → the panel serves a wizard: Proxmox host/node/token (validated with a LIVE
+  call before anything is persisted), admin account, optional first user → signed
+  straight in. **The security invariant: setup is reachable IFF the users table is
+  empty**; once an admin exists every `/api/setup/*` returns 409 forever (it is
+  unauthenticated by necessity, so re-opening it would be a takeover backdoor).
+  Config persists to a `config` table; **env always wins** (agenix/sops users are
+  never overridden); a `SETUP_WRITABLE` allowlist bounds what it can write.
+- **Security audit** — patched: sessions surviving a password change (HIGH), self
+  password-change needing no current password (HIGH), `/api/tasks/{upid}/status`
+  IDOR (MED), console WS key not bound to its minter (MED), missing security
+  headers (MED), login username-enumeration timing (LOW). Details in CHANGELOG.
+- **Genericity**: config defaults no longer bake in a site (`pve_host` required,
+  `pve_node` → `pve`, `admin_user` → `admin`, protected_vmids/vlan_gateways/
+  switch_host empty). Node name comes from `/api/session`; the UI renders it
+  instead of hardcoding a host.
+- **Prometheus datasource** (Phase 2, `HLIDSKJALF_METRICS_SOURCE=prometheus`,
+  `docs/prometheus.md`). rrd stays default.
+- **Bundle code-split**: first paint 633 kB → 182 kB (−71%).
+- Fixed a fatal bootstrap bug: `PveClient` refuses https without a fingerprint, so
+  an *unconfigured* install used to crash on startup and could never be configured.
+
+### Known gaps / next up
+1. **The switch faceplate is still hardcoded** to a 48-port + 4-QSFP Arista
+   DCS-7050TX-48 (`Switch.tsx` renders `Ethernet1..52` regardless of what the switch
+   reports). For genericity it should render from the ports the backend actually
+   returns, with the model read from eAPI (`show version` → `modelName`). The Switch
+   page is already optional (unset `switch_host` hides it).
+2. Real-hardware verification: nobody has run the wizard against a real Proxmox from
+   this box (it is validated against `dev/mock_pve.py`, which now implements
+   `GET /nodes` like real PVE does). Also worth one manual click through the noVNC
+   console after the code-split.
+3. Prometheus exporter metric names are assumed from prometheus-pve-exporter's
+   `/cluster/resources` collector — confirm against your exporter version. Node
+   `iowait`/`loadavg`/`netin`/`netout` don't exist there and stay null unless you set
+   `HLIDSKJALF_PROMETHEUS_NODE_QUERIES` (documented).
+4. Branch protection still needs GitHub Pro on a private repo (unchanged).
+
+## Previous state — v0.3.5-alpha (frontend design system)
 
 Branch `feat/frontend-design-v0.3.5-alpha` (PR pending/merged). **Frontend only.**
 A deliberate design-system pass using the `frontend-design` skill, grounded in the
