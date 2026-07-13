@@ -90,10 +90,22 @@ of an unversioned schema is how people lose their bandwidth history.
    reports). For genericity it should render from the ports the backend actually
    returns, with the model read from eAPI (`show version` → `modelName`). The Switch
    page is already optional (unset `switch_host` hides it).
-2. Real-hardware verification: nobody has run the wizard against a real Proxmox from
-   this box (it is validated against `dev/mock_pve.py`, which now implements
-   `GET /nodes` like real PVE does). Also worth one manual click through the noVNC
-   console after the code-split.
+2. **Real-hardware validation — the top priority, and now tooled.** The panel has still
+   never talked to a real Proxmox host; the whole suite runs against `dev/mock_pve.py`,
+   a mock we wrote ourselves. Run **`scripts/validate-proxmox.py`** (read-only by
+   default; nothing is mutated without `--allow-writes --vmid <>=900>`) against the real
+   host and work the manual checklist in **`docs/real-hardware-validation.md`**.
+   Highest-risk assumptions, in order: the **noVNC console byte-pump** (never exercised
+   against a real VNC endpoint — the mock is a byte echo); **UPID parsing** in
+   `routes/vms.py::_vmid_from_upid` (security-critical, authorizes task-status reads);
+   whether a scoped token may call **`GET /nodes`** (the setup wizard dies without it).
+   - **Already found, without leaving the workshop:** `dev/mock_pve.py::_mk_upid` emits
+     **8**-field UPIDs (it omits `pstart`); real Proxmox emits **9**. So every mock UPID
+     parses to `None` in `_vmid_from_upid`, is treated as a *node-level* task, and is
+     restricted to admins — meaning **a regular user polling their own power-action task
+     gets a 403 against the mock, and no test caught it** (the security tests hand-write
+     correct UPIDs instead of using the mock's). The panel's parser looks right for real
+     PVE; the mock is the liar. Fix the mock and add a test that uses a mock-issued UPID.
 3. Prometheus exporter metric names are assumed from prometheus-pve-exporter's
    `/cluster/resources` collector — confirm against your exporter version. Node
    `iowait`/`loadavg`/`netin`/`netout` don't exist there and stay null unless you set

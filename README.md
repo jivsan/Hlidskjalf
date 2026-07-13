@@ -63,7 +63,30 @@ frontend/   Vite + React + TS + Tailwind SPA (built at Nix build time)
 nix/        package.nix (frontend+backend build) and module.nix (services.hlidskjalf)
 dev/        mock_pve.py — fake PVE API so everything runs without touching hella
 docs/       bootstrap.md — manual one-time steps on hella (token, template, ISO)
+scripts/    validate-proxmox.py — check the panel's assumptions against a REAL host
 ```
+
+## Real-hardware validation
+
+⚠️ **The panel has never been run against a real Proxmox host.** All 163 tests pass —
+against `dev/mock_pve.py`, a mock we wrote ourselves, so they prove self-consistency,
+not correctness.
+
+Before pointing this at a Proxmox you care about, run the read-only validator:
+
+```bash
+python scripts/validate-proxmox.py --host <pve-host> --node <node> \
+    --token-id 'hlidskjalf@pve!panel' --fingerprint AA:BB:...:FF
+```
+
+It checks each assumption the panel is built on (token auth, cert pinning, `/nodes` with
+a scoped token, `/cluster/resources` shape, UPID parsing, rrddata, guest agent, console
+websocket) and prints PASS/FAIL with the observed value and the file each failure breaks.
+It is **read-only by default** and mutates nothing without `--allow-writes --vmid <>=900>`.
+
+Full instructions, the token setup, and the manual checklist (open the console and type
+in it; power-cycle a scratch VM; confirm a protected VMID refuses destroy):
+**[docs/real-hardware-validation.md](docs/real-hardware-validation.md)**.
 
 ## Local development (no Proxmox needed)
 
