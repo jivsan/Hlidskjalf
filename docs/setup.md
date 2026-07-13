@@ -160,3 +160,34 @@ python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-
 ```
 
 See `hlidskjalf.env.example` for the full list of settings.
+
+## Updating
+
+**Settings → Updates** compares the commit the panel is running with the tip of `main`
+on GitHub and tells you how far behind you are. The check is fail-soft (no network → no
+update offered, no error) and sends nothing identifying — it is an anonymous GET of a
+public repo. Turn it off entirely with `HLIDSKJALF_UPDATE_CHECK_ENABLED=false`.
+
+**Applying** it depends on how you installed:
+
+| install | how it updates |
+|---|---|
+| Docker | `docker compose pull && docker compose up -d` |
+| NixOS | update the flake input, then `nixos-rebuild switch` |
+| git + venv | the panel can do it itself — see below |
+
+A container cannot replace its own image, and a Nix system updates from its flake, so
+for those the panel shows the command rather than pretending. For a **git install** you
+may let the panel update itself:
+
+```bash
+HLIDSKJALF_ALLOW_SELF_UPDATE=true
+```
+
+This is **off by default and cannot be turned on from inside the panel**, because it is
+remote code execution by design: it fetches code from GitHub and runs it. Even with it
+on, "apply update" still requires an admin session, CSRF, a typed confirmation, a clean
+working tree, an `origin` that matches the configured repo, and a fast-forward to the
+exact commit you were shown. It backs up the database first, verifies the new code
+imports before restarting, and rolls back if anything fails. Every attempt — including
+every refusal — is audited (`GET /api/debug/audit`).

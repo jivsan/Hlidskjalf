@@ -4,9 +4,21 @@ __pycache__/
 node_modules/
 frontend/dist/
 dev/dev.env
-*.sqlite3
 .DS_Store
 result
+
+# --- state dir: NEVER commit any of this -------------------------------------
+# `scripts/dev.sh --mock` puts the state dir inside the repo (.dev-state/), so
+# these rules are load-bearing, not decorative. secret.key is the Fernet key that
+# DECRYPTS the stored Proxmox API token — the database being ignored is not enough.
+.dev-state/
+*.sqlite3
+*.sqlite3.bak-*
+secret.key
+*.key
+# ...except the dev mock switch's throwaway TLS key, which is meant to be in the repo.
+# (Note: gitignore has no trailing comments — a "# ..." after a pattern is part of it.)
+!dev/mock_switch.key
 
 # Local Claude Code state (plugins, agent worktrees)
 .claude/

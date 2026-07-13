@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     update_repo: str = "jivsan/Hlidskjalf"  # a fork can point this at itself
     update_branch: str = "main"
 
+    # Applying an update from the UI (routes/update.py) EXECUTES CODE FETCHED FROM
+    # THE INTERNET. That is the point of it, and it is why it is off by default and
+    # cannot be turned on from inside the panel — only the operator on the host can.
+    # Even when true it refuses anything but a clean, fast-forward git checkout whose
+    # origin is `update_repo`, and it rolls back if the new code does not import.
+    allow_self_update: bool = False
+    # Whether a successful update re-execs the process. False = "applied, restart it
+    # yourself" (right for a supervisor that pins the code, e.g. a read-only image).
+    self_update_restart: bool = True
+
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
     metrics_source: str = "rrd"

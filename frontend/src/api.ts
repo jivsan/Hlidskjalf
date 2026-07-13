@@ -362,7 +362,8 @@ export interface VersionInfo {
   /** "" when this install is not a git checkout (docker/nix/pip). */
   commit: string;
   branch: string;
-  /** Uncommitted local changes — you are ahead of any release, not behind. */
+  /** Uncommitted local changes. Independent of being behind — it means an update
+   *  would overwrite them, so applying one is refused until the tree is clean. */
   dirty: boolean;
   deployment: "git" | "docker" | "nix" | "package";
   repo: string;
@@ -373,6 +374,8 @@ export interface VersionInfo {
   commits: { sha: string; message: string }[];
   /** The honest way to apply an update for THIS deployment. */
   command: string;
+  /** True only for a git install whose operator set HLIDSKJALF_ALLOW_SELF_UPDATE. */
+  self_update: boolean;
   notes_url: string;
   error: string | null;
   checked_at: number;
@@ -380,4 +383,20 @@ export interface VersionInfo {
 
 export function getVersion(force = false): Promise<VersionInfo> {
   return api.get<VersionInfo>(`/api/version${force ? "?force=true" : ""}`);
+}
+
+/** Applying an update EXECUTES NEW CODE. Off unless the host allows it; the
+ *  backend re-checks every gate regardless of what this client sends. */
+export interface UpdateResult {
+  ok: boolean;
+  from: string;
+  to: string;
+  restarted: boolean;
+  db_backup: string | null;
+  log: string[];
+  detail: string;
+}
+
+export function applyUpdate(target: string): Promise<UpdateResult> {
+  return api.post<UpdateResult>("/api/update", { confirm: "update", target });
 }

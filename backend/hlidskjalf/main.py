@@ -28,6 +28,7 @@ from .routes import (
     provision,
     rescue,
     settings as settings_route,
+    update as update_route,
     version as version_route,
     setup as setup_route,
     switch,
@@ -363,6 +364,7 @@ app.include_router(switch.router)
 app.include_router(users_route.router)  # new user management (admin only)
 app.include_router(settings_route.router)  # /api/settings/* (admin only)
 app.include_router(version_route.router)  # /api/version (admin only, fail-soft)
+app.include_router(update_route.router)   # /api/update  (admin, off unless allowed)
 app.include_router(setup_route.router)  # /api/setup/* — closes forever once a user exists
 
 app.include_router(debug_module.router, prefix="/api/debug")  # /api/debug/* (admin protected)

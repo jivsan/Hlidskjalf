@@ -5,7 +5,48 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.1-alpha] — 2026-07-13
+
+### Security — `.gitignore` did not cover the key that decrypts the Proxmox token
+- `scripts/dev.sh --mock` puts the state dir *inside the repo* (`.dev-state/`), but
+  `.gitignore` only ignored `*.sqlite3`. The database was covered; **`secret.key` — the
+  Fernet key that decrypts the stored Proxmox API token — was not.** A `git add -A` on
+  any box that had run the dev script would have staged it, into a public repo.
+- Fixed, and now **tested**: `backend/tests/test_gitignore.py` asks `git check-ignore`
+  itself whether each real runtime artefact is ignored (and that the rules are not so
+  broad they exclude tracked files). A `.gitignore` rule with nothing enforcing it is
+  exactly how this happened. The test earned its keep immediately by catching that
+  gitignore has **no trailing comments** — `!dev/mock_switch.key  # ...` was being read
+  as a literal pattern, so the mock's key stayed ignored.
+
+### Added — apply updates from the panel (opt-in: `POST /api/update`)
+**This endpoint executes code fetched from the internet. That is its purpose, and it is
+why it is fenced.** Off unless `HLIDSKJALF_ALLOW_SELF_UPDATE=true` on the host — it
+cannot be enabled from inside the panel. Even then it requires all of:
+
+- an **admin** session, **CSRF**, a **typed confirmation**, and 3/hour rate limiting;
+- a **git** install. Docker and Nix are **refused, not worked around** — a container
+  cannot replace its own image, and a panel that `docker exec`s its way out of itself is
+  a privilege-escalation surface. It prints the right command instead;
+- a **clean working tree** (an update must never overwrite local work);
+- `origin` **pointing at the configured repo** — otherwise "apply update" means "run
+  whatever some other remote is serving";
+- the target being **exactly the commit the operator saw** — re-resolved from GitHub and
+  refused if the branch moved — and a **fast-forward**. The panel will not merge or
+  rebase its own source unattended.
+
+It then backs up the database, fast-forwards, reinstalls dependencies, rebuilds the SPA,
+and **proves the new code imports in a subprocess before restarting** — restarting into
+code that does not import leaves a dead panel with nobody left to roll it back. Any
+failure **rolls back to the previous commit**. Every attempt, refusals included, is
+audited.
+
+### Fixed
+- **"2 commits behind" and "you are ahead, not behind" at the same time.** The Updates
+  tab treated a dirty working tree as meaning "ahead of the release". It doesn't — local
+  edits and being behind upstream are independent, and on a dev box both are usually
+  true. Local changes now read as what they are: a reason an update is *refused*, shown
+  next to the commit and on the apply control, not a contradictory claim about position.
 
 ### Fixed — the documented Proxmox role set could not provision (PVE 9)
 - **Every clone failed** on real hardware with
