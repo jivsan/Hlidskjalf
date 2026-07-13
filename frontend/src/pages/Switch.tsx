@@ -248,11 +248,6 @@ export function SwitchPage() {
             DCS-7050TX-48 · eAPI · <span className="text-cyan">{connected}</span> up · {data.length} reported
           </span>
         }
-        actions={
-          <span className="text-[10px] text-muted tracking-eyebrow uppercase border border-border-token px-2 py-1 rounded">
-            Rack 47
-          </span>
-        }
       />
 
       {/* Robust error/offline state: shows with last-known data if available (from usePoll) */}

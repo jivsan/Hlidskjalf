@@ -139,7 +139,7 @@ export function Provision() {
     <div className="space-y-6 max-w-2xl">
       <PageHeader eyebrow="new guest" title="Provision" />
       {templates.length === 0 && (
-        <ErrorState message="no templates found on hella — create a cloud-init template first (VMID 9000+)" />
+        <ErrorState message="no templates found — create a cloud-init template on your Proxmox node first (VMID 9000+)" />
       )}
       <form onSubmit={submit} className="card p-5 space-y-6">
         {/* identity */}

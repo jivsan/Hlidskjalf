@@ -170,8 +170,39 @@ async def power_action(
     return {"upid": upid}
 
 
+def _vmid_from_upid(upid: str) -> int | None:
+    """Pull the guest id out of a PVE UPID.
+
+    Format: ``UPID:node:pid:pstart:starttime:dtype:id:user:``. For guest tasks
+    the ``id`` field is the vmid; for node-level tasks it is not numeric.
+    """
+    parts = upid.split(":")
+    if len(parts) < 7:
+        return None
+    try:
+        return int(parts[6])
+    except ValueError:
+        return None
+
+
 @router.get("/api/tasks/{upid}/status")
-async def upid_status(upid: str, pve: PveClient = Depends(get_pve), _=Depends(require_session)):
+async def upid_status(
+    upid: str,
+    pve: PveClient = Depends(get_pve),
+    db: Db = Depends(get_db),
+    username: str = Depends(require_session),
+):
+    # Scope by the guest the task belongs to. Without this any logged-in tenant
+    # could poll *any* UPID and learn what other tenants are doing (task type,
+    # target vmid, initiating PVE user, exit status) — an IDOR on the task log.
+    vmid = _vmid_from_upid(upid)
+    if vmid is None:
+        # Node-level task (no guest id): admins only.
+        user = await get_current_user(username, db)
+        if not is_admin(user):
+            raise HTTPException(403, "Admin only")
+    else:
+        await _ensure_vm_access(username, vmid, db, pve)
     return await pve.task_status(upid)
 
 

@@ -12,10 +12,13 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HLIDSKJALF_")
 
-    # Proxmox API
-    pve_host: str = "10.0.20.10"
+    # Proxmox API.
+    # No site-specific defaults: every deployment sets these. `pve_node` defaults
+    # to Proxmox's own default node name so a stock single-node install works
+    # out of the box.
+    pve_host: str = ""  # required, e.g. "192.168.1.10" or "pve.example.net"
     pve_port: int = 8006
-    pve_node: str = "hella"
+    pve_node: str = "pve"
     pve_token_id: str = "hlidskjalf@pve!panel"
     pve_token_secret: str = ""
     # SHA-256 cert fingerprint, colon-separated hex. Empty disables pinning
@@ -24,8 +27,8 @@ class Settings(BaseSettings):
     # Scheme override for local dev against dev/mock_pve.py.
     pve_scheme: str = "https"
 
-    # Panel auth (single admin user)
-    admin_user: str = "christina"
+    # Panel auth — the bootstrap admin seeded into the DB on first run.
+    admin_user: str = "admin"
     admin_password_hash: str = ""  # argon2id hash
     session_secret: str = ""
     session_max_age: int = 12 * 3600
@@ -35,14 +38,17 @@ class Settings(BaseSettings):
     # not resend a Secure cookie).
     cookie_secure: bool = True
 
-    # Behaviour
+    # Behaviour — all site-specific, all opt-in. Defaults protect nothing and
+    # assume no particular network, so a fresh deployment starts neutral.
     # comma-separated in the env var, e.g. "101,151"
-    protected_vmids: Annotated[list[int], NoDecode] = [151]
+    protected_vmids: Annotated[list[int], NoDecode] = []
     rescue_iso: str = ""  # e.g. "local:iso/systemrescue-12.01-amd64.iso"
     bandwidth_quotas: dict[str, int] = {}  # vmid (str) -> GB/month, display-only
     default_ssh_keys: str = ""
-    vlan_gateways: dict[str, str] = {"20": "10.0.20.1", "30": "", "50": "10.0.50.1"}
-    clone_storage: str = "local-lvm"
+    # JSON env var, e.g. '{"20": "10.0.20.1", "30": ""}'. Empty = no VLAN tagging
+    # offered in the provision form.
+    vlan_gateways: dict[str, str] = {}
+    clone_storage: str = "local-lvm"  # Proxmox's usual default storage
     metrics_source: str = "rrd"  # rrd | prometheus (phase 2)
 
     # Logging & debug
@@ -55,7 +61,9 @@ class Settings(BaseSettings):
     #     protocol https
     #     no shutdown
     # Then use username/password or token. Falls back to SSH if eapi disabled.
-    switch_host: str = "10.0.20.2"
+    # Empty switch_host disables the Switch section entirely (it is optional —
+    # the panel is fully usable without a managed switch).
+    switch_host: str = ""
     switch_port: int = 443
     switch_username: str = ""
     switch_password: str = ""

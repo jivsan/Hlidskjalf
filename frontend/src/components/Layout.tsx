@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { logout } from "../api";
+import { getNodeName, logout } from "../api";
 import type { CurrentUser } from "../App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useToast } from "./Toast";
@@ -98,14 +98,18 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
         <div className="reveal px-2 pt-2 pb-4" style={{ ["--step" as string]: 0 }}>
           <Wordmark className="text-[22px]" />
           <div className="hairline my-3" />
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="eyebrow">high seat</span>
-            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted">
-              <span className="relative inline-flex">
+            {/* The node comes from the session — every deployment shows its own. */}
+            <span
+              className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted min-w-0"
+              title={getNodeName()}
+            >
+              <span className="relative inline-flex shrink-0">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan" />
                 <span className="absolute inset-0 rounded-full bg-cyan/60 animate-ping" aria-hidden="true" />
               </span>
-              hella
+              <span className="truncate">{getNodeName()}</span>
             </span>
           </div>
         </div>

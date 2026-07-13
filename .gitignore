@@ -7,3 +7,6 @@ dev/dev.env
 *.sqlite3
 .DS_Store
 result
+
+# Local Claude Code state (plugins, agent worktrees)
+.claude/

@@ -117,13 +117,38 @@ def test_user_can_change_own_password(auth_client, user_factory):
     login_as(auth_client, "selfpw-user", "origpass1")
     r = auth_client.post(
         "/api/users/selfpw-user/password",
-        json={"password": "newpass123"},
+        json={"password": "newpass123", "current_password": "origpass1"},
         headers=csrf_headers(auth_client),
     )
     assert r.status_code == 200
     assert r.json()["ok"] is True
     # The new password actually works.
     login_as(auth_client, "selfpw-user", "newpass123")
+
+
+def test_self_password_change_requires_current_password(auth_client, user_factory):
+    """A stolen session (cookie+CSRF) must not be upgradeable into new credentials."""
+    assert user_factory("needscurrent", password="origpass1").status_code == 201
+    login_as(auth_client, "needscurrent", "origpass1")
+
+    # Omitted entirely.
+    r = auth_client.post(
+        "/api/users/needscurrent/password",
+        json={"password": "attacker-set"},
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 403
+
+    # Present but wrong.
+    r = auth_client.post(
+        "/api/users/needscurrent/password",
+        json={"password": "attacker-set", "current_password": "not-it"},
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 403
+
+    # The original password still works — nothing was changed.
+    login_as(auth_client, "needscurrent", "origpass1")
 
 
 # --- robustness: non-existent target -> 404 ----------------------------------

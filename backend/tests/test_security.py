@@ -88,7 +88,7 @@ def test_cookie_secure_flag_honoured():
     try:
         settings.cookie_secure = True
         r = Response()
-        auth.start_session(r, ADMIN_USER)
+        auth.start_session(r, ADMIN_USER, "epoch0")
         set_cookie = r.headers.get("set-cookie")
         assert set_cookie is not None
         assert "Secure" in set_cookie
@@ -98,7 +98,7 @@ def test_cookie_secure_flag_honoured():
 
         settings.cookie_secure = False
         r2 = Response()
-        auth.start_session(r2, ADMIN_USER)
+        auth.start_session(r2, ADMIN_USER, "epoch0")
         set_cookie2 = r2.headers.get("set-cookie")
         assert "Secure" not in set_cookie2
     finally:
