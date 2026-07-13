@@ -52,7 +52,17 @@ _upid_seq = count(1)
 
 
 def _mk_upid(type_: str, vmid: int) -> str:
-    upid = f"UPID:{NODE}:0000{next(_upid_seq):04X}:{int(time.time())}:{type_}:{vmid}:mock@pve:"
+    # Real PVE: UPID:node:pid:pstart:starttime:dtype:id:user:   -> 9 colon-fields.
+    # This mock used to omit `pstart`, emitting 8 — which put the *user* where the
+    # vmid should be, so routes/vms.py::_vmid_from_upid could not read a vmid and
+    # (correctly, failing closed) treated every guest task as node-level and
+    # admin-only. A regular user could not poll the task for their own power
+    # action. No test caught it because the tests hand-wrote *correct* UPIDs
+    # instead of the ones this mock actually hands out.
+    now = int(time.time())
+    pid = f"0000{next(_upid_seq):04X}"
+    pstart = f"{now & 0xFFFFFFFF:08X}"
+    upid = f"UPID:{NODE}:{pid}:{pstart}:{now:08X}:{type_}:{vmid}:mock@pve:"
     tasks[upid] = {"upid": upid, "type": type_, "id": str(vmid), "user": "mock@pve",
                    "starttime": int(time.time()), "status": "running", "node": NODE,
                    "done_at": time.time() + 1.5}
