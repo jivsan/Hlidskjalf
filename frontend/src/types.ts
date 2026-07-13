@@ -189,7 +189,10 @@ export interface ProvisionRequest {
 
 export interface ConsoleInfo {
   ws_path: string;
+  /** RFB password for qemu. Empty for lxc — the panel authenticates termproxy itself. */
   password: string;
+  /** "qemu" → noVNC framebuffer; "lxc" → xterm.js terminal (Proxmox has no working VNC for containers). */
+  kind: GuestKind;
 }
 
 // --- Switch (Arista eAPI) types (match backend contract) --------------------

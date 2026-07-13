@@ -341,6 +341,19 @@ async def vncproxy(node: str, kind: str, vmid: int):
                      "user": "mock@pve", "cert": ""}}
 
 
+@app.post("/api2/json/nodes/{node}/{kind}/{vmid}/termproxy")
+async def termproxy(node: str, kind: str, vmid: int):
+    """The console endpoint real Proxmox uses for CONTAINERS.
+
+    Validated on PVE 9.2.3 (2026-07-13): an LXC guest's `vncproxy` completes the
+    RFB handshake and then hangs forever at ClientInit, while `termproxy` yields
+    a live shell. Note `user` — termproxy needs it and vncproxy does not: the
+    auth line is "<user>:<ticket>".
+    """
+    return {"data": {"port": "5901", "ticket": "MOCK-TERM-TICKET-" + str(vmid),
+                     "user": "mock@pve!panel", "upid": _mk_upid("vncproxy", vmid)}}
+
+
 @app.websocket("/api2/json/nodes/{node}/{kind}/{vmid}/vncwebsocket")
 async def vncwebsocket(
     websocket: WebSocket,
@@ -350,17 +363,35 @@ async def vncwebsocket(
     port: str = "",
     vncticket: str = "",
 ):
-    """Echo VNC websocket.
+    """Echo console websocket — VNC bytes for qemu, a termproxy stream for lxc.
 
-    The real PVE endpoint bridges to the guest's VNC server; the mock just
-    accepts the `binary` subprotocol (tolerating the port/vncticket query
-    params and the PVEAPIToken Authorization header the panel sends) and echoes
-    every binary frame straight back, so an integration test can prove the
-    panel's bidirectional byte pump moves data in both directions.
+    The real endpoint bridges to the guest's VNC server (qemu) or its terminal
+    (lxc, the port termproxy handed out). The mock accepts the `binary`
+    subprotocol (tolerating the port/vncticket query params and the PVEAPIToken
+    header the panel sends) and echoes frames back, so an integration test can
+    prove the panel's bidirectional pump moves data in both directions.
+
+    For a container it first demands termproxy's "<user>:<ticket>" auth line and
+    answers "OK", exactly as real PVE does. The panel sends that line itself (so
+    the ticket never reaches the browser) — this is what keeps the suite honest
+    about it.
     """
     await websocket.accept(subprotocol="binary")
     try:
+        if kind == "lxc":
+            auth = await websocket.receive()
+            line = auth.get("text") or (auth.get("bytes") or b"").decode()
+            if ":" not in line:
+                await websocket.close(code=1008)
+                return
+            await websocket.send_text("OK")
         while True:
-            await websocket.send_bytes(await websocket.receive_bytes())
+            msg = await websocket.receive()
+            if msg["type"] == "websocket.disconnect":
+                break
+            if msg.get("bytes") is not None:
+                await websocket.send_bytes(msg["bytes"])
+            else:
+                await websocket.send_text(msg.get("text", ""))
     except WebSocketDisconnect:
         pass

@@ -197,6 +197,43 @@ async def test_console_echo_is_bidirectional(panel, cookie):
         assert await asyncio.wait_for(ws.recv(), timeout=5) == second
 
 
+# --- containers: a terminal, not a framebuffer ------------------------------
+# Validated against real PVE 9.2.3 (2026-07-13): an LXC guest's vncproxy
+# completes the RFB handshake and then hangs forever at ClientInit — with the
+# panel out of the path entirely. Proxmox drives containers through termproxy,
+# which yields a live shell. These are the tests that would have caught the panel
+# serving a dead VNC console for every container.
+
+
+async def test_lxc_console_uses_termproxy_and_withholds_the_ticket(panel, cookie):
+    base_url, _ = panel
+    body = await _ticket(base_url, cookie, 130)  # the mock's LXC guest
+    assert body["kind"] == "lxc"
+    # The panel authenticates termproxy upstream itself, so a container's ticket
+    # must NEVER reach the browser (unlike noVNC's RFB password, which must).
+    assert body["password"] == ""
+    assert body["ws_path"].startswith("/ws/console/130?key=")
+
+
+async def test_lxc_console_authenticates_upstream_then_pumps(panel, cookie):
+    """The mock's lxc socket demands termproxy's "<user>:<ticket>" line and
+    answers OK, exactly as real PVE does. Had the panel skipped that handshake —
+    or sent it as a binary VNC frame — the socket would close instead of echo."""
+    base_url, port = panel
+    body = await _ticket(base_url, cookie, 130)
+    ws_url = f"ws://127.0.0.1:{port}{body['ws_path']}"
+
+    async with websockets.connect(
+        ws_url, additional_headers=_cookie_header(cookie), subprotocols=["binary"]
+    ) as ws:
+        # The panel already swallowed the upstream "OK"; the first thing we see
+        # is our own echo. termproxy framing is TEXT, not binary.
+        await ws.send("0:5:hello")
+        assert await asyncio.wait_for(ws.recv(), timeout=5) == "0:5:hello"
+        await ws.send("1:80:24:")  # resize frames keep flowing too
+        assert await asyncio.wait_for(ws.recv(), timeout=5) == "1:80:24:"
+
+
 # --- negative paths (auth + one-time key) -----------------------------------
 
 
