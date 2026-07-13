@@ -1,9 +1,13 @@
-"""SQLite state: bandwidth accounting, counter baselines, rescue boot-order stash."""
+"""SQLite state: bandwidth accounting, counter baselines, rescue boot-order stash,
+users, and (after the first-run setup wizard) runtime configuration."""
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
+
+log = logging.getLogger("hlidskjalf.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS bandwidth (
@@ -43,6 +47,15 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ensure at most one user per vmid (for non-admin users)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_vmid ON users(vmid) WHERE vmid IS NOT NULL;
+
+-- Runtime configuration written by the first-run setup wizard. Environment
+-- variables always take precedence over these rows (see config.apply_stored),
+-- so an operator using agenix/sops/systemd-creds keeps secrets out of the DB.
+CREATE TABLE IF NOT EXISTS config (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -57,6 +70,13 @@ class Db:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(SCHEMA)
         await self._conn.commit()
+        # The DB holds password hashes and (after the setup wizard) the Proxmox
+        # token secret, so it must not be world/group readable.
+        try:
+            self.path.chmod(0o600)
+            self.path.parent.chmod(0o700)
+        except OSError:  # pragma: no cover — exotic filesystems
+            log.warning("could not tighten permissions on %s", self.path)
 
     async def close(self) -> None:
         if self._conn:
@@ -164,6 +184,21 @@ class Db:
     async def get_port_notes(self) -> dict[str, str]:
         cur = await self.conn.execute("SELECT name, note FROM switch_port_notes")
         return {r["name"]: r["note"] for r in await cur.fetchall()}
+
+    # --- runtime config (written by the setup wizard) --------------------------
+
+    async def get_config(self) -> dict[str, str]:
+        cur = await self.conn.execute("SELECT key, value FROM config")
+        return {r["key"]: r["value"] for r in await cur.fetchall()}
+
+    async def set_config(self, values: dict[str, str]) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        await self.conn.executemany(
+            "INSERT INTO config (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            [(k, v, now) for k, v in values.items()],
+        )
+        await self.conn.commit()
 
     # --- users (multi-user + roles) -------------------------------------------
 

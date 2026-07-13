@@ -97,6 +97,21 @@ def _resource(vmid: int, v: dict) -> dict:
     }
 
 
+@app.get("/api2/json/nodes")
+async def nodes():
+    """Real PVE exposes this; the setup wizard uses it to confirm the node exists."""
+    return {
+        "data": [
+            {
+                "node": NODE,
+                "status": "online",
+                "type": "node",
+                "uptime": 2_600_000,
+            }
+        ]
+    }
+
+
 @app.get("/api2/json/cluster/resources")
 async def cluster_resources(type: str | None = None):
     return {"data": [_resource(vmid, v) for vmid, v in sorted(vms.items())]}
