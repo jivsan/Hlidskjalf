@@ -20,6 +20,7 @@ const VmDetailPage = lazy(() =>
   import("./pages/VmDetail").then((m) => ({ default: m.VmDetailPage })),
 );
 const Debug = lazy(() => import("./pages/Debug").then((m) => ({ default: m.Debug })));
+const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const Profile = lazy(() => import("./pages/Profile").then((m) => ({ default: m.Profile })));
 // The wizard is reachable exactly once in a deployment's life — never make the
 // other 99.99% of loads pay for it.
@@ -131,6 +132,7 @@ export function App() {
               {isAdmin && <Route path="/new" element={<Page><Provision /></Page>} />}
               {isAdmin && <Route path="/node" element={<Page><NodePage /></Page>} />}
               {isAdmin && <Route path="/users" element={<Page><UsersPage /></Page>} />}
+              {isAdmin && <Route path="/settings" element={<Page><SettingsPage /></Page>} />}
               {isAdmin && <Route path="/debug" element={<Page><Debug /></Page>} />}
               {/* Home: users go to their VM, admins go to fleet */}
               <Route path="/" element={
