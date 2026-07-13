@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { restoreSession, type SessionInfo } from "./api";
+import { getSetupStatus, restoreSession, type SessionInfo } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import { ToastProvider } from "./components/Toast";
@@ -20,6 +20,9 @@ const VmDetailPage = lazy(() =>
   import("./pages/VmDetail").then((m) => ({ default: m.VmDetailPage })),
 );
 const Debug = lazy(() => import("./pages/Debug").then((m) => ({ default: m.Debug })));
+// The wizard is reachable exactly once in a deployment's life — never make the
+// other 99.99% of loads pay for it.
+const Setup = lazy(() => import("./pages/Setup").then((m) => ({ default: m.Setup })));
 
 // Suspense sits *inside* the Layout outlet, so the chrome (nav/header) never
 // unmounts while a route chunk loads — the page body shows the same
@@ -37,25 +40,47 @@ export interface CurrentUser {
 export function App() {
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [setupNeeded, setSetupNeeded] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
-    void restoreSession().then((s: SessionInfo | null) => {
-      if (s) {
-        const role = (s.role === "admin" ? "admin" : "user") as "admin" | "user";
-        setCurrentUser({ username: s.user, role, vmid: s.vmid ?? null });
-        setAuthed(true);
-      } else {
-        setAuthed(false);
+    // Setup status comes first: on a fresh deployment there is no session to
+    // restore and no login to offer — only the wizard. If the status call itself
+    // fails (old backend, proxy hiccup) we assume a configured panel and fall
+    // through to the normal session path rather than trap the operator here.
+    void (async () => {
+      let needed = false;
+      try {
+        needed = (await getSetupStatus()).needed;
+      } catch {
+        needed = false;
+      }
+      setSetupNeeded(needed);
+      if (!needed) {
+        const s: SessionInfo | null = await restoreSession();
+        if (s) {
+          const role = (s.role === "admin" ? "admin" : "user") as "admin" | "user";
+          setCurrentUser({ username: s.user, role, vmid: s.vmid ?? null });
+          setAuthed(true);
+        } else {
+          setAuthed(false);
+        }
       }
       setReady(true);
-    });
+    })();
   }, []);
 
   const handleLogin = (s: SessionInfo) => {
     const role = (s.role === "admin" ? "admin" : "user") as "admin" | "user";
     setCurrentUser({ username: s.user, role, vmid: s.vmid ?? null });
     setAuthed(true);
+  };
+
+  // Finishing the wizard signs the admin in (the backend set the cookie), so the
+  // setup gate drops and the panel routes come up in the same render.
+  const handleSetupComplete = (s: SessionInfo) => {
+    setSetupNeeded(false);
+    handleLogin(s);
   };
 
   if (!ready) {
@@ -73,6 +98,28 @@ export function App() {
       <ToastProvider>
         <BrowserRouter>
         <Routes>
+          {/* Unconfigured panel: the wizard swallows every route — there is no
+              login to offer and nothing behind it to protect yet. */}
+          {setupNeeded ? (
+            <>
+              <Route
+                path="/"
+                element={
+                  <Suspense
+                    fallback={
+                      <div className="min-h-screen flex items-center justify-center">
+                        <LoadingState message="hlidskjalf…" />
+                      </div>
+                    }
+                  >
+                    <Setup onComplete={handleSetupComplete} />
+                  </Suspense>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            <>
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           {authed && currentUser ? (
             <Route element={<Layout currentUser={currentUser} onLogout={() => { setAuthed(false); setCurrentUser(null); }} />}>
@@ -93,6 +140,8 @@ export function App() {
             </Route>
           ) : (
             <Route path="*" element={<Navigate to="/login" replace />} />
+          )}
+            </>
           )}
         </Routes>
         </BrowserRouter>
