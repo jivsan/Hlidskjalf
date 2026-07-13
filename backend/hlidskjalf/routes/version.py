@@ -99,8 +99,10 @@ def local_state() -> dict:
     if root:
         state["commit"] = _git(root, "rev-parse", "HEAD")
         state["branch"] = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
-        # Uncommitted work means "you are ahead of any release" — saying
-        # "update available" to someone mid-edit would be nonsense.
+        # Uncommitted work is INDEPENDENT of being behind: you can have local edits
+        # AND be behind upstream at the same time (the common case on a dev box).
+        # It does not mean "ahead" — it means an update would overwrite something,
+        # so routes/update.py refuses until the tree is clean.
         state["dirty"] = bool(_git(root, "status", "--porcelain"))
     return state
 

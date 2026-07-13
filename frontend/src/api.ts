@@ -362,7 +362,8 @@ export interface VersionInfo {
   /** "" when this install is not a git checkout (docker/nix/pip). */
   commit: string;
   branch: string;
-  /** Uncommitted local changes — you are ahead of any release, not behind. */
+  /** Uncommitted local changes. Independent of being behind — it means an update
+   *  would overwrite them, so applying one is refused until the tree is clean. */
   dirty: boolean;
   deployment: "git" | "docker" | "nix" | "package";
   repo: string;

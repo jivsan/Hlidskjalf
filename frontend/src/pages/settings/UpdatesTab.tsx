@@ -122,7 +122,12 @@ export function UpdatesTab() {
           {info.commit && (
             <Row
               label="commit"
-              value={`${info.commit.slice(0, 8)}${info.dirty ? " (uncommitted changes)" : ""}`}
+              value={
+                <>
+                  {info.commit.slice(0, 8)}
+                  {info.dirty && <span className="text-amber"> · local changes</span>}
+                </>
+              }
             />
           )}
           {info.branch && <Row label="branch" value={info.branch} />}
@@ -174,29 +179,38 @@ export function UpdatesTab() {
                 backs up the database first, refuses if you have local changes, and rolls
                 back if the new code does not even import.
               </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  className="input metric max-w-[14rem]"
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  placeholder={`type "${CONFIRM}"`}
-                  disabled={applying}
-                  spellCheck={false}
-                  autoComplete="off"
-                  aria-label={`type ${CONFIRM} to confirm`}
-                />
-                <button
-                  className="btn-pink"
-                  onClick={() => void apply()}
-                  disabled={applying || confirmText !== CONFIRM}
-                >
-                  {phase === "working"
-                    ? "updating…"
-                    : phase === "restarting"
-                      ? "restarting…"
-                      : "apply update"}
-                </button>
-              </div>
+              {/* A dirty tree is refused server-side, so don't offer the button. */}
+              {info.dirty ? (
+                <p className="text-amber text-xs">
+                  this checkout has uncommitted changes, so applying an update is refused —
+                  it would overwrite them. Commit or stash them on the host first, then
+                  check again.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    className="input metric max-w-[14rem]"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder={`type "${CONFIRM}"`}
+                    disabled={applying}
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-label={`type ${CONFIRM} to confirm`}
+                  />
+                  <button
+                    className="btn-pink"
+                    onClick={() => void apply()}
+                    disabled={applying || confirmText !== CONFIRM}
+                  >
+                    {phase === "working"
+                      ? "updating…"
+                      : phase === "restarting"
+                        ? "restarting…"
+                        : "apply update"}
+                  </button>
+                </div>
+              )}
               {phase === "restarting" && (
                 <p className="text-amber text-xs" role="status">
                   the panel is restarting into the new version — waiting for it to answer…
@@ -235,13 +249,6 @@ export function UpdatesTab() {
         <div className="card border-cyan/40 p-3 text-cyan text-xs" role="status">
           updated and running the new version.
         </div>
-      )}
-
-      {info.dirty && (
-        <p className="text-amber text-xs">
-          this checkout has uncommitted changes — you are ahead of the release, not behind.
-          {info.self_update && " Applying an update is refused until the tree is clean."}
-        </p>
       )}
     </div>
   );
