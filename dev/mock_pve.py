@@ -88,6 +88,18 @@ def _counters(vmid: int) -> tuple[int, int]:
     return int(dt * rin), int(dt * rout)
 
 
+def _guest_disk(v: dict, running: bool) -> int:
+    # Real PVE (validated against a 9.2.3 host, 2026-07-13) reports disk=0 for
+    # QEMU guests in /cluster/resources, status/current AND rrddata: the
+    # hypervisor cannot see in-guest filesystem usage (the guest agent is not
+    # consulted for this figure). Only LXC containers report real disk usage.
+    # This mock used to fabricate 45% of maxdisk for everything, so the UI's
+    # disk bar looked plausible in dev and read empty against reality.
+    if v["type"] == "qemu":
+        return 0
+    return int(v["maxdisk"] * 0.45) if running else 0
+
+
 def _resource(vmid: int, v: dict) -> dict:
     running = v["status"] == "running"
     netin, netout = _counters(vmid)
@@ -100,7 +112,7 @@ def _resource(vmid: int, v: dict) -> dict:
         "cpu": round(cpu, 4), "maxcpu": v["cores"],
         "mem": int(v["memory"] * (1 << 20) * (0.3 + 0.4 * abs(math.sin(time.time() / 600 + phase)))) if running else 0,
         "maxmem": v["memory"] * (1 << 20),
-        "disk": int(v["maxdisk"] * 0.45), "maxdisk": v["maxdisk"],
+        "disk": _guest_disk(v, running), "maxdisk": v["maxdisk"],
         "uptime": uptime, "netin": netin, "netout": netout,
         "diskread": int(uptime * 80_000), "diskwrite": int(uptime * 40_000),
         "tags": "",
@@ -256,7 +268,7 @@ async def vm_rrd(node: str, kind: str, vmid: int, timeframe: str = "hour", cf: s
         rows.append({
             "time": t, "cpu": 0.05 + 0.5 * s, "maxcpu": v["cores"],
             "mem": v["memory"] * (1 << 20) * (0.3 + 0.3 * s), "maxmem": v["memory"] * (1 << 20),
-            "disk": v["maxdisk"] * 0.45, "maxdisk": v["maxdisk"],
+            "disk": _guest_disk(v, v["status"] == "running"), "maxdisk": v["maxdisk"],
             "diskread": 90_000 * s, "diskwrite": 50_000 * s,
             "netin": rin * (0.4 + 0.8 * s), "netout": rout * (0.4 + 0.8 * s),
         })
