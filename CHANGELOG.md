@@ -105,6 +105,14 @@ A full audit of every route, the auth/session model and the config. Patched:
 ### Housekeeping
 - Pruned 11 stale merged/abandoned remote branches; `.claude/` is now gitignored.
 - Backend + frontend versions bumped to 0.3.6-alpha.
+- New screenshot gallery `docs/screenshots/v0.3.6-alpha/`, including all four steps of
+  the setup wizard, plus a `capture-setup.js` that drives a genuinely unconfigured backend.
+- **`dev/dev.env.example` is now tracked** (the real `dev.env` is gitignored, so a fresh
+  clone had nothing to copy). It also fixes a trap this release introduced: `dev.env` had
+  been relying on `pve_node` defaulting to `hella`, and that default is now Proxmox's
+  neutral `pve` — so the dev stack silently pointed at a node its own mock doesn't have,
+  404ing every node-scoped endpoint. The example sets `HLIDSKJALF_PVE_NODE=hella`
+  explicitly and says why.
 
 ## [v0.3.5-alpha] - 2026-07-13
 
