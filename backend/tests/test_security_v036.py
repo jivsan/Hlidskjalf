@@ -136,3 +136,39 @@ def test_security_headers_present(anon):
 
 def test_api_responses_are_not_cacheable(anon):
     assert anon.get("/api/health").headers["cache-control"] == "no-store"
+
+
+# --- the UPIDs the mock ACTUALLY hands out ------------------------------------
+#
+# The tests above hand-write UPIDs. That is how a real bug hid here: dev/mock_pve.py
+# emitted 8-field UPIDs (it omitted `pstart`), so the *user* sat where the vmid
+# belongs, `_vmid_from_upid` could not read a vmid, and every guest task was
+# treated as node-level — i.e. admin-only. A regular user could not poll the task
+# for their own power action, and the UI's watchTask() would have failed for every
+# tenant. Hand-written UPIDs were correct, so nothing caught it.
+#
+# Never assert against a UPID we invented. Use the one the server gave us.
+
+
+def test_tenant_can_poll_the_task_for_their_own_power_action(client, tenant):
+    login(client, tenant, "tenantpass1")
+
+    r = client.post(f"/api/vms/{OWNED_VMID}/status/start", headers=csrf_headers(client))
+    assert r.status_code == 200, r.text
+    upid = r.json()["upid"]
+
+    # Shape check: real Proxmox emits 9 colon-separated fields.
+    assert len(upid.split(":")) == 9, f"mock emitted a non-PVE UPID shape: {upid!r}"
+
+    st = client.get(f"/api/tasks/{upid}/status")
+    assert st.status_code == 200, "a tenant cannot poll the task for their OWN action"
+
+
+def test_a_server_issued_upid_still_scopes_across_tenants(client, tenant):
+    """The IDOR fix must survive the real UPID shape, not just our invented one."""
+    login(client, ADMIN_USER, ADMIN_PASSWORD)
+    r = client.post(f"/api/vms/{OTHER_VMID}/status/start", headers=csrf_headers(client))
+    other_upid = r.json()["upid"]
+
+    login(client, tenant, "tenantpass1")
+    assert client.get(f"/api/tasks/{other_upid}/status").status_code == 403

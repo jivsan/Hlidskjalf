@@ -1,5 +1,6 @@
 """VM list, detail, and power actions."""
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,7 @@ from ..db import Db
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..pve import PveClient, PveError
 
+log = logging.getLogger("hlidskjalf.vms")
 router = APIRouter()
 
 PowerAction = Literal["start", "shutdown", "reboot", "stop", "reset"]
@@ -180,18 +182,39 @@ async def power_action(
     return {"upid": upid}
 
 
-def _vmid_from_upid(upid: str) -> int | None:
-    """Pull the guest id out of a PVE UPID.
+#   UPID:node:pid:pstart:starttime:dtype:id:user:
+#     0    1    2    3      4        5    6   7   8(empty)
+UPID_FIELDS = 9
+UPID_ID_INDEX = 6
 
-    Format: ``UPID:node:pid:pstart:starttime:dtype:id:user:``. For guest tasks
-    the ``id`` field is the vmid; for node-level tasks it is not numeric.
+
+def _vmid_from_upid(upid: str) -> int | None:
+    """Pull the guest id out of a PVE UPID, or None for a node-level task.
+
+    This decides who may read a task's status, so it must **fail closed**: a UPID
+    we cannot read is treated as node-level, which is admin-only. It must never
+    guess a vmid it isn't sure about.
+
+    The shape is checked rather than assumed. If a real Proxmox ever hands us
+    something with a different field count we want a loud warning in the logs —
+    not a panel that silently 403s every tenant polling their own task, which is
+    exactly the failure our own mock produced by dropping `pstart`.
     """
     parts = upid.split(":")
-    if len(parts) < 7:
+    if len(parts) != UPID_FIELDS or parts[0] != "UPID":
+        log.warning(
+            "unrecognised UPID shape (%d fields, expected %d): %r — treating as a "
+            "node-level task (admin-only). If real Proxmox emits this, the parser "
+            "needs updating, NOT relaxing.",
+            len(parts),
+            UPID_FIELDS,
+            upid[:120],
+        )
         return None
     try:
-        return int(parts[6])
+        return int(parts[UPID_ID_INDEX])
     except ValueError:
+        # Node-level tasks legitimately carry a non-numeric id (e.g. a service name).
         return None
 
 
