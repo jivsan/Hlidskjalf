@@ -32,6 +32,24 @@ TOKEN_SECRET_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
 )
 
+# Credentials that announce themselves by prefix. This test did not look for these,
+# and that is precisely how a GitHub Personal Access Token reached handoff.md and a
+# public repo (alert #1, 2026-07-12 — auto-revoked by GitHub, but only by luck: it
+# scans its OWN token formats and would not have saved an AWS key or an SSH key).
+# The rule is not "no fingerprints" — it is "no credentials", so enumerate them.
+# The one sanctioned exception: the dev mock switch's throwaway TLS key. It is a
+# real private key and it is SUPPOSED to be in the repo — the mock serves TLS with
+# it on localhost, and the dev stack cannot run without it. Nothing else may be here.
+ALLOWED_KEYS = {"dev/mock_switch.key"}
+
+CREDENTIAL_RES = [
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"), "a GitHub fine-grained PAT"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}"), "a GitHub classic token"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "an AWS access key id"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "a private key"),
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"), "a Slack token"),
+]
+
 # Binary/vendored files git tracks that are not worth scanning as text.
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2", ".pdf"}
 
@@ -95,3 +113,45 @@ def test_defaults_are_nobody_s_deployment(monkeypatch):
     assert s.rescue_iso == ""
     assert s.admin_user == "admin"       # a role, not a person
     assert s.pve_node == "pve"           # Proxmox's own default node name
+
+
+@pytest.mark.parametrize("pattern,what", CREDENTIAL_RES, ids=[w for _, w in CREDENTIAL_RES])
+def test_no_credentials_in_tracked_files(pattern, what):
+    """No credential-shaped string may be committed, whatever kind it is.
+
+    History is the reason this is parametrised rather than a single regex: a GitHub
+    PAT was committed to `handoff.md` and published. GitHub revoked it automatically —
+    but that only works because GitHub scans for GitHub's own formats. An AWS key, an
+    SSH private key or a Slack token would have sat there indefinitely. A repo that is
+    public must catch its own leaks; being saved by the platform is not a control.
+    """
+    hits = []
+    for path in _tracked_text_files():
+        if path.resolve() == Path(__file__).resolve():
+            continue  # this file names the shapes it forbids
+        if path.relative_to(ROOT).as_posix() in ALLOWED_KEYS:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError):
+            continue
+        for n, line in enumerate(text.splitlines(), 1):
+            if pattern.search(line):
+                hits.append(f"{path.relative_to(ROOT)}:{n}")
+    assert not hits, (
+        f"{what} appears in tracked files: {hits}. Revoke it NOW — a public repo is "
+        "scraped within minutes — then remove it. Secrets belong in dev/dev.env or a "
+        "secret manager, never in a commit, a PR body, or a chat message."
+    )
+
+
+def test_the_only_committed_key_is_the_mocks_throwaway():
+    """The one allowed private key must stay what it claims to be: a self-signed
+    certificate for `dev/mock_switch.py`, generated for a fake switch that answers
+    on localhost. If a real key is ever parked at this path, the allowlist above
+    would wave it straight through — so check the certificate it belongs to."""
+    cert = (ROOT / "dev" / "mock_switch.crt").read_text()
+    assert "BEGIN CERTIFICATE" in cert
+    assert (ROOT / "dev" / "mock_switch.key").exists()
+    # Anything that is not the mock's own pair must not be in the allowlist.
+    assert ALLOWED_KEYS == {"dev/mock_switch.key"}
