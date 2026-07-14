@@ -16,9 +16,9 @@ the tenant, or admin again) rather than juggling two cookie jars at once.
 from conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_headers
 
 # vmid map in dev/mock_pve.py:
-#   105 vps-jarvis-prod  qemu running  (not protected)  -> the tenant's VM (A)
-#   115 vps-jarvis-edge  qemu running  (not protected)  -> a VM the tenant does NOT own (B)
-#   120 hass             qemu running  (not protected)  -> admin rescue happy-path
+#   105 vps-alpha  qemu running  (not protected)  -> the tenant's VM (A)
+#   115 vps-beta  qemu running  (not protected)  -> a VM the tenant does NOT own (B)
+#   120 app-01           qemu running  (not protected)  -> admin rescue happy-path
 #   151 pbs              qemu running  (PROTECTED)       -> rescue refused for everyone
 TENANT_USER = "tenant-ac"
 TENANT_PASS = "tenant-ac-password"

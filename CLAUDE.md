@@ -89,7 +89,7 @@ The write paths — nothing here has ever run against real hardware:
 - **Reinstall must preserve MAC/IP**, and **rescue must restore boot order**.
 - **Bandwidth accumulator**: counters must not double-count across a panel restart or
   go negative when a guest reboots.
-- **Single node vs cluster.** The panel assumes ONE node (`pve_node`); hella is single-
+- **Single node vs cluster.** The panel assumes ONE node (`pve_node`); pve is single-
   node, so the cluster path is still untested.
 
 ## What to do with what you find
@@ -119,8 +119,9 @@ Frontend changes only show up after `npm run build` (the backend serves `dist/`)
 use `--vite`.
 
 Gotchas that have bitten every session:
-- `HLIDSKJALF_PVE_NODE` **must** be set (`hella` for the mock). The default is Proxmox's
-  neutral `pve`, and node-scoped endpoints 404 if it doesn't match.
+- `HLIDSKJALF_PVE_NODE` must match the node name Proxmox actually reports, or every
+  node-scoped endpoint 404s. The mock now uses Proxmox's own default (`pve`), so the
+  mock stack needs nothing set — a **real** host with a different node name does.
 - The switch eAPI is TLS-verified, so `mock_switch` needs its cert **and** the backend
   needs the pin (`HLIDSKJALF_SWITCH_FINGERPRINT`). See `dev/dev.env.example`.
 - `HLIDSKJALF_COOKIE_SECURE=false` for plain-http dev, or the session cookie is never
@@ -168,14 +169,25 @@ cd frontend && npx tsc --noEmit && npm run build    # must be clean, no chunk wa
 
 # Genericity — this ships to other people
 
-**Nothing site-specific belongs in code.** Christian's rule: the panel must work in
-anyone's setup. Hella's IPs, VMIDs, storage names, bridges and fingerprints live in
-env/config/docs — never in code defaults or tests. Config that used to be env-only
-(VLANs, clone storage, bridge) is now editable in **Settings**. The install bar is
-"install → paste the Proxmox API token → set credentials → done".
+**Nothing site-specific belongs in code — or in a tracked file at all.** The rule: a
+`git clone` of this repo is a **fresh install**. Someone who clones it starts the panel,
+meets the setup wizard, and configures *their* Proxmox. They must never find ours.
 
-The one sanctioned exception, for now: the **switch faceplate**, hardcoded to
-Christian's Arista DCS-7050TX-48.
+- IPs, VMIDs, storage names, bridges, node names, cert fingerprints and tokens live in
+  `dev/dev.env` and `dev/site-notes.md` — **both gitignored**. Never in code defaults,
+  tests, the mock, or a doc.
+- The mock and the test fixtures are deliberately generic: node `pve`, guests
+  `panel-host` / `vps-alpha` / `vps-beta` / `app-01` / `ct-runner`, example addresses in
+  `192.168.<vlan>.<host>`. Keep them that way.
+- `backend/tests/test_fresh_clone.py` enforces it: no tracked file may contain a real
+  cert fingerprint or a token-shaped UUID, and `Settings()` with **no** environment must
+  come up unconfigured (no host, no VLANs, no protected VMIDs, admin user `admin`).
+- Config that used to be env-only (VLANs, clone storage, bridge) is editable in
+  **Settings**. The install bar is "install → paste the Proxmox API token → set
+  credentials → done".
+
+The one sanctioned exception, for now: the **switch faceplate**, hardcoded to a
+48-port Arista DCS-7050TX-48.
 
 # Known limitations
 

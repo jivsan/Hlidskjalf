@@ -47,12 +47,16 @@ in
     };
 
     settings = {
-      pveHost = lib.mkOption { type = lib.types.str; default = "10.0.20.10"; };
-      pveNode = lib.mkOption { type = lib.types.str; default = "hella"; };
+      pveHost = lib.mkOption {
+        type = lib.types.str;
+        example = "192.0.2.10";
+        description = "Proxmox host or IP. No default — this is your host, not ours.";
+      };
+      pveNode = lib.mkOption { type = lib.types.str; default = "pve"; };
       pveTokenId = lib.mkOption { type = lib.types.str; default = "hlidskjalf@pve!panel"; };
       pveFingerprint = lib.mkOption {
         type = lib.types.str;
-        description = "SHA-256 fingerprint of hella's API TLS cert (colon-separated hex).";
+        description = "SHA-256 fingerprint of the Proxmox API TLS cert (colon-separated hex).";
       };
       rescueIso = lib.mkOption {
         type = lib.types.str;
@@ -61,8 +65,12 @@ in
       };
       protectedVmids = lib.mkOption {
         type = with lib.types; listOf int;
-        default = [ 151 ];
-        description = "Destroy/reinstall/stop/reset are refused server-side for these.";
+        default = [ ];
+        example = [ 100 ];
+        description = ''
+          Destroy/reinstall/stop/reset are refused server-side for these. Empty means
+          NOTHING is protected — put the VMID of the guest running this panel in here.
+        '';
       };
       bandwidthQuotas = lib.mkOption {
         type = with lib.types; attrsOf int;
@@ -73,10 +81,12 @@ in
       defaultSshKeys = lib.mkOption { type = lib.types.lines; default = ""; };
       vlanGateways = lib.mkOption {
         type = with lib.types; attrsOf str;
-        default = { "20" = "10.0.20.1"; "30" = ""; "50" = "10.0.50.1"; };
+        default = { };
+        example = { "20" = "192.0.2.1"; "30" = ""; };
+        description = "VLAN tag -> gateway IP (\"\" for gateway-less VLANs). Also editable in Settings.";
       };
       cloneStorage = lib.mkOption { type = lib.types.str; default = "local-lvm"; };
-      adminUser = lib.mkOption { type = lib.types.str; default = "christina"; };
+      adminUser = lib.mkOption { type = lib.types.str; default = "admin"; };
     };
   };
 

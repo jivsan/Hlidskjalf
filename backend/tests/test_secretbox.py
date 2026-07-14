@@ -69,9 +69,9 @@ def test_plaintext_values_pass_through():
 
 
 def test_only_secret_fields_are_sealed():
-    cfg = {"pve_host": "10.0.0.1", "pve_node": "pve", "pve_token_secret": TOKEN}
+    cfg = {"pve_host": "192.168.0.1", "pve_node": "pve", "pve_token_secret": TOKEN}
     sealed = secretbox.encrypt_config(cfg, "a-key")
-    assert sealed["pve_host"] == "10.0.0.1"  # not a secret, stays readable
+    assert sealed["pve_host"] == "192.168.0.1"  # not a secret, stays readable
     assert sealed["pve_node"] == "pve"
     assert secretbox.is_encrypted(sealed["pve_token_secret"])
     assert secretbox.decrypt_config(sealed, "a-key") == cfg
@@ -116,7 +116,7 @@ async def test_the_token_never_appears_in_the_database_file(state_dir):
     settings = Settings(state_dir=state_dir)
     db = Db(Path(state_dir) / "hlidskjalf.sqlite3")
     await db.open()
-    await db.set_config(seal({"pve_host": "10.0.0.1", "pve_token_secret": TOKEN}, settings))
+    await db.set_config(seal({"pve_host": "192.168.0.1", "pve_token_secret": TOKEN}, settings))
     await db.close()
 
     # Read the raw file, exactly as someone who walked off with it would.
@@ -129,7 +129,7 @@ async def test_the_token_never_appears_in_the_database_file(state_dir):
     conn.close()
     assert rows["pve_token_secret"] != TOKEN
     assert secretbox.is_encrypted(rows["pve_token_secret"])
-    assert rows["pve_host"] == "10.0.0.1"  # non-secrets stay legible for debugging
+    assert rows["pve_host"] == "192.168.0.1"  # non-secrets stay legible for debugging
 
     # The panel itself still gets the real token back.
     assert unseal(rows, settings)["pve_token_secret"] == TOKEN

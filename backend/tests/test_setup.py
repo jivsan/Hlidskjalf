@@ -22,7 +22,7 @@ def _pve_conn() -> dict:
     return {
         "host": "127.0.0.1",
         "port": MOCK_PORT,
-        "node": "hella",
+        "node": "pve",
         "scheme": "http",
         "token_id": "hlidskjalf@pve!panel",
         "token_secret": "mock-secret",
@@ -153,7 +153,7 @@ def test_setup_test_accepts_a_good_connection(fresh_app):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
-    assert body["node"] == "hella"
+    assert body["node"] == "pve"
     assert body["guests"] > 0
 
 
@@ -199,7 +199,7 @@ def test_setup_commits_and_signs_the_admin_in(fresh_app):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True and body["user"] == "operator" and body["role"] == "admin"
-    assert body["node"] == "hella"
+    assert body["node"] == "pve"
     assert body["csrf"]
 
     # The response signed us in — the session works without a separate login.

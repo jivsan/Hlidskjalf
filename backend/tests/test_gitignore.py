@@ -25,6 +25,7 @@ MUST_BE_IGNORED = [
     "hlidskjalf.sqlite3",
     "hlidskjalf.sqlite3.bak-v3-1234", # migrations back the DB up before touching it
     "dev/dev.env",                    # the Proxmox token in plaintext
+    "dev/site-notes.md",              # the operator's own host, pin, VMIDs
 ]
 
 # ...and things that must stay tracked, so an over-broad rule can't silently

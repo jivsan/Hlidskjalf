@@ -23,7 +23,7 @@ when it fails — the file and the line whose assumption just died.
 Run the script against our own mock and it fails on `upid/vmid-field`:
 
 ```
-INFO  upid/example      UPID:hella:00000001:1783938274:qmstart:140:mock@pve:   (8 fields)
+INFO  upid/example      UPID:pve:00000001:1783938274:qmstart:140:mock@pve:   (8 fields)
 FAIL  upid/vmid-field   _vmid_from_upid(...) = None, but the task's id is 140.
 ```
 
@@ -138,7 +138,7 @@ against the wrong thing again and we are back where we started.
 ```bash
 cd dev && python -m uvicorn mock_pve:app --port 18006 &
 python scripts/validate-proxmox.py --scheme http --host 127.0.0.1 --port 18006 \
-    --node hella --token-secret mock-secret
+    --node pve --token-secret mock-secret
 ```
 
 This is useful for exactly one thing: confirming **the script itself** runs. A clean

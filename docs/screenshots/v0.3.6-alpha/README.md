@@ -13,7 +13,7 @@ until the connection is proven, and once an admin exists these endpoints close
 | Step | File | Notes |
 | --- | --- | --- |
 | 1 · Proxmox connection | `setup-1-connect.png` | host/node/token + optional cert fingerprint. The `pveum` command to mint the token is inline. |
-| 1 · connection verified | `setup-2-tested.png` | **Test connection** makes a real API call — "Proxmox answered. node hella · 9 guests". Continue stays disabled until it succeeds, and editing any field invalidates the result. |
+| 1 · connection verified | `setup-2-tested.png` | **Test connection** makes a real API call — "Proxmox answered. node pve · 9 guests". Continue stays disabled until it succeeds, and editing any field invalidates the result. |
 | 2 · Admin account | `setup-3-admin.png` | username + password + confirm (min 8). |
 | 3 · First user | `setup-4-first-user.png` | Optional, **skipped by default**. The VM is chosen from a **picker of the guests the connection test actually found** — not a VMID typed from memory. |
 | 4 · Review | `setup-5-review.png` | The token secret renders as `•••••••• (held, not shown)` and is never echoed back. "finish & take the seat" signs you straight in. |
@@ -42,7 +42,7 @@ until the connection is proven, and once an admin exists these endpoints close
 
 The design system is unchanged — v0.3.6 is a security/product release. The one
 visible difference is that **the panel no longer hardcodes a host name**: the node
-comes from `/api/session`, so the sidebar and the Fleet eyebrow now read "hella"
+comes from `/api/session`, so the sidebar and the Fleet eyebrow now read "pve"
 because that's what *this* deployment watches, not because it's baked into the
 source. The login screen deliberately names no host at all (it renders pre-auth).
 

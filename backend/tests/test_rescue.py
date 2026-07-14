@@ -9,7 +9,7 @@ ISO = "local:iso/systemrescue-12.01-amd64.iso"
 
 def _mock_config(mock_pve_url):
     return httpx.get(
-        f"{mock_pve_url}/api2/json/nodes/hella/qemu/{VMID}/config"
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/{VMID}/config"
     ).json()["data"]
 
 

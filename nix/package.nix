@@ -51,7 +51,7 @@ python312Packages.buildPythonApplication {
   passthru = { inherit frontend; };
 
   meta = {
-    description = "Self-hosted Proxmox VPS panel — Odin's high seat over hella";
+    description = "Self-hosted, multi-user Proxmox VE control panel";
     mainProgram = "hlidskjalf";
   };
 }

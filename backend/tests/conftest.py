@@ -27,7 +27,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR = REPO_ROOT / "dev"
 
-ADMIN_USER = "christina"
+ADMIN_USER = "admin"
 ADMIN_PASSWORD = "test-password"
 
 
@@ -50,7 +50,7 @@ os.environ.update(
         "HLIDSKJALF_PVE_SCHEME": "http",
         "HLIDSKJALF_PVE_HOST": "127.0.0.1",
         "HLIDSKJALF_PVE_PORT": str(MOCK_PORT),
-        "HLIDSKJALF_PVE_NODE": "hella",
+        "HLIDSKJALF_PVE_NODE": "pve",
         "HLIDSKJALF_PVE_TOKEN_SECRET": "mock-secret",
         "HLIDSKJALF_ADMIN_USER": ADMIN_USER,
         "HLIDSKJALF_ADMIN_PASSWORD_HASH": PasswordHasher().hash(ADMIN_PASSWORD),
@@ -60,7 +60,7 @@ os.environ.update(
         "HLIDSKJALF_BANDWIDTH_QUOTAS": '{"115": 500}',
         # Site-specific settings now default to empty (the panel ships neutral, not
         # wired to one homelab), so the suite states its own network explicitly.
-        "HLIDSKJALF_VLAN_GATEWAYS": '{"20": "10.0.20.1", "30": "", "50": "10.0.50.1"}',
+        "HLIDSKJALF_VLAN_GATEWAYS": '{"20": "192.168.20.1", "30": "", "50": "192.168.50.1"}',
         "HLIDSKJALF_STATE_DIR": STATE_DIR,
         "HLIDSKJALF_STATIC_DIR": "",
         # cookie_secure defaults to True (production). Starlette's TestClient runs

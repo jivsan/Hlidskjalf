@@ -55,7 +55,8 @@ async def enter_rescue(
     # an unscoped endpoint let any logged-in user reboot any tenant's machine.
     await _ensure_vm_access(username, vmid, db, pve)
     # Refuse protected VMIDs for EVERYONE (admins included): rescuing protected
-    # infrastructure — heimdall hosts this very panel, PBS, etc. — is catastrophic.
+    # infrastructure — the VM hosting this very panel, a backup server, etc. — is
+    # catastrophic.
     guard_protected(vmid, "rescue")
     iso = settings().rescue_iso
     if not iso:

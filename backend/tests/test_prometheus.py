@@ -78,7 +78,7 @@ def mock_prom_url() -> str:
 
 def _settings(url: str, **kw) -> Settings:
     return Settings(
-        metrics_source="prometheus", prometheus_url=url, pve_node="hella", **kw
+        metrics_source="prometheus", prometheus_url=url, pve_node="pve", **kw
     )
 
 
@@ -154,7 +154,7 @@ def test_cf_max_uses_max_over_time(source):
 
 def test_node_queries_omit_unexported_fields(source):
     q = source._node_queries(60, "AVERAGE")
-    assert 'id="node/hella"' in q["cpu"]
+    assert 'id="node/pve"' in q["cpu"]
     # prometheus-pve-exporter has no node iowait/loadavg/netin/netout
     assert not {"iowait", "loadavg", "netin", "netout"} & set(q)
 
@@ -171,7 +171,7 @@ def test_node_query_overrides(mock_prom_url):
         )
     )
     q = src._node_queries(300, "AVERAGE")
-    assert q["loadavg"] == 'node_load1{instance="hella:9100"}'
+    assert q["loadavg"] == 'node_load1{instance="pve:9100"}'
     assert q["iowait"] == 'rate(node_cpu_seconds_total{mode="iowait"}[300s])'
     assert "bogus" not in q
 

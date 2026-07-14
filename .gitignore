@@ -4,6 +4,9 @@ __pycache__/
 node_modules/
 frontend/dist/
 dev/dev.env
+# Your own homelab's facts (node name, host IP, cert pin, VMIDs). The repo ships
+# knowing nothing about anyone's setup — keep it that way.
+dev/site-notes.md
 .DS_Store
 result
 

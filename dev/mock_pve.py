@@ -18,24 +18,24 @@ from itertools import count
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 app = FastAPI(title="mock-pve")
-NODE = "hella"
+NODE = "pve"
 BOOT = time.time()
 
 vms: dict[int, dict] = {
-    101: dict(name="heimdall", type="qemu", status="running", cores=4, memory=8192,
-              maxdisk=64 << 30, vlan="20", ip="10.0.20.17"),
-    105: dict(name="vps-jarvis-prod", type="qemu", status="running", cores=8, memory=16384,
-              maxdisk=200 << 30, vlan="20", ip="10.0.20.15"),
-    115: dict(name="vps-jarvis-edge", type="qemu", status="running", cores=2, memory=4096,
-              maxdisk=40 << 30, vlan="50", ip="10.0.50.11"),
-    120: dict(name="hass", type="qemu", status="running", cores=2, memory=4096,
-              maxdisk=32 << 30, vlan="20", ip="10.0.20.30"),
+    101: dict(name="panel-host", type="qemu", status="running", cores=4, memory=8192,
+              maxdisk=64 << 30, vlan="20", ip="192.168.20.17"),
+    105: dict(name="vps-alpha", type="qemu", status="running", cores=8, memory=16384,
+              maxdisk=200 << 30, vlan="20", ip="192.168.20.15"),
+    115: dict(name="vps-beta", type="qemu", status="running", cores=2, memory=4096,
+              maxdisk=40 << 30, vlan="50", ip="192.168.50.11"),
+    120: dict(name="app-01", type="qemu", status="running", cores=2, memory=4096,
+              maxdisk=32 << 30, vlan="20", ip="192.168.20.30"),
     151: dict(name="pbs", type="qemu", status="running", cores=2, memory=4096,
-              maxdisk=500 << 30, vlan="30", ip="10.0.30.5"),
-    130: dict(name="ct-forge", type="lxc", status="running", cores=2, memory=2048,
-              maxdisk=16 << 30, vlan="20", ip="10.0.20.40"),
+              maxdisk=500 << 30, vlan="30", ip="192.168.30.5"),
+    130: dict(name="ct-runner", type="lxc", status="running", cores=2, memory=2048,
+              maxdisk=16 << 30, vlan="20", ip="192.168.20.40"),
     140: dict(name="scratch-old", type="qemu", status="stopped", cores=1, memory=1024,
-              maxdisk=8 << 30, vlan="20", ip="10.0.20.90"),
+              maxdisk=8 << 30, vlan="20", ip="192.168.20.90"),
     9000: dict(name="debian13-template", type="qemu", status="stopped", template=1,
                cores=2, memory=2048, maxdisk=4 << 30, vlan="20", ip=""),
     9001: dict(name="ubuntu2404-template", type="qemu", status="stopped", template=1,
@@ -245,7 +245,7 @@ async def agent_net(node: str, vmid: int):
         raise HTTPException(500, "agent not running")
     return {"data": {"result": [
         {"name": "lo", "ip-addresses": [{"ip-address": "127.0.0.1", "ip-address-type": "ipv4"}]},
-        {"name": "eth0", "ip-addresses": [{"ip-address": v["ip"] or "10.0.20.99",
+        {"name": "eth0", "ip-addresses": [{"ip-address": v["ip"] or "192.168.20.99",
                                            "ip-address-type": "ipv4"}]},
     ]}}
 
@@ -313,7 +313,7 @@ async def node_storage(node: str):
          "avail": 60 << 30, "content": "iso,vztmpl,backup", "active": 1},
         # Real hosts rarely have exactly one image-capable storage (the first
         # real one had four); a second entry keeps the Settings select honest.
-        {"storage": "vm-drives", "type": "zfspool", "used": 300 << 30, "total": 1800 << 30,
+        {"storage": "vm-store", "type": "zfspool", "used": 300 << 30, "total": 1800 << 30,
          "avail": 1500 << 30, "content": "images,rootdir", "active": 1},
     ]}
 
@@ -326,8 +326,8 @@ async def node_network(node: str):
     return {"data": [
         {"iface": "eno1", "type": "eth", "active": 1, "exists": 1, "method": "manual"},
         {"iface": "vmbr0", "type": "bridge", "active": 1, "autostart": 1,
-         "method": "static", "cidr": "10.0.10.2/24", "address": "10.0.10.2",
-         "netmask": "24", "gateway": "10.0.10.1", "bridge_ports": "eno1",
+         "method": "static", "cidr": "192.168.10.2/24", "address": "192.168.10.2",
+         "netmask": "24", "gateway": "192.168.10.1", "bridge_ports": "eno1",
          "bridge_stp": "off", "bridge_fd": "0"},
         {"iface": "vmbr1", "type": "bridge", "active": 1, "autostart": 1,
          "method": "manual", "bridge_ports": "eno1.20", "bridge_stp": "off",

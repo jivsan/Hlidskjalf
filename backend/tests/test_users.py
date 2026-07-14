@@ -7,7 +7,7 @@ protection). The shared harness (conftest.py) is imported read-only.
 Note on shared state: `client` is session-scoped, so the users table (a single
 sqlite in the session STATE_DIR) accumulates across tests. Every helper below
 therefore uses unique usernames and cleans up the users it creates so tests
-stay order-independent (in particular, the bootstrap admin `christina` must
+stay order-independent (in particular, the bootstrap admin `admin` must
 remain the *only* admin for the last-admin test to be meaningful).
 """
 

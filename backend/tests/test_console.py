@@ -33,7 +33,7 @@ from argon2 import PasswordHasher
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV_DIR = REPO_ROOT / "dev"
 
-ADMIN_USER = "christina"
+ADMIN_USER = "admin"
 ADMIN_PASSWORD = "console-test-password"
 COOKIE_NAME = "hlidskjalf_session"  # matches hlidskjalf.auth.COOKIE_NAME
 
@@ -87,7 +87,7 @@ def panel():
             "HLIDSKJALF_PVE_SCHEME": "http",
             "HLIDSKJALF_PVE_HOST": "127.0.0.1",
             "HLIDSKJALF_PVE_PORT": str(mock_port),
-            "HLIDSKJALF_PVE_NODE": "hella",
+            "HLIDSKJALF_PVE_NODE": "pve",
             "HLIDSKJALF_PVE_TOKEN_ID": "hlidskjalf@pve!panel",
             "HLIDSKJALF_PVE_TOKEN_SECRET": "mock-secret",
             "HLIDSKJALF_ADMIN_USER": ADMIN_USER,

@@ -4,7 +4,7 @@ A scratch Debian VM you can break, pointed at a Proxmox you **cannot**. This is 
 setup for first contact with reality — fast iteration, real tracebacks, and enough
 guard rails that a mistake at 1am doesn't cost you a VM.
 
-> **The dev box is disposable. Hella is not.** The panel holds a token that can stop,
+> **The dev box is disposable. Your Proxmox host is not.** The panel holds a token that can stop,
 > reinstall and permanently destroy guests. Everything below assumes that.
 
 ---
@@ -20,7 +20,7 @@ guard rails that a mistake at 1am doesn't cost you a VM.
    the VM the panel is running on. Put every VMID you care about in it:
 
    ```bash
-   HLIDSKJALF_PROTECTED_VMIDS=<dev-vm>,<heimdall>,<anything-precious>
+   HLIDSKJALF_PROTECTED_VMIDS=<dev-vm>,<panel-host>,<anything-precious>
    ```
 
    The Fleet page shows an amber banner whenever nothing is protected. If you see
@@ -118,14 +118,14 @@ state dir and restart without re-typing anything. Create `dev.env`:
 
 ```bash
 # --- the real Proxmox ---
-HLIDSKJALF_PVE_HOST=10.0.20.10          # your host
-HLIDSKJALF_PVE_NODE=hella               # from `pvesh get /nodes`
+HLIDSKJALF_PVE_HOST=<pve-host>          # your host
+HLIDSKJALF_PVE_NODE=pve               # from `pvesh get /nodes`
 HLIDSKJALF_PVE_TOKEN_ID=hlidskjalf@pve!panel
 HLIDSKJALF_PVE_TOKEN_SECRET=xxxxxxxx-xxxx-...
 HLIDSKJALF_PVE_FINGERPRINT=AA:BB:CC:...:FF   # required for https — the cert is pinned
 
 # --- SAFETY: env-only, empty by default. Do not skip this. ---
-HLIDSKJALF_PROTECTED_VMIDS=<dev-vm>,<heimdall>,<anything-precious>
+HLIDSKJALF_PROTECTED_VMIDS=<dev-vm>,<panel-host>,<anything-precious>
 
 # --- panel ---
 HLIDSKJALF_ADMIN_USER=admin

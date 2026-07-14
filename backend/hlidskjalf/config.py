@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     rescue_iso: str = ""  # e.g. "local:iso/systemrescue-12.01-amd64.iso"
     bandwidth_quotas: dict[str, int] = {}  # vmid (str) -> GB/month, display-only
     default_ssh_keys: str = ""
-    # JSON env var, e.g. '{"20": "10.0.20.1", "30": ""}'. Empty = no VLAN tagging
+    # JSON env var, e.g. '{"20": "192.168.20.1", "30": ""}'. Empty = no VLAN tagging
     # offered in the provision form.
     vlan_gateways: dict[str, str] = {}
     clone_storage: str = "local-lvm"  # Proxmox's usual default storage

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — a `git clone` is now a fresh install, not a copy of someone's homelab
+The repo carried the author's setup around in it: the Proxmox **cert fingerprint** sat in
+`handoff.md`, the host's IP was the **default** for `services.hlidskjalf.settings.pveHost`
+in the NixOS module, `adminUser` defaulted to a person's name, and the mock, the tests and
+the docs were named after real machines on a real LAN. None of it was a credential — the
+token, the session key and the database have never been committed — but none of it was
+anyone else's business either, and a fresh clone should describe *your* setup, not ours.
+
+- **Site identity removed from every tracked file.** Real host, cert pin and subnet are
+  gone; the NixOS module's `pveHost` has no default, `adminUser` defaults to `admin`, and
+  `protectedVmids` / `vlanGateways` default to empty instead of one particular fleet.
+- **The mock and fixtures are now openly fictional**: node `pve` (Proxmox's own default —
+  which incidentally retires the "you must set `HLIDSKJALF_PVE_NODE` or everything 404s"
+  gotcha for the mock stack), guests `panel-host` / `vps-alpha` / `vps-beta` / `app-01` /
+  `ct-runner`, addresses in `192.168.<vlan>.<host>`.
+- **Your facts live in `dev/site-notes.md`** — gitignored, alongside `dev/dev.env`.
+- **`backend/tests/test_fresh_clone.py` keeps it that way**: no tracked file may contain a
+  SHA-256 certificate fingerprint or a token-shaped UUID, and `Settings()` with no
+  environment at all must come up unconfigured — no host, no VLANs, no protected VMIDs.
+  Verified it fails on the previous `handoff.md`, which is the only proof that counts.
+
+### Added — a step-by-step getting-started guide in `README.md`
+Token → fingerprint → validator → run it → finish in the browser, written for someone who
+has just cloned the repo and has nothing set up yet, including which steps happen on the
+Proxmox host and which don't.
+
 ### Added — choose the VMID when you provision
 The Provision form now has a **VMID** box, prefilled with the next free id and editable.
 Leave it empty and the panel picks the next free one exactly as before (`vmid` is
@@ -312,8 +338,8 @@ A full audit of every route, the auth/session model and the config. Patched:
   traceback-leak handler, and the protected-VMID guards.
 
 ### Changed — deployable by anyone
-- **Config ships neutral.** `pve_host` is required (was `10.0.20.10`), `pve_node`
-  defaults to Proxmox's own `pve` (was `hella`), `admin_user` is `admin` (was a person's
+- **Config ships neutral.** `pve_host` is required (was `<pve-host>`), `pve_node`
+  defaults to Proxmox's own `pve` (was `pve`), `admin_user` is `admin` (was a person's
   name), and `protected_vmids` / `vlan_gateways` / `switch_host` now default empty. An
   unset switch simply hides the Switch page.
 - **The UI no longer hardcodes a host.** `/api/login` and `/api/session` return the node
@@ -353,9 +379,9 @@ A full audit of every route, the auth/session model and the config. Patched:
   the setup wizard, plus a `capture-setup.js` that drives a genuinely unconfigured backend.
 - **`dev/dev.env.example` is now tracked** (the real `dev.env` is gitignored, so a fresh
   clone had nothing to copy). It also fixes a trap this release introduced: `dev.env` had
-  been relying on `pve_node` defaulting to `hella`, and that default is now Proxmox's
+  been relying on `pve_node` defaulting to `pve`, and that default is now Proxmox's
   neutral `pve` — so the dev stack silently pointed at a node its own mock doesn't have,
-  404ing every node-scoped endpoint. The example sets `HLIDSKJALF_PVE_NODE=hella`
+  404ing every node-scoped endpoint. The example sets `HLIDSKJALF_PVE_NODE=pve`
   explicitly and says why.
 
 ## [v0.3.5-alpha] - 2026-07-13
@@ -363,7 +389,7 @@ A full audit of every route, the auth/session model and the config. Patched:
 ### Design (frontend-only visual system pass)
 A deliberate design-system pass giving the panel a distinctive identity built
 around its subject — Hlidskjalf, the high seat from which one watches every guest
-running on the host "hella".
+running on the host "pve".
 
 - **Type system — the concept**: introduced **Archivo** (variable, weight + width
   axes) as the human interface face for headings, nav, labels, and the wordmark,
@@ -372,10 +398,10 @@ running on the host "hella".
   something instead of being mono-everywhere by default.
 - **Signature masthead**: the wordmark is set wide + heavy (Archivo 800 / width
   125%) so the name reads as carved into the seat; the sidebar became a proper
-  identity rail — wordmark, hairline, "high seat · hella" with a live pulse, an
+  identity rail — wordmark, hairline, "high seat · pve" with a live pulse, an
   aurora-bar active nav, and a "leave the seat / take the seat" vocabulary.
 - **Login redesigned** as a quiet hero: monumental wordmark, a one-line thesis
-  ("The high seat. From it, one watches over every realm running on hella."), and
+  ("The high seat. From it, one watches over every realm running on the node."), and
   a disciplined form with a single orchestrated page-load reveal.
 - **Refined palette**: deepened the night background, split surfaces into two
   elevation levels (`surface` / `surface-2`) plus an `abyss` for recessed data
@@ -429,7 +455,7 @@ running on the host "hella".
 - Login page redesigned: gradient accent card, radial backdrop glow, larger
   wordmark, footer tagline.
 - Sidebar: accent-bar active nav states, hover transitions, role badge
-  (pink admin / cyan user), "HIGH SEAT · HELLA" tagline, username truncation.
+  (pink admin / cyan user), "HIGH SEAT · <NODE>" tagline (the live node name), username truncation.
 - Buttons/inputs: subtle color transitions; keyboard `:focus-visible` ring
   everywhere; spinner-based `LoadingState`; `prefers-reduced-motion` disables
   LED blink animations.
@@ -446,7 +472,7 @@ running on the host "hella".
 - **Console IDOR + rescue broken-access-control** (PR #17): `GET /api/vms/{vmid}/console`
   was unscoped (any user could open any tenant's VNC console); rescue enter/exit had
   no ownership/admin check and no protected-VMID guard (any user could reboot any VM
-  into the rescue ISO, incl. heimdall which hosts the panel). Both now enforce
+  into the rescue ISO, incl. panel-host which hosts the panel). Both now enforce
   `_ensure_vm_access`; rescue-enter also refuses protected VMIDs for everyone.
 - **Hardening** (PR #18): exception handler no longer leaks tracebacks/`error_type`
   to clients (kept in logs + admin `/api/debug/errors`); session cookie `Secure`
@@ -544,12 +570,17 @@ See `docs/screenshots/v0.3.2-alpha/README.md` for visual comparison (admin fleet
 See `docs/screenshots/v0.3-alpha/README.md` for visual comparison notes. Screenshots will be populated with actual captures after testing the merged code.
 
 ### Switch Visualizer Enhancements (PRs #5, #6) - Completed
-- Backend subagent (019f562a-2ff2-7e10-919c-1024e085ca18): pure eAPI-only Arista client (removed SSH/paramiko), added LLDP neighbors via "show lldp neighbors" (lldpNeighbor with system_name/port), robust interface descriptions, updated PortInfo, created dev/mock_switch.py (52-port 7050TX sim with status, desc, rates, lldpNeighbors JSON-RPC). Docs in handoff/CHANGELOG.
-- Frontend subagent (019f562a-3fd9-7081-b2e8-1532a824eb19): full redesign - SVG faceplate emulating exact physical 7050TX-48T-4SFP+ (48 RJ45 + 4 SFP+ layout, clickable <g> ports with rect/LEDs, rack bezel/ears, labels), Top Talkers (rate-sorted top 5, clickable), enhanced panel (LLDP, switch desc, inline editable notes), Flux-human styling (clean .card, subtle shadows, readable, less glow, .rack-bezel/.svg-port classes). tsc/build clean. Branches updated.
-- PR/docs subagent (this): ensured feat/* branches have latest (git rebase main on each; mock conflict on eapi resolved `git checkout --theirs dev/mock_switch.py` to incorporate completed 52-port LLDP mock); `git push --force origin feat/switch-eapi-lldp-mock feat/switch-svg-rack-top-talkers`; attempted GitHub API PRs via `curl -X POST .../pulls` (token ~/.hlidskjalf_gh_token) with bodies containing exact cmds + Flux refs; both 401 Bad credentials; updated handoff.md/CHANGELOG; `git commit` + push. Branches now at f0d9bd0 / 9bbfb23 (include latest main).
-- PRs merged: #8, #9 via API; #6 via local after rebase (using PAT).
-- Real screenshots captured: v03-fleet.png, v03-switch.png (SVG faceplate visible with LLDP, activity, notes UI), v03-node.png added to v0.3-alpha/ with updated README for before/after.
-- All documented in handoff.md + CHANGELOG.
+- **Arista client is eAPI-only** (SSH/paramiko removed): LLDP neighbours via
+  `show lldp neighbors` (`lldpNeighbor` with system_name/port), robust interface
+  descriptions, reworked `PortInfo`.
+- **`dev/mock_switch.py`** added — a 52-port 7050TX simulator (status, description,
+  rates, `lldpNeighbors`) over JSON-RPC, so the Switch page runs without hardware.
+- **Faceplate redesign**: an SVG rack unit matching the physical 7050TX-48T-4SFP+
+  (48 RJ45 + 4 SFP+, clickable ports with LEDs, bezel and ears), Top Talkers
+  (rate-sorted top 5, clickable) and an enriched port panel (LLDP, description,
+  inline editable notes).
+- PRs merged: #6, #8, #9. Screenshots captured: `v03-fleet.png`, `v03-switch.png`,
+  `v03-node.png` under `docs/screenshots/v0.3-alpha/`.
 
 ### v0.3-alpha realistic faceplate
 - Switched to React + CSS for faceplate to look exactly like actual DCS-7050TX-48 photo.
@@ -560,7 +591,6 @@ See `docs/screenshots/v0.3-alpha/README.md` for visual comparison notes. Screens
 - PR #12.
 - Screenshots updated with realistic images.
 
-See handoff.md for subagent outputs, git commands (rebase, --theirs, force-push, curl), PR bodies, Flux inspiration.
 
 ## [0.2.0-alpha] - 2026-07-12
 

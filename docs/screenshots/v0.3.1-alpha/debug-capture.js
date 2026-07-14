@@ -7,7 +7,7 @@ const puppeteer = require('/tmp/node_modules/puppeteer');
   page.on('pageerror', err => console.log('PAGE ERR:', err.message));
 
   await page.goto('http://127.0.0.1:5173/login', {waitUntil:'networkidle2'});
-  await page.type('input#username', 'christina');
+  await page.type('input#username', 'admin');
   await page.type('input#password', 'devpass');
   await page.click('button[type="submit"]');
   await new Promise(r=>setTimeout(r,2500));

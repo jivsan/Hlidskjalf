@@ -5,25 +5,25 @@ By default the panel reads graphs straight from PVE's `rrddata`
 consolidate hard at long range (the `month` timeframe is 12h-granular, `year` is
 1-week-granular) and PVE keeps no history beyond the RRD.
 
-If heimdall's Prometheus scrapes hella, the panel can read the same graphs from
+If panel-host's Prometheus scrapes pve, the panel can read the same graphs from
 it instead — same charts, same rows, finer long-range resolution:
 
 ```
 HLIDSKJALF_METRICS_SOURCE=prometheus
-HLIDSKJALF_PROMETHEUS_URL=http://10.0.20.17:9090
+HLIDSKJALF_PROMETHEUS_URL=http://192.168.20.17:9090
 ```
 
 It is a drop-in swap (`datasources/prometheus.py` implements the same
 `MetricsSource` protocol as `datasources/rrd.py`): nothing else changes, and if
 you set none of these vars the panel behaves exactly as before.
 
-## 1. prometheus-pve-exporter on heimdall
+## 1. prometheus-pve-exporter on panel-host
 
 The exporter talks to PVE with the **same** `hlidskjalf@pve!panel` token the panel
 uses (`PVEAuditor` alone is enough for it — see docs/bootstrap.md §1).
 
 ```nix
-# hosts/heimdall/modules/services/… (nixos-dotfiles repo)
+# hosts/panel-host/modules/services/… (nixos-dotfiles repo)
 services.prometheus.exporters.pve = {
   enable = true;
   port = 9221;
@@ -32,14 +32,14 @@ services.prometheus.exporters.pve = {
   #     user: hlidskjalf@pve
   #     token_name: panel
   #     token_value: <the token secret>
-  #     verify_ssl: false      # hella's API cert is self-signed
+  #     verify_ssl: false      # a stock PVE API cert is self-signed
   configFile = "/run/secrets/pve-exporter.yml";
 };
 
 services.prometheus.scrapeConfigs = [{
   job_name = "pve";
   metrics_path = "/pve";
-  params.target = [ "10.0.20.10" ];   # hella
+  params.target = [ "<pve-host>" ];   # pve
   scrape_interval = "60s";            # 15-60s is fine; see the rate() note below
   static_configs = [{ targets = [ "127.0.0.1:9221" ]; }];
 }];
@@ -49,7 +49,7 @@ Sanity check once it is up:
 
 ```bash
 curl -s 'http://127.0.0.1:9090/api/v1/query?query=pve_cpu_usage_ratio' | jq '.data.result[].metric.id'
-# "node/hella", "qemu/105", "lxc/130", …
+# "node/pve", "qemu/105", "lxc/130", …
 ```
 
 The `id` label (`qemu/<vmid>`, `lxc/<vmid>`, `node/<node>`) is how the panel
@@ -88,17 +88,17 @@ absorbs the counter reset when a guest reboots). The rate window is
 short timeframes will have holes. Gauges are consolidated over the step with
 `avg_over_time` (`cf=AVERAGE`, the default) or `max_over_time` (`cf=MAX`).
 
-Node series (`id="node/hella"`): `cpu`, `maxcpu`, `memused`, `memtotal`,
+Node series (`id="node/pve"`): `cpu`, `maxcpu`, `memused`, `memtotal`,
 `rootused` (`pve_disk_usage_bytes`), `roottotal` (`pve_disk_size_bytes`).
 
 **`iowait`, `loadavg`, `netin`, `netout` do not exist for a node in
 prometheus-pve-exporter** — PVE's `/cluster/resources` has no such node fields —
 so those node chart series are empty (`null`) with this source. If a
-`node_exporter` runs on hella, fill them in yourself; `$node` and `$step` (the
+`node_exporter` runs on the Proxmox host, fill them in yourself; `$node` and `$step` (the
 step in seconds) are substituted:
 
 ```
-HLIDSKJALF_PROMETHEUS_NODE_QUERIES={"loadavg":"node_load1{instance=\"hella:9100\"}","iowait":"rate(node_cpu_seconds_total{mode=\"iowait\",instance=\"hella:9100\"}[$steps])","netin":"rate(node_network_receive_bytes_total{device=\"vmbr0\",instance=\"hella:9100\"}[$steps])","netout":"rate(node_network_transmit_bytes_total{device=\"vmbr0\",instance=\"hella:9100\"}[$steps])"}
+HLIDSKJALF_PROMETHEUS_NODE_QUERIES={"loadavg":"node_load1{instance=\"pve:9100\"}","iowait":"rate(node_cpu_seconds_total{mode=\"iowait\",instance=\"pve:9100\"}[$steps])","netin":"rate(node_network_receive_bytes_total{device=\"vmbr0\",instance=\"pve:9100\"}[$steps])","netout":"rate(node_network_transmit_bytes_total{device=\"vmbr0\",instance=\"pve:9100\"}[$steps])"}
 ```
 
 ## 4. Timeframes
