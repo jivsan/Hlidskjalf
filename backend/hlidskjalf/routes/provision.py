@@ -25,7 +25,12 @@ from ..pve import PveClient
 router = APIRouter()
 
 NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+# Where the panel starts looking when it picks a VMID itself. A VMID typed by an
+# admin only has to clear Proxmox's own floor (100) — the panel does not get to
+# reserve 100-199 for itself.
 MIN_VMID = 200
+PVE_MIN_VMID = 100
+PVE_MAX_VMID = 999_999_999
 
 
 def _net0(vlan: str | int, mac: str | None = None) -> str:
@@ -61,22 +66,38 @@ async def provision_defaults(
         raise HTTPException(403, "Admin only")
     s = settings()
     resources = await pve.cluster_resources()
-    used = {r["vmid"] for r in resources if r.get("vmid")}
-    next_vmid = MIN_VMID
-    while next_vmid in used:
-        next_vmid += 1
+    used = _used_vmids(resources)
     return {
         "vlans": list(s.vlan_gateways.keys()),
         "vlan_gateways": s.vlan_gateways,
         "default_ssh_keys": s.default_ssh_keys,
-        "next_vmid": next_vmid,
+        "next_vmid": _next_free_vmid(used),
         "storages": [s.clone_storage],
+        # so the form can say "taken" / "protected" before anyone clicks create
+        "used_vmids": sorted(used),
+        "protected_vmids": sorted(s.protected_vmids),
+        "min_vmid": PVE_MIN_VMID,
+        "max_vmid": PVE_MAX_VMID,
     }
+
+
+def _used_vmids(resources: list[dict]) -> set[int]:
+    return {r["vmid"] for r in resources if r.get("vmid")}
+
+
+def _next_free_vmid(used: set[int]) -> int:
+    vmid = MIN_VMID
+    while vmid in used:
+        vmid += 1
+    return vmid
 
 
 class CreateVm(BaseModel):
     name: str
     template_vmid: int
+    # None = let the panel take the next free VMID. A typed one must be free, and
+    # must not be protected — cloning onto a VMID would overwrite that guest.
+    vmid: int | None = Field(default=None, ge=PVE_MIN_VMID, le=PVE_MAX_VMID)
     cores: int = Field(ge=1, le=32)
     memory_mb: int = Field(ge=256, le=131072)
     disk_gb: int = Field(ge=1, le=2048)
@@ -163,10 +184,21 @@ async def create_vm(
     if not template:
         raise HTTPException(400, f"VMID {body.template_vmid} is not a template")
 
-    used = {r["vmid"] for r in resources if r.get("vmid")}
-    new_vmid = MIN_VMID
-    while new_vmid in used:
-        new_vmid += 1
+    used = _used_vmids(resources)
+    if body.vmid is None:
+        new_vmid = _next_free_vmid(used)
+    else:
+        new_vmid = body.vmid
+        try:
+            # a clone onto a live VMID would take that guest's place — never a
+            # protected one, and never one that already exists
+            guard_protected(new_vmid, "provision")
+        except HTTPException as e:
+            await journal.record(db, request, username, journal.VM_PROVISION, new_vmid,
+                                 f"refused: {e.detail}", ok=False)
+            raise
+        if new_vmid in used:
+            raise HTTPException(409, f"VMID {new_vmid} is already in use")
 
     upids: list[str] = []
     clone_upid = await pve.post(

@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — choose the VMID when you provision
+The Provision form now has a **VMID** box, prefilled with the next free id and editable.
+Leave it empty and the panel picks the next free one exactly as before (`vmid` is
+optional on `POST /api/vms`, so nothing that already called the API has to change).
+
+The number is checked as you type — `free`, `already in use`, `protected`, or outside
+Proxmox's 100–999999999 range — from `used_vmids` / `protected_vmids`, which
+`GET /api/provision/defaults` now returns alongside `next_vmid`. **The backend re-checks
+all of it**: a clone writes to whatever `newid` it is handed, so a VMID that is taken is
+refused with 409, and one listed in `HLIDSKJALF_PROTECTED_VMIDS` is refused with 403 and
+audited — the panel will not clone a template on top of a guest you told it to protect.
+
 ## [0.4.1-alpha] — 2026-07-13
 
 ### Security — `.gitignore` did not cover the key that decrypts the Proxmox token

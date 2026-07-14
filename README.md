@@ -89,7 +89,7 @@ secret also takes a `*_FILE` twin, because a secret manager hands you a file.
 | **Fleet** | every guest on the node, live status, quick power actions |
 | **VM detail** | overview, graphs, console, rescue, tasks — scoped per user |
 | **Console** | **noVNC** for VMs, **xterm.js** for containers (Proxmox serves no working VNC for LXC — its RFB handshake hangs at ClientInit, so containers go through `termproxy`) |
-| **Provision** | clone a cloud-init template, set cores/RAM/disk/VLAN/IP/SSH keys |
+| **Provision** | clone a cloud-init template, set VMID/cores/RAM/disk/VLAN/IP/SSH keys |
 | **Bandwidth** | daily/monthly per-VM accounting with quotas |
 | **Rescue** | boot a SystemRescue ISO, then restore the original boot order |
 | **Users** | admins manage tenants; each tenant sees exactly one VM |
@@ -236,7 +236,6 @@ unaccounted. The numbers are for capacity awareness, **not billing**.
 - **Single Proxmox node** — a cluster shows only the configured node.
 - Provisioning is **QEMU-only** (containers list, power and console fine; LXC *create*
   is not implemented).
-- Provisioning always picks the next free VMID; you cannot choose one yet.
 - The switch faceplate is hardcoded to a 48-port Arista DCS-7050TX-48 and does not
   render from what the switch reports. The Switch page is optional — leave
   `switch_host` unset and it disappears.

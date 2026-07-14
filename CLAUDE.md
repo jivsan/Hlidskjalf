@@ -184,4 +184,3 @@ Christian's Arista DCS-7050TX-48.
   Switch page is optional — leaving `switch_host` unset hides it.)
 - Provisioning is QEMU-only (LXC list/power/console work; LXC create does not).
 - The panel **detects** updates (Settings → Updates) but does not apply them.
-- Provisioning always picks the next free VMID; you cannot choose one yet.
