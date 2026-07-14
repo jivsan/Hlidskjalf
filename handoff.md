@@ -132,6 +132,16 @@ and **`scsi0` is hardcoded** for template disk reads and resize (a template on
 8. After ~24 h: daily bandwidth rows exist for every running guest, survive a restart
    without double-counting, and a mid-day reboot produces no negative delta.
 
+### ⚠️ Before the first tenant VM exists: give tenants their own VLAN
+
+The panel is now exposed to the internet for tenants (Cloudflare tunnel), with admin
+pinned to `admin_networks`. If those networks include a VLAN that tenant VMs also sit on,
+a tenant with a shell on their own VM is *inside an admin network* — they would still
+need a password, but they can reach the admin login page and everything else on that
+segment. Provision tenant guests onto a VLAN that is **not** an admin network and has no
+route to one. Decide this before the first friend's VM is created; retrofitting means
+renumbering a machine somebody else is using.
+
 ### Also queued (asked for, not yet built)
 - **Choose your own VMID** — ✅ **done, unreleased** (branch `feat/choose-vmid`). The
   Provision form has a VMID box prefilled with the next free id; empty still means
