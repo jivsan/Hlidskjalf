@@ -25,6 +25,8 @@ from pydantic import BaseModel
 from .. import journal
 from ..auth import require_admin_user, require_csrf
 from ..config import ADMIN_WRITABLE, apply_stored, get_settings, seal
+from ..probe import TLS_PIN, TLS_SYSTEM, PveConn, probe
+from ..pve import PveClient
 from ..db import Db
 from ..deps import get_db
 
@@ -38,7 +40,9 @@ FIELD_FOR = {
     "clone_storage": "clone_storage",
     "bridge": "pve_bridge",
 }
-assert set(FIELD_FOR.values()) == set(ADMIN_WRITABLE)
+# The connection keys in ADMIN_WRITABLE are handled by the Proxmox route below,
+# not this map — so this is a subset check, not equality.
+assert set(FIELD_FOR.values()) <= set(ADMIN_WRITABLE)
 
 IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")  # same shape provision.py accepts
 
@@ -196,3 +200,146 @@ async def put_provision_settings(
         f"storage={submitted['clone_storage']} bridge={submitted['bridge']}",
     )
     return _view(options, warning)
+
+
+# --- The Proxmox connection itself ------------------------------------------
+# This used to be settable ONLY in the first-run wizard, which closes forever once
+# a user exists. So a rotated token, a renewed certificate or a moved host meant
+# editing sqlite by hand. It is now editable here — but ONLY here: the setup
+# endpoints stay closed, because they are unauthenticated and reopening them would
+# hand anyone who can reach the panel a window to make themselves an admin.
+#
+# Every gate the wizard has, this has too, plus authentication: admin session,
+# CSRF, and a LIVE connection test that must pass before a single value is stored.
+
+CONNECTION_FIELDS = (
+    "pve_host", "pve_port", "pve_node", "pve_scheme",
+    "pve_token_id", "pve_token_secret", "pve_fingerprint", "pve_tls",
+)
+assert set(CONNECTION_FIELDS) <= set(ADMIN_WRITABLE)
+
+
+class PveConnectionBody(BaseModel):
+    host: str
+    port: int = 8006
+    node: str
+    scheme: str = "https"
+    token_id: str
+    # Empty means "keep the stored one" — the secret is never sent TO the browser,
+    # so it must be possible to change everything else without retyping it.
+    token_secret: str = ""
+    fingerprint: str = ""
+    tls: str = TLS_PIN
+
+
+def _connection_view() -> dict:
+    s = get_settings()
+    return {
+        "host": s.pve_host,
+        "port": s.pve_port,
+        "node": s.pve_node,
+        "scheme": s.pve_scheme,
+        "token_id": s.pve_token_id,
+        # NEVER the secret. Only whether one exists.
+        "token_secret_set": bool(s.pve_token_secret),
+        "fingerprint": s.pve_fingerprint,
+        "tls": s.pve_tls,
+        "env_locked": [
+            f.removeprefix("pve_") for f in CONNECTION_FIELDS if _env_locked(f)
+        ],
+    }
+
+
+@router.get("/api/settings/pve")
+async def get_pve_connection(_admin: dict = Depends(require_admin_user)):
+    return _connection_view()
+
+
+def _to_conn(body: PveConnectionBody) -> PveConn:
+    """The connection to test: the submitted one, falling back to the stored
+    secret when the operator did not retype it."""
+    s = get_settings()
+    return PveConn(
+        host=body.host.strip(),
+        port=body.port,
+        node=body.node.strip(),
+        scheme=body.scheme,
+        token_id=body.token_id.strip(),
+        token_secret=body.token_secret or s.pve_token_secret,
+        fingerprint=body.fingerprint.strip(),
+        tls=body.tls,
+    )
+
+
+@router.post("/api/settings/pve/test")
+async def test_pve_connection(
+    body: PveConnectionBody,
+    _admin: dict = Depends(require_admin_user),
+    _csrf=Depends(require_csrf),
+):
+    """Dry run. Persists nothing — same probe the wizard uses."""
+    return await probe(_to_conn(body))
+
+
+@router.put("/api/settings/pve")
+async def put_pve_connection(
+    body: PveConnectionBody,
+    request: Request,
+    db: Db = Depends(get_db),
+    admin: dict = Depends(require_admin_user),
+    _csrf=Depends(require_csrf),
+):
+    settings = get_settings()
+    if body.tls not in (TLS_PIN, TLS_SYSTEM):
+        raise HTTPException(400, f"tls must be '{TLS_PIN}' or '{TLS_SYSTEM}'")
+
+    conn = _to_conn(body)
+    if not conn.token_secret:
+        raise HTTPException(400, "No token secret stored yet — paste one")
+
+    locked = _connection_view()["env_locked"]
+    if locked:
+        raise HTTPException(
+            400,
+            f"The Proxmox connection is set by the environment ({', '.join(locked)}) — "
+            "env always wins, so a change here would silently revert on restart. Unset "
+            "those variables to manage the connection from the panel.",
+        )
+
+    # Prove it works BEFORE persisting. A saved-but-broken connection would leave
+    # the panel unable to reach Proxmox with no way back except the database.
+    try:
+        result = await probe(conn)
+    except HTTPException as e:
+        await journal.record(db, request, admin["username"], journal.PVE_CONNECTION,
+                             conn.host, f"refused: {e.detail}", ok=False)
+        raise
+
+    stored = {
+        "pve_host": conn.host,
+        "pve_port": str(conn.port),
+        "pve_node": conn.node,
+        "pve_scheme": conn.scheme,
+        "pve_token_id": conn.token_id,
+        "pve_token_secret": conn.token_secret,   # sealed on the way in
+        "pve_fingerprint": conn.fingerprint,
+        "pve_tls": conn.tls,
+    }
+    assert set(stored) <= ADMIN_WRITABLE
+    await db.set_config(seal(stored, settings))
+    apply_stored(settings, stored)
+
+    # Take effect without a restart. Reconfigure the existing client IN PLACE:
+    # the metrics source and the bandwidth accumulator hold a reference to it, and
+    # rebinding app.state.pve would leave them using a client we just closed.
+    live = getattr(request.app.state, "pve", None)
+    if live is None:
+        request.app.state.pve = PveClient(settings)  # was unconfigured
+    else:
+        await live.reconfigure(settings)
+
+    await journal.record(
+        db, request, admin["username"], journal.PVE_CONNECTION, conn.host,
+        f"node={conn.node} token={conn.token_id} tls={conn.tls}",
+    )
+    return {**_connection_view(), "tested": result}

@@ -190,3 +190,76 @@ def test_update_command_is_honest_per_deployment():
     assert "docker compose pull" in V.update_command("docker", "jivsan/Hlidskjalf")
     assert "nixos-rebuild" in V.update_command("nix", "jivsan/Hlidskjalf")
     assert "git pull --ff-only" in V.update_command("git", "jivsan/Hlidskjalf")
+
+
+# --- release-tag detection: the only thing a non-git install can compare -------
+# A Nix or Docker deployment has no git checkout, so commit comparison reports
+# "this install does not expose a git commit" and the Updates page is decoration.
+# Those installs move between RELEASES, so that is what they compare.
+
+
+def test_version_normalisation_survives_pep440():
+    """setuptools rewrites "0.4.2-alpha" to "0.4.2a0", so the running package NEVER
+    reports the string that was tagged. Comparing them naively tells an operator
+    they are out of date because of punctuation."""
+    from hlidskjalf.routes.version import normalize_version as n
+
+    assert n("v0.4.2-alpha") == n("0.4.2a0")
+    assert n("0.4.2-alpha") == n("0.4.2a0") == n("v0.4.2a0")
+    assert n("v0.4.2") == n("0.4.2")
+    assert n("v0.4.2-alpha") != n("v0.4.3-alpha")
+    assert n("0.4.2a0") != n("0.4.2")          # a prerelease is not the release
+
+
+async def test_non_git_install_compares_releases_not_commits(monkeypatch):
+    """The bug this fixes: on Nix the Updates tab could only ever say 'cannot
+    compare'."""
+    from hlidskjalf.routes import version as v
+
+    monkeypatch.setattr(v, "deployment_kind", lambda: "nix")
+    monkeypatch.setattr(
+        v, "local_state",
+        lambda: {"version": "0.4.2a0", "commit": "", "branch": "", "dirty": False,
+                 "deployment": "nix"},
+    )
+
+    async def fake_tag(repo):
+        return {"tag": "v0.4.3-alpha", "commit": "abc123"}
+
+    async def fake_remote(repo, branch):
+        return {"commit": "deadbeef", "message": "x", "date": "", "author": ""}
+
+    monkeypatch.setattr(v, "fetch_latest_release", fake_tag)
+    monkeypatch.setattr(v, "fetch_remote", fake_remote)
+    v._cache.clear()
+
+    view = await v._compute(force=True)
+    assert view["update_available"] is True
+    assert view["latest_release"] == "v0.4.3-alpha"
+    assert view["error"] is None
+    assert view["self_update"] is False          # never on nix
+    assert "nixos-rebuild" in view["command"]
+
+
+async def test_non_git_install_on_the_latest_release_is_up_to_date(monkeypatch):
+    from hlidskjalf.routes import version as v
+
+    monkeypatch.setattr(v, "deployment_kind", lambda: "nix")
+    monkeypatch.setattr(
+        v, "local_state",
+        lambda: {"version": "0.4.2a0", "commit": "", "branch": "", "dirty": False,
+                 "deployment": "nix"},
+    )
+
+    async def fake_tag(repo):
+        return {"tag": "v0.4.2-alpha", "commit": "abc123"}
+
+    async def fake_remote(repo, branch):
+        return {"commit": "deadbeef", "message": "x", "date": "", "author": ""}
+
+    monkeypatch.setattr(v, "fetch_latest_release", fake_tag)
+    monkeypatch.setattr(v, "fetch_remote", fake_remote)
+    v._cache.clear()
+
+    view = await v._compute(force=True)
+    assert view["update_available"] is False

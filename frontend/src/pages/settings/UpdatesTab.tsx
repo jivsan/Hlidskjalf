@@ -102,8 +102,18 @@ export function UpdatesTab() {
   if (loadError) return <ErrorState message={loadError} />;
   if (!info) return <LoadingState />;
 
+  // A non-git install (nix/docker/pip) has no commit to compare — it moves between
+  // RELEASES, so that is what it is told about. Reporting "0 commits behind" there
+  // would be meaningless, and "could not check" was simply wrong.
+  const byRelease = !info.commit && info.latest_release;
+
   const status = info.update_available
-    ? { tone: "text-amber", text: `${info.behind_by} commit${info.behind_by === 1 ? "" : "s"} behind` }
+    ? {
+        tone: "text-amber",
+        text: byRelease
+          ? `${info.latest_release} available`
+          : `${info.behind_by} commit${info.behind_by === 1 ? "" : "s"} behind`,
+      }
     : info.error
       ? { tone: "text-muted", text: "could not check" }
       : { tone: "text-cyan", text: "up to date" };
@@ -132,7 +142,10 @@ export function UpdatesTab() {
           )}
           {info.branch && <Row label="branch" value={info.branch} />}
           <Row label="tracking" value={`${info.repo}@${info.branch_tracked}`} />
-          {info.latest && (
+          {info.latest_release && (
+            <Row label="latest release" value={info.latest_release} />
+          )}
+          {info.latest && !byRelease && (
             <Row label="latest upstream" value={info.latest.commit.slice(0, 8)} />
           )}
         </div>
@@ -228,19 +241,7 @@ export function UpdatesTab() {
               )}
             </div>
           ) : (
-            <div>
-              <div className="label">apply it</div>
-              <pre className="well p-3 metric text-xs overflow-x-auto whitespace-pre-wrap">
-                {info.command}
-              </pre>
-              <p className="text-muted text-xs mt-2">
-                Applying from the panel is <span className="text-fg">off</span>: it runs
-                code fetched from the internet, so it stays disabled unless the operator
-                sets <span className="metric">HLIDSKJALF_ALLOW_SELF_UPDATE=true</span> on
-                the host — and it is never possible for a Docker or Nix install, which
-                cannot replace their own image or system. Run the command above instead.
-              </p>
-            </div>
+            <HowToApply deployment={info.deployment} command={info.command} />
           )}
         </div>
       )}
@@ -250,6 +251,68 @@ export function UpdatesTab() {
           updated and running the new version.
         </div>
       )}
+    </div>
+  );
+}
+
+/** How to apply an update on a deployment the panel is not allowed to update itself.
+ *
+ *  Nix is the interesting case: the panel runs from an immutable /nix/store path, so
+ *  "update" means moving the flake input in the CONFIGURATION repo and rebuilding the
+ *  system. That is two commands in two places, and printing a single line would be a
+ *  half-truth. A NixOS system's source of truth is its flake; a service that rewrites
+ *  its own store path is lying to the thing that manages it.
+ */
+function HowToApply({ deployment, command }: { deployment: string; command: string }) {
+  const [copied, setCopied] = useState(false);
+  const nix = deployment === "nix";
+
+  const steps = nix
+    ? [
+        "# 1. where your NixOS config lives (the repo with flake.nix):",
+        "nix flake update hlidskjalf",
+        "",
+        "# 2. rebuild the host that runs the panel:",
+        "sudo nixos-rebuild switch --flake .#<host>",
+      ].join("\n")
+    : command;
+
+  const copy = () => {
+    void navigator.clipboard.writeText(steps).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <div className="label">apply it</div>
+        <button type="button" className="ml-auto text-xs text-cyan hover:underline" onClick={copy}>
+          {copied ? "copied" : "copy"}
+        </button>
+      </div>
+      <pre className="well p-3 metric text-xs overflow-x-auto whitespace-pre-wrap">{steps}</pre>
+      <p className="text-muted text-xs mt-2">
+        {nix ? (
+          <>
+            This panel runs from <span className="metric">/nix/store</span>, which is
+            immutable — it cannot update itself, and should not: your flake is the source of
+            truth, and a service that rewrote its own store path would be lying to the system
+            that manages it. Move the input, rebuild, and the panel restarts on the new
+            version. If your config repo is on another machine, commit and push there first,
+            then pull and rebuild on this host.
+          </>
+        ) : (
+          <>
+            Applying from the panel is <span className="text-fg">off</span>: it runs code
+            fetched from the internet, so it stays disabled unless the operator sets{" "}
+            <span className="metric">HLIDSKJALF_ALLOW_SELF_UPDATE=true</span> on the host —
+            and it is never possible for a Docker install, which cannot replace its own
+            image. Run the command above instead.
+          </>
+        )}
+      </p>
     </div>
   );
 }

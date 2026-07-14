@@ -1,7 +1,7 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> **v0.4.1-alpha** · tested against a real Proxmox VE 9.2.3 host
+> **v0.4.2-alpha** · running on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
 
 A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live graphs,
 per-VM bandwidth accounting with monthly charts and quotas, provisioning from cloud-init
@@ -54,17 +54,28 @@ Three traps, each producing a token that authenticates and then fails everything
 The resulting token cannot reboot the host, change permissions, create users,
 reconfigure storage, or alter SDN zones.
 
-### 2. Get the certificate fingerprint
+### 2. Decide how TLS is verified
 
-The panel pins the Proxmox cert rather than trusting whatever answers on the wire:
+**If Proxmox serves its stock self-signed certificate** — no CA can vouch for it, so the
+panel pins it. Read the fingerprint of the certificate *actually being served*:
 
 ```bash
-openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
+openssl s_client -connect <your-proxmox>:8006 </dev/null 2>/dev/null \
+  | openssl x509 -noout -fingerprint -sha256
 ```
 
-Copy the whole line it prints, colons included. It is a hash of the host's public
-certificate, so it is not a secret — but it is what stops anything else on the network
-from impersonating your Proxmox.
+Reading `/etc/pve/local/pve-ssl.pem` looks equivalent and often isn't: when a custom
+certificate is installed, **`pveproxy` serves `pveproxy-ssl.pem` instead**, and the panel
+will refuse to connect with a fingerprint that belongs to a certificate nobody presents.
+
+**If Proxmox serves a real certificate** (Let's Encrypt / ACME / your internal CA), choose
+**system-CA verification** in the wizard instead of a pin. An ACME certificate is reissued
+every ~60 days and its fingerprint changes with it — a pinned panel would lose Proxmox on
+renewal, on a schedule nobody remembers. Verifying the chain and hostname survives renewal
+and still refuses an impostor. This needs the **hostname** the certificate was issued for,
+not an IP.
+
+There is no third option: the panel never talks to an unverified Proxmox over https.
 
 ### 3. Check the token before the panel ever uses it
 
@@ -100,6 +111,9 @@ Pick one. All three land on the same wizard.
 ```bash
 docker compose up -d          # see docs/docker.md
 ```
+
+**NixOS** — a flake with a module (`services.hlidskjalf.enable = true;` and nothing else
+is a working install). See **[docs/nixos.md](docs/nixos.md)**.
 
 **From the clone** (what the dev box does — the launcher builds the SPA on first run):
 
@@ -172,7 +186,7 @@ Full walkthrough, including what each field means: **[docs/setup.md](docs/setup.
 | **Bandwidth** | daily/monthly per-VM accounting with quotas |
 | **Rescue** | boot a SystemRescue ISO, then restore the original boot order |
 | **Users** | admins manage tenants; each tenant sees exactly one VM |
-| **Settings** | VLANs → gateways, disk storage, network bridge — from what the node actually reports |
+| **Settings** | the Proxmox connection (host, node, token, TLS) · VLANs → gateways, disk storage, network bridge — from what the node actually reports |
 | **Updates** | the panel notices when a new commit lands on GitHub, and can apply it (opt-in) |
 | **Profile** | change your own password (invalidates every other session) |
 
@@ -231,7 +245,8 @@ refusal — is audited.
 
 ## Real-hardware status
 
-**v0.4.1-alpha has been run against a real Proxmox VE 9.2.3 host.** The first-run
+**v0.4.2-alpha runs on real hardware**: deployed on NixOS behind a Traefik reverse
+proxy, against a real Proxmox VE 9.2.3 host. The first-run
 wizard, fleet, node, graphs and both consoles work there. That run found five defects
 that months of green tests never did — see [`CHANGELOG.md`](CHANGELOG.md) and
 [`handoff.md`](handoff.md).
@@ -239,7 +254,7 @@ that months of green tests never did — see [`CHANGELOG.md`](CHANGELOG.md) and
 **The write paths are still unproven**: nothing has been provisioned, reinstalled,
 rescued or destroyed through the panel on real hardware yet.
 
-All 242 backend tests pass — against `dev/mock_pve.py`, **a mock we wrote ourselves**.
+All 285 backend tests pass — against `dev/mock_pve.py`, **a mock we wrote ourselves**.
 Green tests prove self-consistency, not correctness. That mock has been caught lying
 three times (8-field UPIDs where real PVE emits 9; fabricated QEMU disk usage where real
 PVE reports 0; one echo websocket that made a container's console look identical to a

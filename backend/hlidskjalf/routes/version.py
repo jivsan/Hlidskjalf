@@ -150,6 +150,47 @@ async def fetch_behind(repo: str, base: str, head: str) -> dict | None:
     }
 
 
+def normalize_version(v: str) -> str:
+    """Compare "v0.4.2-alpha" (a git tag) with "0.4.2a0" (what Python reports).
+
+    setuptools normalises PEP 440 versions, so the version the running package
+    reports never looks like the tag someone pushed. Canonicalise both ends rather
+    than telling an operator they are out of date because of punctuation.
+    """
+    v = v.strip().lower().lstrip("v")
+    for word, short in (("-alpha", "a"), ("-beta", "b"), ("-rc", "rc"),
+                        ("alpha", "a"), ("beta", "b")):
+        v = v.replace(word, short)
+    v = v.replace("-", "").replace("_", "").replace(".post", "post")
+    # 0.4.2a == 0.4.2a0
+    if v and v[-1] in "ab" :
+        v += "0"
+    return v
+
+
+async def fetch_latest_release(repo: str) -> dict | None:
+    """The newest tag on GitHub. The only thing a non-git install can compare against.
+
+    A Nix or Docker deployment has no commit to compare — `/nix/store/...` is not a
+    checkout — so commit-based detection reports "this install does not expose a git
+    commit" and the Updates page is decoration. Releases are the unit those installs
+    actually move between, so compare those.
+    """
+    url = f"https://api.github.com/repos/{repo}/tags"
+    try:
+        async with httpx.AsyncClient(timeout=GITHUB_TIMEOUT) as client:
+            r = await client.get(url, headers={"Accept": "application/vnd.github+json"})
+            r.raise_for_status()
+            tags = r.json()
+    except httpx.HTTPError as e:
+        log.debug("tag lookup for %s failed: %s", repo, e)
+        return None
+    if not tags:
+        return None
+    tag = tags[0]  # GitHub returns newest first
+    return {"tag": tag.get("name", ""), "commit": (tag.get("commit") or {}).get("sha", "")}
+
+
 def update_command(kind: str, repo: str) -> str:
     """The honest way to apply an update for THIS deployment.
 
@@ -159,7 +200,7 @@ def update_command(kind: str, repo: str) -> str:
     """
     return {
         "docker": "docker compose pull && docker compose up -d",
-        "nix": "update the flake input, then: sudo nixos-rebuild switch",
+        "nix": "nix flake update hlidskjalf && sudo nixos-rebuild switch",
         "git": (
             "git pull --ff-only && "
             ".venv/bin/pip install -e ./backend && "
@@ -179,6 +220,9 @@ async def _compute(force: bool) -> dict:
         "repo": repo,
         "branch_tracked": branch,
         "latest": None,
+        # The newest published tag. What a non-git install (nix/docker/pip) can
+        # actually compare itself against — those move between releases, not commits.
+        "latest_release": None,
         "update_available": False,
         "behind_by": 0,
         "commits": [],
@@ -211,9 +255,16 @@ async def _compute(force: bool) -> dict:
     view["latest"] = remote
 
     if not local["commit"]:
-        # Not a git checkout (docker/nix/pip): we cannot compare commits, so we
-        # report the tip and let the operator judge. Better than a false "up to date".
-        view["error"] = "this install does not expose a git commit — compare versions manually"
+        # Not a git checkout (docker/nix/pip). Commits are meaningless here — but
+        # RELEASES are exactly what these installs move between, so compare those.
+        release = await fetch_latest_release(repo)
+        if release is None or not release["tag"]:
+            view["error"] = "no releases published yet — compare versions manually"
+            return view
+        view["latest_release"] = release["tag"]
+        view["update_available"] = (
+            normalize_version(release["tag"]) != normalize_version(local["version"])
+        )
         return view
 
     if local["commit"] == remote["commit"]:

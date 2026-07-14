@@ -41,6 +41,7 @@ USER_ASSIGN = "user.assign"
 SWITCH_NOTE = "switch.note"
 
 SETTINGS_UPDATE = "settings.update"
+PVE_CONNECTION = "settings.pve_connection"  # repointing the panel at a Proxmox — audit it loudly
 PANEL_UPDATE = "panel.update"   # the panel updating its own code — audit it loudly
 
 

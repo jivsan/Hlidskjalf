@@ -97,7 +97,17 @@ services.hlidskjalf = {
 
 **Never expose the panel to the internet.** It holds a token that can destroy VMs.
 
-## 4. Declaring config instead of using the wizard
+## 4. The Debug page, and log level
+
+The admin **Debug** page reads in-memory log and error buffers that are only attached when
+the panel runs with debug on. Without it the page is permanently empty, which looks like a
+bug and isn't:
+
+```nix
+services.hlidskjalf.debug = true;      # or: logLevel = "DEBUG";
+```
+
+## 5. Declaring config instead of using the wizard
 
 Every setting has an option, and every secret takes a `*_FILE` twin so it can come from
 agenix / sops-nix / systemd-creds:
@@ -120,11 +130,24 @@ services.hlidskjalf = {
 };
 ```
 
-Leave `cloneStorage`, `pveBridge` and `vlanGateways` empty to manage them in
-**Settings → provisioning** instead, where the panel offers what your node actually
-reports rather than what you remembered.
+**Every option here defaults to `null`, meaning "the wizard owns it".** Declare one only
+to take it away from the UI — the environment always wins, so a value set here *cannot* be
+changed in Settings, and a wrong one silently overrides what the wizard was told. (The
+module used to default `pveNode = "pve"` and emit it always; a panel configured for a node
+named something else then failed every node-scoped page with a DNS error. Hence `null`.)
 
-## 5. Updating
+Leave `cloneStorage`, `pveBridge` and `vlanGateways` unset to manage them in
+**Settings → provisioning**, and `pveHost` / `pveNode` / `pveTokenId` / `pveFingerprint`
+unset to manage the connection in **Settings → Proxmox** — where the panel offers what your
+node actually reports rather than what you remembered.
+
+### Certificates that renew
+
+`pveTls = "system"` verifies the CA chain and hostname like a browser, instead of pinning
+one certificate. Use it when Proxmox serves an ACME/Let's Encrypt certificate: a pin dies
+on every renewal (~60 days), taking the panel's Proxmox connection with it.
+
+## 6. Updating
 
 A Nix deployment updates the way the rest of your system does:
 
@@ -142,7 +165,7 @@ client sends.)
 
 Disable the check entirely with `updateCheckEnabled = false`.
 
-## 6. When the build fails
+## 7. When the build fails
 
 - **`npmDepsHash` mismatch** — expected after any `frontend/package-lock.json` change.
   The error prints the correct hash (`got: sha256-…`); put it in `nix/package.nix`. Or
