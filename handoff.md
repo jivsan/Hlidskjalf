@@ -142,6 +142,38 @@ segment. Provision tenant guests onto a VLAN that is **not** an admin network an
 route to one. Decide this before the first friend's VM is created; retrofitting means
 renumbering a machine somebody else is using.
 
+### Queued — reachable tenant VMs: `<vps-name>.im-goat.com` so friends can SSH in
+
+**Asked for 2026-07-14.** A friend with a VM needs to get into it. The panel gives them a
+console; SSH is what they will actually want. The naming should follow the panel's own
+public domain: one hostname per VM.
+
+**The trap: Cloudflare's proxy carries HTTP/HTTPS only.** An orange-clouded record does
+not forward port 22 — raw TCP through Cloudflare is Spectrum, which is an Enterprise
+product. So "point the DNS at Cloudflare" does not give anyone SSH. The real options,
+honestly compared:
+
+| approach | what the friend does | what it costs you |
+|---|---|---|
+| **Cloudflare Tunnel + Access (SSH)** | installs `cloudflared`, then `ssh -o ProxyCommand='cloudflared access ssh --hostname vps.im-goat.com'` | one tunnel ingress entry + one Access policy per VM. No inbound ports, origin IP stays hidden. Friends need a client and a Cloudflare login. |
+| **Tailscale on the tenant VM** | installs Tailscale, joins (node sharing / auth key) | nothing exposed at all, no ports, no DNS. Arguably the best answer, and you already run Tailscale. The VM must be allowed to reach the tailnet. |
+| **DNS-only record + port forward** | plain `ssh vps.im-goat.com` | **exposes your home IP**, one NAT rule per VM, and puts sshd on the internet. Simplest for the friend, worst for you. |
+
+**Recommendation: Tailscale for shell access, the tunnel for the panel.** Keep the
+Cloudflare tunnel doing what it is good at (the tenant panel over HTTPS) and let Tailscale
+do what it is good at (getting a person into a machine). If tunnel-based SSH is chosen
+anyway, prefer it over the port-forward — never publish the origin IP.
+
+**Panel work this implies (none of it exists yet):**
+- a per-VM `public_hostname` field, shown to the tenant on their VM page, with the exact
+  connection command for whichever method is chosen;
+- optional automation: create the DNS record / tunnel ingress entry when a VM is
+  provisioned, and remove it when the VM is destroyed. That needs a **Cloudflare API
+  token** — scope it to DNS:Edit on the one zone, store it encrypted like the PVE token,
+  and never let a tenant reach the routes that use it;
+- and it depends on the **tenant VLAN** decision above: a friend who can SSH into their VM
+  is a friend with a shell inside whatever network that VM sits on.
+
 ### Also queued (asked for, not yet built)
 - **Choose your own VMID** — ✅ **done, unreleased** (branch `feat/choose-vmid`). The
   Provision form has a VMID box prefilled with the next free id; empty still means
