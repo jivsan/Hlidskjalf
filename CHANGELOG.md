@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — the panel can be exposed to the internet, for tenants only
+The VPS model wants friends to reach their own VM from anywhere. The panel now supports
+exactly one shape of that, and it is not "put it on the internet and hope":
+
+> **Tenants sign in from anywhere. Admin exists only inside `admin_networks`.**
+
+- **`HLIDSKJALF_TRUSTED_PROXIES`** — whose `X-Forwarded-For` / `CF-Connecting-IP` may be
+  believed. This was a **bug before it was a feature**: every request was attributed to
+  `request.client.host`, which behind Traefik is `127.0.0.1`. So the audit log recorded
+  `127.0.0.1` for every action anyone ever took, and the per-IP login limiter was one
+  global bucket a single attacker could fill on everybody's behalf. Forwarded headers are
+  now honoured **only** from a declared proxy; the chain is walked from the right, so a
+  client cannot prepend a forged address and claim to be on your LAN.
+- **`HLIDSKJALF_ADMIN_NETWORKS`** — empty (default) means anywhere, i.e. today's LAN-only
+  behaviour, unchanged. Set it and admin is enforced **at three layers**: an admin cannot
+  log in from outside, an admin *session* used from outside is refused (including the
+  console websocket), and admin routes 403. The session layer is the one that matters: a
+  cookie travels with the browser, so signing in at home and opening the laptop on café
+  wifi must not carry admin with it — and ~20 routes branch on `is_admin(user)` directly.
+- **Per-account login backoff** — 10 failures in 15 minutes and the account stops
+  answering, wherever the guesses come from. Per-IP limiting is no defence against a
+  botnet spreading attempts across thousands of addresses, which is what an
+  internet-facing login page attracts. It expires, because a permanent lock is a denial
+  of service any stranger can inflict by typing your username wrong ten times.
+- NixOS: `trustedProxies` / `adminNetworks`, and a **warning** if you declare a proxy but
+  no admin network — the combination that quietly puts admin on the internet.
+- **`docs/public-access.md`** — the Cloudflare tunnel, why a tailnet beats a LAN as the
+  admin boundary, and whether you need a separate host for the tunnel (you don't; here is
+  the honest argument for one anyway).
+
+
 ## [0.4.2-alpha] — 2026-07-14
 
 **The release that found out what a real deployment does to you.** Hlidskjalf now runs

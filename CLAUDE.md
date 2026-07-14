@@ -166,6 +166,13 @@ cd frontend && npx tsc --noEmit && npm run build    # must be clean, no chunk wa
   `secretbox.py`. The token is never written in plaintext and never returned by an API.
 - Setup endpoints are unauthenticated **only** while no user exists; they close forever
   after that. Do not add a way to re-open them.
+- **The panel may be exposed publicly — tenants only.** `admin_networks` (empty =
+  anywhere) pins admin to a network; a tunnel puts the tenant panel on the internet.
+  Enforced at login, at session use, and on every admin route — because a session cookie
+  travels with the browser, so "admin from the LAN" has to mean the *request*, not the
+  login. `trusted_proxies` decides whose `X-Forwarded-For` may be believed; without it
+  the audit log records the proxy for everyone and the per-IP limiter is one shared
+  bucket. See `docs/public-access.md`.
 
 # Genericity — this ships to other people
 

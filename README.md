@@ -278,7 +278,12 @@ you care about:
 - The PVE token is **encrypted at rest** and never returned by any API.
 - Every NIC the panel writes gets `firewall=0` — a VLAN-tagged NIC on a firewall bridge
   silently drops traffic otherwise.
-- **Never expose the panel publicly.** It is designed for a LAN, behind a reverse proxy.
+- **Exposing it is a deliberate, supported mode — for tenants only.** Set
+  `admin_networks` (e.g. your tailnet) and admin stops existing outside it: an admin
+  cannot log in from the internet, an admin session that leaves the network stops
+  working, and admin routes refuse. Tenants sign in from anywhere and reach their one VM.
+  Without `admin_networks`, the panel assumes a LAN and admin works from anywhere — so
+  **do not put it on the internet in that state**. See [docs/public-access.md](docs/public-access.md).
 
 ---
 
