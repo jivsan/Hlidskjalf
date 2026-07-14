@@ -120,6 +120,15 @@ and **`scsi0` is hardcoded** for template disk reads and resize (a template on
   **Untested on real hardware** — it is a write path (see Phase 3).
 - **Self-update** (`POST /api/update`) — ✅ landed in v0.4.1-alpha, opt-in behind
   `HLIDSKJALF_ALLOW_SELF_UPDATE`, verified live against GitHub. See the changelog.
+- **NixOS deployment** — ✅ **done, unreleased**. `nix/package.nix` had never been built;
+  it was missing `cryptography` (Nix gives a Python app only what that list names, so it
+  would have built fine and crashed on first request), still had `lib.fakeHash`, version
+  `0.1.0`, nixpkgs 24.11. Now builds, starts, serves the SPA and the wizard — verified on
+  a real NixOS 26.05 host. The module is wizard-first (`enable = true` and nothing else),
+  with `bindAddress` / `cookieSecure` / `openFirewall` / `updateCheckEnabled` and warnings
+  for the two silent-failure traps (nothing protected; Secure cookie over plain http).
+  See `docs/nixos.md`. **Self-update stays refused on Nix by design** — a Nix system
+  updates from its flake: `nix flake update hlidskjalf && nixos-rebuild switch`.
 - **The switch faceplate is still hardcoded** to a 48-port Arista DCS-7050TX-48.
   Christian's call: this one may stay site-specific for now. Everything else must
   be generic — no homelab baked into code.

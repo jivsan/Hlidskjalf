@@ -28,6 +28,32 @@ anyone else's business either, and a fresh clone should describe *your* setup, n
   environment at all must come up unconfigured — no host, no VLANs, no protected VMIDs.
   Verified it fails on the previous `handoff.md`, which is the only proof that counts.
 
+### Fixed — the NixOS package had never been built, and would not have worked
+`nix/package.nix` was written months ago and never once run. Building it on a real NixOS
+host (26.05) found what a green test suite never could:
+
+- **`cryptography` was missing from `dependencies`.** Nix gives a Python application *only*
+  the packages that list names — so the build would have **succeeded**, and the panel would
+  have died on its first request, importing `secretbox.py` on a host with no dev tooling.
+  `pythonImportsCheck` now imports the app in the builder, and
+  `backend/tests/test_nix_package.py` fails the normal test suite on any drift between
+  `pyproject.toml` and `package.nix` — no Nix required, because nobody runs `nix build`
+  before merging a Python change.
+- `npmDepsHash` was still `lib.fakeHash`; the version was frozen at `0.1.0`; the flake
+  pinned nixpkgs 24.11 and a hardcoded `python312`. Now a real hash, the real version, and
+  the default `python3`.
+- **The module demanded an `environmentFile` and a fingerprint**, which defeats the entire
+  wizard. Both are optional now: `services.hlidskjalf.enable = true` and nothing else gives
+  you a panel on loopback serving the setup wizard.
+- New options: `bindAddress`, `openFirewall`, `cookieSecure`, `updateCheckEnabled`,
+  `settings.pveBridge`, `settings.pvePort` — plus **warnings** when `protectedVmids` is
+  empty (nothing is protected, including the guest the panel runs on) and when the panel
+  binds the LAN with a `Secure` cookie and no TLS in front (login silently fails).
+- `docs/nixos.md` — deploy, reverse-proxy (including the websocket requirement for the
+  console), declarative config, and how updates work on Nix.
+
+Verified on real hardware: builds, starts, serves the SPA and the wizard.
+
 ### Added — a step-by-step getting-started guide in `README.md`
 Token → fingerprint → validator → run it → finish in the browser, written for someone who
 has just cloned the repo and has nothing set up yet, including which steps happen on the
