@@ -14,16 +14,18 @@ fleet. FastAPI backend serving a React SPA — **one service, one port**.
 
 ---
 
-## Quick start
+## Getting started
 
-The panel ships **unconfigured**. Start it, open it in a browser, and it serves a
-**setup wizard**: point it at your Proxmox, paste an API token (validated with a live
-call before anything is saved), create the admin account. No env file required.
+A clone of this repo knows **nothing** about anyone's setup — no host, no VLANs, no
+VMIDs, no credentials. You start it, it serves a **setup wizard**, and you configure
+your own Proxmox. That is the whole install:
 
-```bash
-docker compose up -d           # or: pip install -e backend && hlidskjalf
-# open http://localhost:8787
-```
+> **install → paste a Proxmox API token → set your credentials → done.**
+
+Steps 1–2 run on the **Proxmox host** and produce the two things the wizard asks for: a
+scoped API token and the host's certificate fingerprint. Steps 3–5 run **wherever you
+want the panel** — any machine that can reach Proxmox on port 8006. It does not have to
+run on the Proxmox host, and it is better if it doesn't.
 
 ### 1. Make a scoped Proxmox token
 
@@ -60,25 +62,102 @@ The panel pins the Proxmox cert rather than trusting whatever answers on the wir
 openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
 ```
 
-### 3. Validate before it touches anything
+Copy the whole line it prints, colons included. It is a hash of the host's public
+certificate, so it is not a secret — but it is what stops anything else on the network
+from impersonating your Proxmox.
+
+### 3. Check the token before the panel ever uses it
+
+Run this from wherever you are about to run the panel. It is **read-only** — it mutates
+nothing unless you explicitly pass `--allow-writes --vmid <≥900>`:
 
 ```bash
-python scripts/validate-proxmox.py --host <pve-host> --node <node> \
-    --token-id 'hlidskjalf@pve!panel' --fingerprint AA:BB:...:FF
+git clone https://github.com/jivsan/Hlidskjalf && cd Hlidskjalf
+python3 -m venv .venv && .venv/bin/pip install -e ./backend python-multipart
+
+HLIDSKJALF_PVE_TOKEN_SECRET='<the-secret-from-step-1>' \
+.venv/bin/python scripts/validate-proxmox.py \
+    --host <your-proxmox> --node <your-node-name> \
+    --token-id 'hlidskjalf@pve!panel' --fingerprint <the-fingerprint-from-step-2>
 ```
 
-Read-only by default (it mutates nothing without `--allow-writes --vmid <≥900>`). It
-checks every assumption the panel is built on — token privileges, cert pinning, `/nodes`
-with a scoped token, `/cluster/resources` shape, UPID parsing, rrddata, guest agent,
-console websocket — and prints PASS/FAIL with the observed value and the file each
-failure breaks.
+It checks every assumption the panel is built on — token privileges, cert pinning,
+`GET /nodes` with a scoped token, `/cluster/resources` shape, UPID parsing, rrddata,
+guest agent, console websocket — and prints PASS/FAIL with the observed value and the
+file each failure would break. **If it reports a missing privilege here, fix the token
+now**; every one of them turns into a confusing failure inside the panel later.
 
-Full walkthrough: **[docs/setup.md](docs/setup.md)**.
+`--node` must be the name Proxmox itself uses for the machine (the one in the left-hand
+tree of the Proxmox web UI, often just `pve`). If it is wrong, every node-scoped page
+404s.
 
-Prefer to configure declaratively? Set the environment variables instead
+### 4. Run the panel
+
+Pick one. All three land on the same wizard.
+
+**Docker** — nothing to build:
+
+```bash
+docker compose up -d          # see docs/docker.md
+```
+
+**From the clone** (what the dev box does — the launcher builds the SPA on first run):
+
+```bash
+./scripts/dev.sh              # panel on http://localhost:8787
+./scripts/dev.sh --mock       # no Proxmox at all: also starts dev/mock_pve.py
+./scripts/dev.sh --reload     # + restart the backend on every save
+./scripts/dev.sh --vite       # + Vite on :5173 with hot reload (open THAT url)
+```
+
+`scripts/dev.sh` is a **development** launcher — it reads `dev/dev.env` if present and
+warns loudly when nothing is protected. For a real deployment, run the installed
+`hlidskjalf` console script under systemd, or use the NixOS module (`nix/module.nix`).
+`docs/dev-against-real-proxmox.md` §7 has a working unit file.
+
+<details>
+<summary>…or by hand, if you'd rather see every moving part</summary>
+
+```bash
+cd dev     && ../.venv/bin/uvicorn mock_pve:app --port 18006 &     # optional mock
+cd backend && set -a && source ../dev/dev.env && set +a \
+           && ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787 --reload
+cd frontend && npm ci && npm run dev        # :5173, proxies /api and /ws to :8787
+```
+</details>
+
+**Before that first start, protect the guests that must never be destroyed** — most of
+all the one the panel itself runs on. This defaults to **empty**, which means *nothing*
+is protected:
+
+```bash
+HLIDSKJALF_PROTECTED_VMIDS=<panel-host-vmid>,<anything-else-precious>
+```
+
+### 5. Finish in the browser
+
+Open <http://localhost:8787>. Because no user exists yet, the panel serves the **setup
+wizard** and nothing else:
+
+1. **Proxmox connection** — host, port (8006), node name, `https`, the token id, the
+   token secret from step 1, and the fingerprint from step 2. The wizard makes a **live
+   API call** and refuses to save anything that doesn't answer.
+2. **Admin account** — your username and password. This closes the setup endpoints
+   *forever*: they are unauthenticated only while no user exists.
+3. **First tenant** (optional) — a regular user pinned to exactly one VM.
+
+You land signed in. Then set **Settings → provisioning**: your VLAN → gateway pairs, the
+storage your VM disks actually live on, and the bridge your guests are actually on
+(often **not** `vmbr0`). Proxmox's defaults are not universal, and provisioning fails
+confusingly if these are wrong — the panel reads the real options off your node, so
+they're dropdowns, not guesses.
+
+**Prefer to configure declaratively?** Set the environment variables instead
 (`hlidskjalf.env.example`) and the wizard never appears — **env always wins** over
 anything the wizard stored, so secrets can live in agenix/sops/systemd-creds. Every
 secret also takes a `*_FILE` twin, because a secret manager hands you a file.
+
+Full walkthrough, including what each field means: **[docs/setup.md](docs/setup.md)**.
 
 ---
 
@@ -99,35 +178,20 @@ secret also takes a `*_FILE` twin, because a secret manager hands you a file.
 
 ---
 
-## Starting it
+## Try it without a Proxmox at all
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e ./backend python-multipart
-
-./scripts/dev.sh --mock      # no Proxmox needed: starts dev/mock_pve.py too
-./scripts/dev.sh             # against a real Proxmox, using dev/dev.env
-./scripts/dev.sh --reload    # + restart the backend on every save
-./scripts/dev.sh --vite      # + Vite on :5173 with hot reload (open THAT url)
+./scripts/dev.sh --mock       # starts dev/mock_pve.py too; panel on :8787
 ```
 
-The panel is then on <http://localhost:8787>. First run builds the SPA automatically.
-The script warns if `HLIDSKJALF_PROTECTED_VMIDS` is empty, because then **nothing** is
-safe from destroy — including the machine the panel runs on.
+A fake Proxmox with a fake fleet (`panel-host`, `vps-alpha`, `ct-runner`, a couple of
+templates). Everything works — fleet, graphs, provisioning, the container terminal —
+against a host that does not exist. It is also how the tests run.
 
-`scripts/dev.sh` is a **development** launcher. Production is Docker
-(`docs/docker.md`), the NixOS module (`nix/module.nix`), or the `hlidskjalf` console
-script under systemd (`docs/dev-against-real-proxmox.md` §7).
-
-<details>
-<summary>The same thing by hand, if you'd rather</summary>
-
-```bash
-cd dev     && ../.venv/bin/uvicorn mock_pve:app --port 18006 &     # optional mock
-cd backend && set -a && source ../dev/dev.env && set +a \
-           && ../.venv/bin/uvicorn hlidskjalf.main:app --port 8787 --reload
-cd frontend && npm ci && npm run dev        # :5173, proxies /api and /ws to :8787
-```
-</details>
+Be aware of what that means: `dev/mock_pve.py` is **a mock we wrote ourselves**, so it
+can only ever reflect our own assumptions back at us. It has been caught lying three
+times. Before you point the panel at a Proxmox you care about, run the validator
+(step 3).
 
 ---
 
@@ -215,6 +279,12 @@ scripts/    dev.sh (launcher) · validate-proxmox.py (check assumptions against 
 ```
 
 `plan.md` is the design source of truth. `handoff.md` is what's done and what's next.
+
+**Nothing site-specific lives in the repo** — no host, no cert pin, no VMIDs, no token.
+Your own deployment's facts go in `dev/dev.env` and `dev/site-notes.md`, both gitignored.
+`backend/tests/test_fresh_clone.py` fails the build if a real certificate fingerprint or
+a token-shaped secret ever reaches a tracked file, and if the panel's defaults ever stop
+being "unconfigured". The mock's fleet is deliberately fictional.
 
 ## Screenshots
 

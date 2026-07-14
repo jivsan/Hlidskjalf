@@ -317,7 +317,7 @@ export function Provision() {
                 className="input metric"
                 value={ipCidr}
                 onChange={(e) => setIpCidr(e.target.value.trim())}
-                placeholder="10.0.20.50/24"
+                placeholder="192.168.20.50/24"
                 spellCheck={false}
                 required
               />

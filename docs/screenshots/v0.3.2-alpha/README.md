@@ -13,7 +13,7 @@ All screenshots captured live from the dev stack (mock_pve + mock_switch + backe
 
 **After (v0.3.2-alpha) - New multi-user / VPS panels:**
 
-### Admin Experience (christina / admin)
+### Admin Experience (admin / admin)
 - Fleet overview with all VMs
 - Provision new VMs
 - **New Users management page**: create users, assign VM, reset passwords
@@ -78,7 +78,7 @@ cd backend && (set -a; source ../dev/dev.env; set +a; ../.venv/bin/uvicorn hlids
 cd frontend && npm run dev
 ```
 
-Login as admin (christina/devpass) → see full panels + Users tab.
+Login as admin (admin/devpass) → see full panels + Users tab.
 Create a user + assign a VM → logout → login as that user → see minimal VPS panel.
 
 ## Files updated for this version
@@ -97,7 +97,7 @@ Create a user + assign a VM → logout → login as that user → see minimal VP
 
 **To reproduce screenshots:** Use puppeteer against running dev stack (5173), login as admin then as demo user, navigate the different views, capture.
 
-For the PR / subagent history see handoff.md.
+For the PR history see handoff.md.
 
 ---
 

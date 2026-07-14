@@ -1125,7 +1125,7 @@ def build_parser() -> argparse.ArgumentParser:
             "      --token-id 'hlidskjalf@pve!panel' --fingerprint AA:BB:...:FF\n\n"
             "  # against the local mock (proves the SCRIPT works; proves nothing about PVE)\n"
             "  python scripts/validate-proxmox.py --scheme http --host 127.0.0.1 --port 18006 \\\n"
-            "      --node hella --token-secret mock-secret\n\n"
+            "      --node pve --token-secret mock-secret\n\n"
             "  # opt in to ONE power-cycle of a scratch VM\n"
             "  python scripts/validate-proxmox.py ... --allow-writes --vmid 901\n\n"
             "see docs/real-hardware-validation.md\n"

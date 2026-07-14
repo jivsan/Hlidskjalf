@@ -2,7 +2,7 @@
 
 A **design-system pass**. The panel now has a deliberate identity built around its
 subject: Hlidskjalf, the high seat from which one watches every guest running on
-the host "hella". Captured live against the dev stack (mock PVE + mock switch +
+the host "pve". Captured live against the dev stack (mock PVE + mock switch +
 backend serving the built frontend, `HLIDSKJALF_DEBUG=true`).
 
 ## What changed vs [v0.3.4-alpha](../v0.3.4-alpha/)
@@ -12,7 +12,7 @@ backend serving the built frontend, `HLIDSKJALF_DEBUG=true`).
   reserved strictly for machine data (metrics, IDs, UPIDs, MACs, IPs, bytes, the
   faceplate). The split *means* something instead of being mono-everywhere.
 - **Signature masthead + login.** The wordmark is set monumental (Archivo 800 /
-  width 125%); the sidebar is a high-seat identity rail with a live "hella" pulse
+  width 125%); the sidebar is a high-seat identity rail with a live "pve" pulse
   and an aurora-bar active nav. Login is a quiet hero with a one-line thesis and a
   single orchestrated page-load reveal. Cohesive verbs: *take the seat* / *leave
   the seat*.

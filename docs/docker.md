@@ -5,7 +5,7 @@ installs the FastAPI backend, and serves the panel on one port. Good for a plain
 Debian VM where you don't want NixOS. (On NixOS, prefer the flake module — see
 `README.md`.)
 
-The container is self-contained except for the **manual PVE bootstrap on hella**
+The container is self-contained except for the **manual PVE bootstrap on the Proxmox host**
 (the scoped API token, cloud-init template, and rescue ISO). Do that first:
 `docs/bootstrap.md` §1–3. You need the token secret and the TLS fingerprint from
 §1 before the panel can talk to Proxmox.
@@ -18,7 +18,7 @@ The container is self-contained except for the **manual PVE bootstrap on hella**
 
 - Docker Engine 24+ with the Compose v2 plugin (`docker compose`, not
   `docker-compose`). Docker 29 is known good.
-- Network reachability from the VM to the Proxmox API (default `10.0.20.10:8006`).
+- Network reachability from the VM to the Proxmox API (default `<pve-host>:8006`).
 - The PVE token secret + cert fingerprint from `docs/bootstrap.md` §1.
 
 ## Quickstart (Compose)
@@ -48,7 +48,7 @@ curl -fsS http://127.0.0.1:8787/api/health   # -> {"ok":true}
 docker compose ps                             # STATUS should show "healthy"
 ```
 
-Then open `http://<vm-ip>:8787/` and log in (default user `christina`, the
+Then open `http://<vm-ip>:8787/` and log in (default user `admin`, the
 password whose hash you set in step 4).
 
 ## Generating the secrets
@@ -86,7 +86,7 @@ hash getting mangled is the usual cause.)
 `pveum user token add` prints the secret once, and
 
 ```bash
-openssl s_client -connect 10.0.20.10:8006 </dev/null 2>/dev/null \
+openssl s_client -connect <pve-host>:8006 </dev/null 2>/dev/null \
   | openssl x509 -fingerprint -sha256 -noout
 ```
 

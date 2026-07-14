@@ -40,7 +40,7 @@ const set = async (page, sel, val) => {
   // Step 1 — point it at the mock Proxmox and test.
   await set(page, '#s-host', '127.0.0.1');
   await set(page, '#s-port', '18006');
-  await set(page, '#s-node', 'hella');
+  await set(page, '#s-node', 'pve');
   await page.select('#s-scheme', 'http');
   await set(page, '#s-token-secret', 'mock-secret');
   await sleep(200);

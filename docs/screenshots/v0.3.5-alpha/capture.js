@@ -49,7 +49,7 @@ async function shot(page, path, name, settle = 2000) {
   console.log('saved login');
 
   // ---- Admin views ----
-  await login(page, 'christina', 'devpass');
+  await login(page, 'admin', 'devpass');
   console.log('admin logged in, url:', page.url());
 
   await shot(page, '/', 'admin-fleet', 3000);

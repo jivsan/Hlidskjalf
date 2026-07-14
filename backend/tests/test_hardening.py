@@ -177,7 +177,7 @@ def test_a_refused_action_is_recorded_too(client, user_factory):
     login(client, "prober", "proberpw1")
 
     r = client.request(
-        "DELETE", "/api/vms/101", json={"confirm_name": "heimdall"}, headers=csrf_headers(client)
+        "DELETE", "/api/vms/101", json={"confirm_name": "panel-host"}, headers=csrf_headers(client)
     )
     assert r.status_code == 403
 

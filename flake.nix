@@ -1,5 +1,5 @@
 {
-  description = "Hlidskjalf — self-hosted Proxmox VPS panel (Odin's high seat over hella)";
+  description = "Hlidskjalf — self-hosted, multi-user Proxmox VE control panel";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";

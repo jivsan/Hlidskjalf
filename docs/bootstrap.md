@@ -1,4 +1,4 @@
-# Manual bootstrap on hella (one-time, needs root on the PVE shell / UI)
+# Manual bootstrap on the Proxmox host (one-time, needs root on the PVE shell / UI)
 
 The panel itself never needs root. These steps create the scoped service
 account, the cloud-init template(s), and the rescue ISO it works with.
@@ -6,7 +6,7 @@ account, the cloud-init template(s), and the rescue ISO it works with.
 ## 1. PVE user, role scoping, API token (no root)
 
 ```bash
-# On hella (Proxmox shell)
+# On pve (Proxmox shell)
 pveum user add hlidskjalf@pve --comment "hlidskjalf panel service account"
 
 # Read-only audit of everything (stats, node info, storage listing)
@@ -35,12 +35,12 @@ pveum aclmod /sdn/zones/localnetwork/vmbr0 --tokens 'hlidskjalf@pve!panel' --rol
 ```
 
 > ⚠️ `pveum user token add` prints the secret **once**. It goes into the env file
-> on heimdall (§4), never into git.
+> on panel-host (§4), never into git.
 
 Pin the API TLS cert (self-signed) by SHA-256 fingerprint:
 
 ```bash
-openssl s_client -connect 10.0.20.10:8006 </dev/null 2>/dev/null \
+openssl s_client -connect <pve-host>:8006 </dev/null 2>/dev/null \
   | openssl x509 -fingerprint -sha256 -noout
 ```
 
@@ -62,7 +62,7 @@ qm set 9000 --ide2 local-lvm:cloudinit --boot order=scsi0 --serial0 socket --vga
 qm template 9000
 ```
 
-> ⚠️ **`firewall=0` is mandatory** on every NIC with a VLAN tag on hella —
+> ⚠️ **`firewall=0` is mandatory** on every NIC with a VLAN tag —
 > `firewall=1` silently breaks tag propagation through the firewall bridge
 > (documented fleet-wide bug). The panel hardcodes `firewall=0` on every NIC it
 > ever creates or edits.
@@ -81,7 +81,7 @@ wget https://fastly-cdn.system-rescue.org/releases/latest/systemrescue-*-amd64.i
 The ISO volid (e.g. `local:iso/systemrescue-12.01-amd64.iso`) goes into
 `services.hlidskjalf.settings.rescueIso`.
 
-## 4. Secrets env file on heimdall
+## 4. Secrets env file on panel-host
 
 Root-owned `0600`, e.g. `/etc/hlidskjalf/env`, referenced by
 `services.hlidskjalf.environmentFile` (move to sops-nix/agenix later):
@@ -105,7 +105,7 @@ print(PasswordHasher().hash(getpass.getpass("panel password: ")))'
 (If argon2-cffi is missing in that interpreter:
 `nix shell nixpkgs#python312Packages.argon2-cffi nixpkgs#python312` first.)
 
-## 5. Traefik + DNS on heimdall (dotfiles repo)
+## 5. Traefik + DNS on panel-host (dotfiles repo)
 
 ```nix
 services.traefik.dynamicConfigOptions.http = {
@@ -120,5 +120,5 @@ services.traefik.dynamicConfigOptions.http = {
 ```
 
 WebSockets (the noVNC console) pass through Traefik untouched. DNS:
-`hlidskjalf.oryxserver.org` → 10.0.20.17, same as grafana.oryxserver.org.
+`hlidskjalf.oryxserver.org` → 192.168.20.17, same as grafana.oryxserver.org.
 LAN-only — do not add a public ingress.

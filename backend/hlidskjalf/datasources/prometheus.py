@@ -1,4 +1,4 @@
-"""PrometheusSource — long-range metrics from heimdall's Prometheus (plan.md §8).
+"""PrometheusSource — long-range metrics from an external Prometheus (plan.md §8).
 
 Drop-in alternative to ``RRDSource``: same ``MetricsSource`` protocol, same row
 shapes (``datasources/rrd.py`` owns ``VM_FIELDS`` / ``NODE_FIELDS`` — imported
@@ -6,11 +6,11 @@ here so the two can never drift), so the frontend charts need zero changes.
 Selected with ``HLIDSKJALF_METRICS_SOURCE=prometheus``; ``rrd`` stays the default.
 
 Data comes from ``prometheus-pve-exporter`` (nixpkgs
-``services.prometheus.exporters.pve``) scraping hella with the same
+``services.prometheus.exporters.pve``) scraping the node with the same
 ``hlidskjalf@pve!panel`` token, queried through the Prometheus HTTP API
 (``/api/v1/query_range``). The exporter derives its series from PVE's
 ``/cluster/resources``, so every metric is labelled ``id="qemu/105"`` /
-``id="lxc/130"`` / ``id="node/hella"``.
+``id="lxc/130"`` / ``id="node/pve"``.
 
 Semantics matched to rrddata (see the frontend's ``VmMetricPoint``):
 - ``cpu`` is a 0..1 ratio, ``mem``/``disk`` are bytes — gauges, consolidated
@@ -133,7 +133,7 @@ class PrometheusSource:
         if not settings.prometheus_url:
             raise RuntimeError(
                 "HLIDSKJALF_PROMETHEUS_URL is required with "
-                "HLIDSKJALF_METRICS_SOURCE=prometheus (e.g. http://10.0.20.17:9090)"
+                "HLIDSKJALF_METRICS_SOURCE=prometheus (e.g. http://192.168.20.17:9090)"
             )
         self.settings = settings
         self.node = settings.pve_node
@@ -221,7 +221,7 @@ class PrometheusSource:
             # prometheus-pve-exporter (PVE's /cluster/resources exposes none of
             # them for a node), so they stay None unless the operator supplies
             # PromQL via HLIDSKJALF_PROMETHEUS_NODE_QUERIES — typically pointing
-            # at a node_exporter running on hella.
+            # at a node_exporter running on the Proxmox node itself.
         }
         for field, expr in (self.settings.prometheus_node_queries or {}).items():
             if field not in NODE_FIELDS:

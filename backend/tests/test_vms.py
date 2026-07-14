@@ -20,11 +20,11 @@ def test_fleet_lists_guests_with_protected_flags(auth_client):
     assert vms[151]["protected"] is True
     assert vms[105]["protected"] is False
 
-    jarvis = vms[105]
-    assert jarvis["name"] == "vps-jarvis-prod"
-    assert jarvis["kind"] == "qemu"
-    assert jarvis["status"] == "running"
-    assert jarvis["netin"] > 0 and jarvis["netout"] > 0
+    vm = vms[105]
+    assert vm["name"] == "vps-alpha"
+    assert vm["kind"] == "qemu"
+    assert vm["status"] == "running"
+    assert vm["netin"] > 0 and vm["netout"] > 0
     assert vms[130]["kind"] == "lxc"
 
 
@@ -33,11 +33,11 @@ def test_vm_detail_ips_vlan_mac(auth_client):
     assert r.status_code == 200
     d = r.json()
     assert d["vmid"] == 105
-    assert d["name"] == "vps-jarvis-prod"
+    assert d["name"] == "vps-alpha"
     assert d["status"] == "running"
     # IPs come from the guest agent (loopback filtered out)
     assert d["agent"] is True
-    assert d["ips"] == ["10.0.20.15"]
+    assert d["ips"] == ["192.168.20.15"]
     assert d["vlan"] == "20"
     assert d["mac"] == "BC:24:11:69:AA:01"  # 105 == 0x69
     assert d["bridge"] == "vmbr0"
@@ -77,7 +77,7 @@ def test_mock_qemu_guests_report_disk_zero_like_real_pve(mock_pve_url):
 
     # status/current must agree with /cluster/resources
     r = httpx.get(
-        f"{mock_pve_url}/api2/json/nodes/hella/qemu/105/status/current", timeout=5.0
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/105/status/current", timeout=5.0
     )
     assert r.json()["data"]["disk"] == 0
 

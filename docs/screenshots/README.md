@@ -27,7 +27,7 @@ Live telemetry feeds from the Hlidskjalf panel are archived here by version.
 
 All captures are taken against the development mock PVE (`dev/mock_pve.py`) running inside the rack.
 
-> "The high seat overlooks hella. The lights never sleep."
+> "The high seat overlooks pve. The lights never sleep."
 
 Back to main control: [../README.md](../README.md)
 

@@ -50,7 +50,7 @@ NUM_PORTS = 52
 CONNECTED = {1, 2, 3, 5, 7, 12, 15, 20, 22, 25, 30, 31, 35, 40, 48, 50}
 # Ports with LLDP info (subset of connected)
 LLDP_PORTS = {
-    1: ("proxmox-hella", "Eth1/1"),
+    1: ("proxmox-pve", "Eth1/1"),
     3: ("vps-host-j", "enp3s0"),
     5: ("nas-truenas", "ix0"),
     12: ("kvm-build", "eno1"),
@@ -64,9 +64,9 @@ LLDP_PORTS = {
 
 # Static-ish descriptions (enhanced for task)
 DESCRIPTIONS = {
-    1: "to-hella-pve",
+    1: "to-pve-pve",
     2: "dev-workstation",
-    3: "vps-jarvis-prod",
+    3: "vps-alpha",
     4: "spare",
     5: "truenas-nas",
     6: "",

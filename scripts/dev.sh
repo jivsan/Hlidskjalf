@@ -56,7 +56,7 @@ if [[ $MOCK -eq 1 ]]; then
   export HLIDSKJALF_PVE_HOST=127.0.0.1
   export HLIDSKJALF_PVE_PORT=18006
   export HLIDSKJALF_PVE_SCHEME=http     # http is for the mock ONLY
-  export HLIDSKJALF_PVE_NODE=hella      # must match the mock's node name
+  export HLIDSKJALF_PVE_NODE=pve      # must match the mock's node name
   export HLIDSKJALF_PVE_TOKEN_ID='mock@pve!panel'
   export HLIDSKJALF_PVE_TOKEN_SECRET=mock-secret
   export HLIDSKJALF_COOKIE_SECURE=false

@@ -4,7 +4,8 @@ Safety rails (non-negotiable, enforced here server-side):
 - protected VMIDs refuse destroy/reinstall outright
 - destroy/reinstall require confirm_name == exact VM name
 - every net0 the panel ever writes hardcodes firewall=0 (VLAN tags silently
-  break through the firewall bridge on hella with firewall=1 — fleet-wide bug).
+  break through the firewall bridge with firewall=1 — observed fleet-wide on real
+  hardware).
   The bridge itself comes from settings.pve_bridge (admin-editable in Settings);
   only firewall=0 stays hardcoded.
 """
@@ -102,7 +103,7 @@ class CreateVm(BaseModel):
     memory_mb: int = Field(ge=256, le=131072)
     disk_gb: int = Field(ge=1, le=2048)
     vlan: str
-    ip_cidr: str  # e.g. 10.0.20.50/24
+    ip_cidr: str  # e.g. 192.168.20.50/24
     gateway: str = ""  # empty allowed (gateway-less VLANs, e.g. storage)
     ssh_keys: str = ""
     start: bool = True
@@ -154,7 +155,7 @@ def _validate_create(body: CreateVm) -> None:
     if body.vlan not in s.vlan_gateways:
         raise HTTPException(400, f"VLAN must be one of {sorted(s.vlan_gateways)}")
     if not re.match(r"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", body.ip_cidr):
-        raise HTTPException(400, "ip_cidr must look like 10.0.20.50/24")
+        raise HTTPException(400, "ip_cidr must look like 192.168.20.50/24")
     if body.gateway and not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", body.gateway):
         raise HTTPException(400, "gateway must be an IPv4 address or empty")
 

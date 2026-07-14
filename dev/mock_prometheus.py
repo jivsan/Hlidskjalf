@@ -27,7 +27,7 @@ from fastapi import FastAPI
 
 app = FastAPI(title="mock-prometheus")
 
-NODE = "hella"
+NODE = "pve"
 
 # vmid -> (cores, memory bytes, disk bytes, netin B/s, netout B/s), mirrors dev/mock_pve.py
 GUESTS: dict[str, tuple[int, int, int, int, int]] = {
@@ -137,7 +137,7 @@ async def query_range(query: str, start: float, end: float, step: float):
         "data": {
             "resultType": "matrix",
             "result": [
-                {"metric": {"__name__": metric, "id": id_, "instance": "hella:9221"},
+                {"metric": {"__name__": metric, "id": id_, "instance": "pve:9221"},
                  "values": values}
             ],
         },

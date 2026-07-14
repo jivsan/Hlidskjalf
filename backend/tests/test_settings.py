@@ -40,7 +40,7 @@ def vlans_unlocked(monkeypatch):
 
 def _put_body(**overrides):
     body = {
-        "vlan_gateways": {"20": "10.0.20.1", "30": "", "50": "10.0.50.1"},
+        "vlan_gateways": {"20": "192.168.20.1", "30": "", "50": "192.168.50.1"},
         "clone_storage": "local-lvm",
         "bridge": "vmbr0",
     }
@@ -85,11 +85,11 @@ def test_get_defaults_and_options(auth_client):
     assert r.status_code == 200, r.text
     d = r.json()
     # values as configured by conftest / defaults
-    assert d["vlan_gateways"] == {"20": "10.0.20.1", "30": "", "50": "10.0.50.1"}
+    assert d["vlan_gateways"] == {"20": "192.168.20.1", "30": "", "50": "192.168.50.1"}
     assert d["clone_storage"] == "local-lvm"
     assert d["bridge"] == "vmbr0"
     # options straight from the mock node
-    assert d["options"]["storages"] == ["local-lvm", "vm-drives"]  # images-capable only
+    assert d["options"]["storages"] == ["local-lvm", "vm-store"]  # images-capable only
     assert d["options"]["bridges"] == ["vmbr0", "vmbr1"]
     # conftest supplies HLIDSKJALF_VLAN_GATEWAYS, nothing else
     assert d["env_locked"] == ["vlan_gateways"]
@@ -100,8 +100,8 @@ def test_get_defaults_and_options(auth_client):
 
 def test_put_roundtrip(auth_client, vlans_unlocked):
     body = _put_body(
-        vlan_gateways={"20": "10.0.20.1", "40": "10.0.40.1"},
-        clone_storage="vm-drives",
+        vlan_gateways={"20": "192.168.20.1", "40": "192.168.40.1"},
+        clone_storage="vm-store",
         bridge="vmbr1",
     )
     r = auth_client.put(
@@ -110,8 +110,8 @@ def test_put_roundtrip(auth_client, vlans_unlocked):
     assert r.status_code == 200, r.text
 
     d = auth_client.get("/api/settings/provision").json()
-    assert d["vlan_gateways"] == {"20": "10.0.20.1", "40": "10.0.40.1"}
-    assert d["clone_storage"] == "vm-drives"
+    assert d["vlan_gateways"] == {"20": "192.168.20.1", "40": "192.168.40.1"}
+    assert d["clone_storage"] == "vm-store"
     assert d["bridge"] == "vmbr1"
     assert d["env_locked"] == []
 
@@ -123,18 +123,18 @@ def test_put_roundtrip(auth_client, vlans_unlocked):
     with sqlite3.connect(get_settings().db_path) as con:
         stored = dict(con.execute("SELECT key, value FROM config"))
     assert stored["pve_bridge"] == "vmbr1"
-    assert stored["clone_storage"] == "vm-drives"
+    assert stored["clone_storage"] == "vm-store"
     assert '"40"' in stored["vlan_gateways"]
 
 
 @pytest.mark.parametrize(
     "gateways",
     [
-        {"abc": "10.0.20.1"},  # non-numeric tag
-        {"0": "10.0.20.1"},  # below range
-        {"4095": "10.0.20.1"},  # above range
+        {"abc": "192.168.20.1"},  # non-numeric tag
+        {"0": "192.168.20.1"},  # below range
+        {"4095": "192.168.20.1"},  # above range
         {"20": "not-an-ip"},  # bad gateway
-        {"20": "10.0.20"},  # truncated gateway
+        {"20": "192.168.20"},  # truncated gateway
     ],
 )
 def test_put_bad_vlan_rows_400(auth_client, vlans_unlocked, gateways):
@@ -168,7 +168,7 @@ def test_put_env_locked_key_refused(auth_client, monkeypatch):
     # conftest already locks vlan_gateways via the environment
     r = auth_client.put(
         "/api/settings/provision",
-        json=_put_body(vlan_gateways={"20": "10.0.20.1"}),
+        json=_put_body(vlan_gateways={"20": "192.168.20.1"}),
         headers=csrf_headers(auth_client),
     )
     assert r.status_code == 400
@@ -201,7 +201,7 @@ def test_provision_uses_configured_bridge_and_vlan(
     r = auth_client.put(
         "/api/settings/provision",
         json=_put_body(
-            vlan_gateways={"40": "10.0.40.1"}, clone_storage="vm-drives", bridge="vmbr1"
+            vlan_gateways={"40": "192.168.40.1"}, clone_storage="vm-store", bridge="vmbr1"
         ),
         headers=csrf_headers(auth_client),
     )
@@ -216,8 +216,8 @@ def test_provision_uses_configured_bridge_and_vlan(
             "memory_mb": 1024,
             "disk_gb": 8,
             "vlan": "40",
-            "ip_cidr": "10.0.40.201/24",
-            "gateway": "10.0.40.1",
+            "ip_cidr": "192.168.40.201/24",
+            "gateway": "192.168.40.1",
             "start": False,
         },
         headers=csrf_headers(auth_client),
@@ -226,7 +226,7 @@ def test_provision_uses_configured_bridge_and_vlan(
     vmid = r.json()["vmid"]
 
     cfg = httpx.get(
-        f"{mock_pve_url}/api2/json/nodes/hella/qemu/{vmid}/config"
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/{vmid}/config"
     ).json()["data"]
     net0 = cfg["net0"]
     assert "bridge=vmbr1" in net0

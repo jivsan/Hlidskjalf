@@ -1,7 +1,7 @@
 """Thin async Proxmox VE API client.
 
 Auth via API token header; TLS verified against a pinned SHA-256 certificate
-fingerprint instead of a CA chain (hella's cert is self-signed). The pin is
+fingerprint instead of a CA chain (a stock PVE cert is self-signed). The pin is
 enforced inside the TLS handshake on BOTH of Python's handshake paths: a custom
 SSLObject subclass covers the memory-BIO path (`SSLContext.wrap_bio` — what
 httpx (REST) and websockets (VNC proxy) use), and a custom SSLSocket subclass

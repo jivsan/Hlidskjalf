@@ -4,7 +4,7 @@
 
 This release finalizes the realistic switch faceplate for the Arista DCS-7050TX-48 using **React + CSS** (non-SVG, non-Canvas) for a physical 1U hardware look. Includes all prior eAPI/LLDP, notes, top talkers, and robustness work.
 
-All screenshots captured live from the dev stack (mocks + backend + frontend on 5173) after final React faceplate work and local PR/branch merges (feat/switch-*-* branches). Latest refresh: post-merge 2026-07-12. Subagent runs for stack + docs also completed.
+All screenshots captured live from the dev stack (mocks + backend + frontend on 5173) after final React faceplate work and local PR/branch merges (feat/switch-*-* branches). Latest refresh: post-merge 2026-07-12.
 
 **Before (v0.3-alpha / earlier):**
 - Fleet: ![Fleet before](fleet.png)
@@ -41,7 +41,7 @@ The faceplate now looks like the physical hardware instead of blocky/cartoon.
 - Continued robustness (debounced saves, error states, polling).
 - Updated docs for v0.3.1-alpha naming and screenshots.
 
-Run `cd frontend && npm run dev` (after backend+ mocks) and visit http://127.0.0.1:5173/switch (login: christina / devpass) to interact live.
+Run `cd frontend && npm run dev` (after backend+ mocks) and visit http://127.0.0.1:5173/switch (login: admin / devpass) to interact live.
 
 ## Files updated for this version
 - `frontend/src/pages/Switch.tsx` (React faceplate)

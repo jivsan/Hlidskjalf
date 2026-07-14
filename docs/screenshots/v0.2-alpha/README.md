@@ -61,7 +61,7 @@ Watch the task log light up as the new guest spins up in the rack.
 
 ## MONITOR 06 — NODE STATUS
 
-**Hella's own vitals.** CPU/RAM/Storage. Host RRD graphs.  
+**The node's own vitals.** CPU/RAM/Storage. Host RRD graphs.  
 The hypervisor itself, viewed from the control room.
 
 ![Node](node.png)

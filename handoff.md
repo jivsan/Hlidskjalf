@@ -5,7 +5,7 @@ _Last updated: 2026-07-13 (**v0.4.0-alpha — tested against real hardware**; PR
 ## ✅ v0.4.0-alpha — THE PANEL HAS RUN AGAINST A REAL PROXMOX HOST
 
 **This is no longer a panel that has only ever met a mock.** It was run against a
-real Proxmox VE 9.2.3 host (`hella`) on 2026-07-13, from a Debian dev VM on the
+real Proxmox VE 9.2.3 host (`pve`) on 2026-07-13, from a Debian dev VM on the
 same LAN: read-only validation, then the panel itself, live, with a real scoped
 token — first-run wizard, fleet, node, graphs, and both consoles.
 
@@ -30,7 +30,7 @@ console look identical to a VM's). Each was fixed in the mock too. **Assume ther
 are more.** Read `CLAUDE.md` first — the hard safety rules are not negotiable.
 Setup for the dev box: `docs/dev-against-real-proxmox.md`.
 
-### ✅ Phase 1 — DONE (2026-07-13, against hella, PVE 9.2.3)
+### ✅ Phase 1 — DONE (2026-07-13, against a real host, PVE 9.2.3)
 
 `scripts/validate-proxmox.py` ran read-only against the real host: **33 pass,
 1 FAIL, 4 warn**; after triage (PRs #32/#33/#34) it is **35 pass, 0 FAIL**. The
@@ -44,32 +44,31 @@ TLS API the panel never uses (`wrap_socket`); the pin now covers both paths
 to `VM.GuestAgent.*` (#33, validator map fixed). One was the mock fabricating
 QEMU disk usage (#34, mock now honest). The rest are environment facts (below).
 
-**Environment facts discovered (matter for Phases 2–3):**
-- Node name is `hella`; API at `https://10.0.20.10:8006`; cert SHA-256 pin
-  `08:9B:64:D1:A5:71:09:0E:F4:B5:90:65:B9:4D:67:CD:51:99:61:CA:F1:33:1E:09:93:87:25:07:E5:E1:7E:A3`.
-- Storages are `pbs / vm-drives / local / local-zfs` — VM disks live on
-  **`vm-drives`**, so set `HLIDSKJALF_CLONE_STORAGE=vm-drives` (the `local-lvm`
-  default does not exist on hella; every provision would fail).
-- A Debian cloud-init **template now exists** (created 2026-07-13; `scsi0` on
-  `vm-drives`, agent enabled). Note the stock cloud image ships **without**
-  `qemu-guest-agent`, so clones show no in-guest IPs/disk until it is installed.
-- Real fleet (protect ALL of these): 151 proxmox-backup-server, 152 lxc-pihole,
-  153 nixos-services, 154 heimdall-nix, 155 homeassistant, **201
-  dev-debian-homelab (the dev VM itself)** →
-  `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201`.
-- Token `hlidskjalf@pve!panel` needs **four** roles, not three:
-  `PVEVMAdmin,PVEDatastoreUser,PVEAuditor,PVESDNUser` (privsep 0). Without
-  **PVESDNUser** every clone dies with `Permission check failed
-  (/sdn/zones/localnetwork/vmbr1/20, SDN.Use)` — PVE 9 gates attaching a NIC to a
-  bridge/VLAN behind `SDN.Use`, and PVEAuditor grants only `SDN.Audit`. Fix on the
-  host: `pveum acl modify /sdn/zones/localnetwork --users hlidskjalf@pve --roles PVESDNUser`. **The secret was
-  pasted into a chat once on 2026-07-13 — rotate it** (`pveum user token remove
-  hlidskjalf@pve panel` + re-add) before anything long-lived uses it.
-- The repo is now **public** (that unlocked branch protection: ruleset
-  `protect-main` — PRs + green `backend`/`frontend` CI required, no force-push).
-  Mind what lands in commits/PRs; plan.md already exposes LAN topology.
+**What real hardware taught us — the generic lessons** (this repo is public and ships
+to other people, so it holds no one's host facts. **Your** node name, host, cert pin,
+storage names, VMIDs and token live in `dev/site-notes.md`, which is gitignored, next
+to `dev/dev.env`. `backend/tests/test_fresh_clone.py` fails the build if any of it
+leaks back into a tracked file):
 
-### ✅ Phase 2 — DONE (2026-07-13). The panel ran against hella.
+- **`local-lvm` is only Proxmox's usual default, not a guarantee.** A host whose VM
+  disks live on some other storage rejects every provision until
+  `HLIDSKJALF_CLONE_STORAGE` (or Settings → provisioning) names the real one.
+- **Guests are often not on `vmbr0`.** Same story — set the bridge in Settings.
+- **Stock cloud images ship without `qemu-guest-agent`**, so a fresh clone shows no
+  in-guest IP or disk usage until it is installed. That is the guest's fault, not
+  the panel's; it degrades correctly.
+- **The token needs four roles, not three:** `PVEVMAdmin,PVEDatastoreUser,PVEAuditor,
+  PVESDNUser` (privsep 0). Without **PVESDNUser** every clone dies with
+  `Permission check failed (/sdn/zones/<zone>/<bridge>/<vlan>, SDN.Use)` — PVE 9 gates
+  attaching a NIC to a bridge/VLAN behind `SDN.Use`, and PVEAuditor grants only
+  `SDN.Audit` (read). The setup wizard now prints all four, generated from the token
+  id you type.
+- **Set `HLIDSKJALF_PROTECTED_VMIDS` before the first start.** It defaults to empty,
+  which means *nothing* is protected — including the guest the panel runs on.
+- The repo is **public**, with ruleset `protect-main`: PRs + green `backend`/`frontend`
+  CI required, no force-push. Never paste a token secret into a commit, a PR, or a chat.
+
+### ✅ Phase 2 — DONE (2026-07-13). The panel ran against the real host.
 
 Started with `HLIDSKJALF_PROTECTED_VMIDS=151,152,153,154,155,201` (env-only,
 empty by default — **set it before the first start or nothing is guarded**), no
@@ -88,8 +87,9 @@ Found and fixed while the panel was up (all merged):
 ### The remaining plan, in this order. Do not skip ahead to the fun part.
 
 **Phase 3 — writes. NEXT SESSION. Scratch VM only, VMID ≥ 900.**
-1. Set `HLIDSKJALF_CLONE_STORAGE=vm-drives`, then in **Settings → provisioning**
-   add VLAN `20 → 10.0.20.1` and bridge `vmbr1` (hella's guests are NOT on vmbr0).
+1. Set `HLIDSKJALF_CLONE_STORAGE=vm-store`, then in **Settings → provisioning**
+   add the VLAN → gateway you use and the bridge your guests are actually on (it is
+   often NOT vmbr0).
 2. Provision a scratch guest *from the panel*, from the Debian template — **type
    `900` in the new VMID box**, so everything below stays inside the ≥ 900 fence by
    construction rather than by luck. Then, on that guest only:
@@ -149,7 +149,7 @@ New in v0.4.0-alpha (all found or driven by the real-hardware run above):
   git) and **does not update itself**: an endpoint that runs new code on demand is
   a bigger hole than anything it protects.
 - **Profile page** — click your username → change your own password.
-- **Both consoles fixed** (#39, #40) — QEMU noVNC and LXC xterm.js, live on hella.
+- **Both consoles fixed** (#39, #40) — QEMU noVNC and LXC xterm.js, live on real hardware.
 
 ### The v0.3.6-alpha foundation (still true)
 
@@ -239,7 +239,7 @@ of an unversioned schema is how people lose their bandwidth history.
    returns, with the model read from eAPI (`show version` → `modelName`). The Switch
    page is already optional (unset `switch_host` hides it).
 2. **Real-hardware validation — Phase 1 DONE (2026-07-13), Phases 2–4 remain.** The
-   read-only validator passed against hella (PVE 9.2.3): 35 pass, 0 FAIL — see the
+   read-only validator passed against the real host (PVE 9.2.3): 35 pass, 0 FAIL — see the
    "START HERE" section at the top for full results and environment facts. The panel
    process itself has still never run against real Proxmox; that is Phase 2. The
    manual checklist in **`docs/real-hardware-validation.md`** (open a console and
@@ -256,7 +256,7 @@ of an unversioned schema is how people lose their bandwidth history.
 
 Branch `feat/frontend-design-v0.3.5-alpha` (PR pending/merged). **Frontend only.**
 A deliberate design-system pass using the `frontend-design` skill, grounded in the
-subject (Hlidskjalf = the high seat watching every guest on host "hella").
+subject (Hlidskjalf = the high seat watching every guest on host "pve").
 
 - **Type concept**: added **Archivo Variable** (`@fontsource-variable/archivo`,
   weight + width axes) as `font-sans`/`font-display` for the human interface;
@@ -270,7 +270,7 @@ subject (Hlidskjalf = the high seat watching every guest on host "hella").
   `components/ui.tsx` (new `<PageHeader>`, restyled Card/states/StatusDot/etc.),
   `components/Layout.tsx` (high-seat masthead rail + aurora nav), `pages/Login.tsx`
   (hero + thesis copy). Design spec archived at `docs/design/v0.3.5-design-system.md`.
-- **Pages** brought onto the system by 3 parallel subagents (disjoint file sets;
+- **Pages** brought onto the system in three parallel passes (disjoint file sets;
   Fleet+Node, Provision+Users, Debug+VmDetail+vm/*) + Switch by me. Each page opens
   with `<PageHeader eyebrow title>`; data in mono; cards/wells; disciplined accents
   (cyan=live, pink=brand/selection only, amber=attention, red=danger). Behavior,
@@ -315,7 +315,7 @@ see this on `main` it merged). **Frontend only** per Christian's request:
 
 `main` (post-merge) is GREEN: **98 backend tests pass**, `tsc`/`build` clean. Merged this batch:
 - **PR #16** — fixed a CSRF bug that made every authenticated mutation 403 (and had been merged RED, 16 failing tests). One-line fix; suite restored.
-- **PR #17** — closed console IDOR + rescue broken-access-control (+ protected-VMID guard on rescue). The rescue hole let any user reboot any VM incl. heimdall (hosts the panel).
+- **PR #17** — closed console IDOR + rescue broken-access-control (+ protected-VMID guard on rescue). The rescue hole let any user reboot any VM incl. panel-host (hosts the panel).
 - **PR #18** — hardening: no traceback leak to clients; `Secure` cookie (`HLIDSKJALF_COOKIE_SECURE`, default true); switch eAPI TLS verify/pin; legacy env-admin login only during bootstrap; per-IP login rate limit.
 - **PR #19** — first authz test coverage + users 404/last-admin fixes + removed dup `get_status`.
 - Post-merge test-only fix on main: `test_authz_scoping` used vmid 105 which `test_access_control` already assigns in the session-scoped DB → moved it to vmid 120 (they collided only when run together).
@@ -352,8 +352,8 @@ See new `docs/screenshots/v0.3.2-alpha/README.md` and updated CHANGELOG + main R
 ## Debug / Logging & Error Handling (v0.3.2+ work)
 
 - **Deployed sub-agents**:
-  - Backend subagent: implemented enhanced logging, request middleware, global error handler, in-memory buffers, debug router.
-  - Frontend subagent: built full Debug.tsx admin page + api.ts helpers + nav integration.
+  - Backend: implemented enhanced logging, request middleware, global error handler, in-memory buffers, debug router.
+  - Frontend: built full Debug.tsx admin page + api.ts helpers + nav integration.
 - Backend improvements:
   - `log_level` (DEBUG/INFO/...) + `debug` flag from env/settings.
   - HTTP request logging middleware (logs every call with timing).
@@ -456,7 +456,7 @@ Fake PVE on :18006 (plain http): resources/status/config/rrddata/tasks/clone/
 resize/destroy/power/agent/vncproxy, synthetic traffic counters that tick, so
 the accumulator books real-looking data. Needs `python-multipart` in the venv
 (form parsing). `dev/dev.env` (gitignored) holds a working dev config —
-recreate via README "Local development"; login is christina/devpass.
+recreate via README "Local development"; login is admin/devpass.
 
 ### Frontend (`frontend/`) — source complete, build verified, served by backend
 
@@ -468,7 +468,7 @@ and `npm run build` pass clean; the built `dist/` is served by the backend
 (index, assets, SPA fallback, path-traversal guard all verified with curl).
 **Not yet done: an actual in-browser visual pass** — no Chromium on this box.
 Easiest: `ssh -L 8787:127.0.0.1:8787 hermes-agent`, start mock+backend per the
-cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
+cheat-sheet below, open http://127.0.0.1:8787 (admin/devpass).
 
 ### Nix (`nix/`) + docs — WRITTEN, NOT BUILT (no nix on this box)
 
@@ -477,7 +477,7 @@ cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
   `nix/module.nix` (DynamicUser, StateDirectory=hlidskjalf, hardening,
   EnvironmentFile secrets). **`npmDepsHash = lib.fakeHash` placeholder — set the
   real hash on first `nix build` failure output.**
-- `docs/bootstrap.md` — manual hella steps (token/ACLs with the plan's
+- `docs/bootstrap.md` — manual pve steps (token/ACLs with the plan's
   storage/local typo corrected to PVEDatastoreUser, template, ISO, argon2 hash
   command, Traefik snippet). `README.md` — dev + deploy quickstart.
 
@@ -486,13 +486,13 @@ cheat-sheet below, open http://127.0.0.1:8787 (christina/devpass).
 1. ~~Optional small PR: normalize...~~ **DONE in this PR** (`feat/normalize-pve-shapes`).
 2. On a nix machine: `nix build .#hlidskjalf` → fix `npmDepsHash`, then
    `nix flake check`.
-4. Real deployment (Christina, manual). Two paths now:
-   - **Nix/heimdall (primary):** `docs/bootstrap.md` on hella → secrets env on
-     heimdall → flake input + Traefik + DNS in dotfiles (plan §7).
+4. Real deployment (manual). Two paths now:
+   - **Nix (primary):** `docs/bootstrap.md` on the Proxmox host → secrets env on
+     panel-host → flake input + Traefik + DNS in dotfiles (plan §7).
    - **Docker (any Debian VM):** `docs/docker.md` (after PR #3 merges).
-5. M2–M4 acceptance against real hella with **scratch VMIDs ≥ 900 only**;
+5. M2–M4 acceptance against real pve with **scratch VMIDs ≥ 900 only**;
    confirm plan §10 open items (real storage IDs, real protected VMIDs —
-   heimdall/hermes-agent/HAOS VMIDs still unknown, VLAN 30 gateway).
+   panel-host/hermes-agent/HAOS VMIDs still unknown, VLAN 30 gateway).
 
 ## Git / PR workflow
 
@@ -508,10 +508,10 @@ the branch actually has pushed commits). To enable real PR creation: install
 
 ## Open decisions / deferred
 
-- Hosting: recommendation is **heimdall** (existing Traefik + wildcard cert +
+- Hosting: recommendation is **panel-host** (existing Traefik + wildcard cert +
   NixOS module deploy). NOT on the Proxmox host itself (keep the hypervisor
   clean; the whole security model is a scoped token from a separate machine).
-  A small Debian VM works too (venv + systemd + env file) if heimdall is out.
+  A small Debian VM works too (venv + systemd + env file) if panel-host is out.
 - rrddata seeding of first-month bandwidth: nice-to-have, skipped.
 - Prometheus datasource: Phase 2 stub in `datasources/prometheus.py`.
 - LXC: list/detail/power work; provisioning is qemu-only (per plan non-goals).
@@ -521,6 +521,6 @@ the branch actually has pushed commits). To enable real PR creation: install
 ```bash
 .venv/bin/uvicorn mock_pve:app --port 18006             # from dev/
 set -a; source ../dev/dev.env; set +a                    # from backend/
-../.venv/bin/uvicorn hlidskjalf.main:app --port 8787     #   (login christina/devpass)
+../.venv/bin/uvicorn hlidskjalf.main:app --port 8787     #   (login admin/devpass)
 npm run dev                                              # from frontend/, :5173 proxies to :8787
 ```
