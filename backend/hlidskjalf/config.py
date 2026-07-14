@@ -75,6 +75,18 @@ class Settings(BaseSettings):
     # (verified 2026-07-13: the first real host runs its guests on vmbr1).
     pve_bridge: str = "vmbr0"
 
+    # --- who is calling, and from where ------------------------------------
+    # Reverse proxies whose forwarded headers we believe. Behind Traefik/cloudflared
+    # on the same host that is ["127.0.0.1/32"]. Empty (default) = no proxy, so the
+    # socket peer IS the client and forwarded headers are ignored entirely — anyone
+    # can send X-Forwarded-For, and only a proxy we trust may speak for someone else.
+    trusted_proxies: Annotated[list[str], NoDecode] = []
+    # Networks from which admin is permitted. EMPTY = anywhere (a LAN-only panel).
+    # Set it when the panel is reachable from the internet: tenants can then sign in
+    # from anywhere and manage their one VM, while admin exists only inside these
+    # networks — enforced at login, at session use, and on every admin route.
+    admin_networks: Annotated[list[str], NoDecode] = []
+
     # --- Update detection (routes/version.py) --------------------------------
     # The panel compares its running commit with the tip of `update_branch` in
     # `update_repo` on GitHub, and says so if it is behind. Detection only — it
@@ -154,6 +166,14 @@ class Settings(BaseSettings):
     # Paths
     static_dir: str = ""  # built frontend dist; empty = API only
     state_dir: str = "/var/lib/hlidskjalf"
+
+    @field_validator("trusted_proxies", "admin_networks", mode="before")
+    @classmethod
+    def _split_networks(cls, v):
+        """Comma-separated CIDRs from env: "127.0.0.1/32,100.64.0.0/10"."""
+        if isinstance(v, str):
+            return [p.strip() for p in v.split(",") if p.strip()]
+        return v or []
 
     @field_validator("protected_vmids", mode="before")
     @classmethod

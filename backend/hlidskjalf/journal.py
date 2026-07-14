@@ -46,9 +46,17 @@ PANEL_UPDATE = "panel.update"   # the panel updating its own code — audit it l
 
 
 def client_ip(request: Request | None) -> str:
-    if request is None or request.client is None:
-        return "-"
-    return request.client.host
+    """The address the request really came from.
+
+    Behind a reverse proxy the socket peer is the proxy, so an audit log built on
+    it records "127.0.0.1" for every action anyone ever takes — worthless exactly
+    when the panel gains users who are not you. netzone.client_ip believes the
+    forwarded headers only when the peer is a proxy the operator declared.
+    """
+    from .config import get_settings
+    from .netzone import client_ip as real_client_ip
+
+    return real_client_ip(request, get_settings().trusted_proxies)
 
 
 async def record(

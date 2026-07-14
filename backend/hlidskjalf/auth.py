@@ -17,6 +17,7 @@ from argon2.exceptions import VerifyMismatchError
 from fastapi import Cookie, Depends, Header, HTTPException, Request, Response
 from itsdangerous import BadSignature, TimestampSigner
 
+from . import netzone
 from .config import get_settings
 from .db import Db  # for type hints only
 from .deps import get_db
@@ -100,9 +101,56 @@ def check_login_rate(client_ip: str) -> None:
     dq.append(now)
 
 
+# Failed attempts per ACCOUNT, not per source. Per-IP limiting is the right defence
+# against one abusive host, and no defence at all against a botnet spreading attempts
+# across thousands of addresses — which is exactly what an internet-facing login page
+# attracts. So the account itself backs off too.
+_failed_by_user: dict[str, deque] = {}
+ACCOUNT_FAILURES = 10          # within...
+ACCOUNT_WINDOW = 900.0         # ...15 minutes -> the account stops answering
+ACCOUNT_LOCKOUT = 900.0        # for 15 minutes
+
+
+def check_account_lockout(username: str) -> None:
+    """Refuse an account that has been guessed at too hard, wherever from.
+
+    Deliberately NOT a permanent lock: a permanent one is a denial-of-service any
+    stranger can inflict on you by typing your username wrong ten times. It expires.
+    """
+    now = time.monotonic()
+    dq = _failed_by_user.get(username)
+    if not dq:
+        return
+    while dq and now - dq[0] > ACCOUNT_WINDOW:
+        dq.popleft()
+    if not dq:
+        del _failed_by_user[username]
+        return
+    if len(dq) >= ACCOUNT_FAILURES:
+        wait = int((ACCOUNT_LOCKOUT - (now - dq[-1])) / 60) + 1
+        raise HTTPException(
+            429,
+            f"Too many failed sign-ins for this account. Try again in about {wait} minute(s).",
+        )
+
+
+def record_login_failure(username: str) -> None:
+    now = time.monotonic()
+    dq = _failed_by_user.setdefault(username, deque())
+    while dq and now - dq[0] > ACCOUNT_WINDOW:
+        dq.popleft()
+    dq.append(now)
+
+
+def clear_login_failures(username: str) -> None:
+    """A successful sign-in clears the account's backoff."""
+    _failed_by_user.pop(username, None)
+
+
 def reset_login_rate() -> None:
-    """Clear all per-IP login buckets (test/ops helper)."""
+    """Clear all per-IP login buckets and per-account backoff (test/ops helper)."""
     _login_attempts.clear()
+    _failed_by_user.clear()
 
 
 def hash_password(password: str) -> str:
@@ -242,11 +290,13 @@ async def validate_session(cookie: str | None, db: Db) -> tuple[str, str, str]:
 
 
 async def require_session(
+    request: Request,
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
     db: Db = Depends(get_db),
 ) -> str:
     """Dependency: returns the username from a valid, current session cookie."""
     username, _epoch, _sid = await validate_session(session, db)
+    await deny_admin_outside_zone(request, username, db)
     return username
 
 
@@ -259,6 +309,7 @@ async def require_session_full(
 
 
 async def require_csrf(
+    request: Request,
     session: str | None = Cookie(default=None, alias=COOKIE_NAME),
     csrf: str | None = Header(default=None, alias=CSRF_HEADER),
     db: Db = Depends(get_db),
@@ -267,12 +318,19 @@ async def require_csrf(
     username, epoch, _sid = await validate_session(session, db)
     if not csrf or not hmac.compare_digest(csrf, csrf_for(username, epoch)):
         raise HTTPException(403, f"Missing or bad {CSRF_HEADER} header")
+    await deny_admin_outside_zone(request, username, db)
     return username
 
 
 async def session_from_request(request: Request, db: Db) -> str:
-    """WebSocket: returns username from a valid, current session cookie."""
+    """WebSocket: returns username from a valid, current session cookie.
+
+    The console websocket goes through here, so an admin's console from outside the
+    admin networks is refused too — the tenant's own console still works, which is
+    the whole point of exposing the panel.
+    """
     username, _epoch, _sid = await validate_session(request.cookies.get(COOKIE_NAME), db)
+    await deny_admin_outside_zone(request, username, db)
     return username
 
 
@@ -287,6 +345,30 @@ async def get_current_user(username: str, db: Db) -> dict:
     if secrets.compare_digest(username, s.admin_user):
         return {"username": username, "role": "admin", "vmid": None}
     raise HTTPException(401, "User no longer exists")
+
+
+async def deny_admin_outside_zone(request: Request, username: str, db: Db) -> None:
+    """An admin session must not work outside the admin networks. At all.
+
+    Not "must not see the admin pages" — must not *work*. A session cookie travels
+    with the browser: sign in as admin at home over Tailscale, open the same laptop
+    on café wifi, and the cookie is still valid. `require_admin_user` would refuse
+    it, but ~20 routes branch on `is_admin(user)` directly (fleet scoping, power,
+    provisioning) and would have honoured it. So the check belongs at the session
+    layer, where every authenticated path passes through exactly once.
+
+    Free when `admin_networks` is unset (a LAN-only panel) or the caller is inside
+    it: the user lookup only happens for a session arriving from outside.
+    """
+    s = get_settings()
+    if not s.admin_networks or netzone.is_admin_zone(request, s):
+        return
+    user = await db.get_user_by_username(username)
+    role = (user or {}).get("role") or (
+        "admin" if secrets.compare_digest(username, s.admin_user) else "user"
+    )
+    if role == "admin":
+        raise HTTPException(403, netzone.admin_zone_error(s))
 
 
 def is_admin(user: dict) -> bool:
@@ -308,14 +390,21 @@ def rate_limited(action: str, limit: int, window: float):
 
 
 async def require_admin_user(
+    request: Request,
     username: str = Depends(require_session),
     db: Db = Depends(get_db),
 ) -> dict:
-    """Dependency: returns the admin user dict or raises 403 for non-admins.
+    """Dependency: returns the admin user dict, or 403.
 
-    Works with multi-user admin checks (role == 'admin').
+    TWO refusals, not one. Being an admin is not enough — the request must also come
+    from a network the operator allows admin from (`admin_networks`, empty = anywhere).
+    The panel is reachable from the internet so tenants can manage their own VM; admin
+    must not be reachable there, and hiding the URL is not a boundary.
     """
     user = await get_current_user(username, db)
     if not is_admin(user):
         raise HTTPException(403, "Admin only")
+    settings = get_settings()
+    if not netzone.is_admin_zone(request, settings):
+        raise HTTPException(403, netzone.admin_zone_error(settings))
     return user

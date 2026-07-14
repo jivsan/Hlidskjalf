@@ -1,0 +1,139 @@
+# Exposing the panel: tenants from anywhere, admin from nowhere
+
+The default posture is **do not expose this panel**. It holds a token that can destroy
+VMs, and an internet-facing login page is a standing invitation.
+
+But the VPS model wants the opposite: you provision a VM for a friend, and they need to
+reach it — console, power, bandwidth — without being on your LAN. So the panel supports
+exactly one shape of exposure, and it is not "put it on the internet and hope":
+
+> **Tenants can sign in from anywhere. Admin exists only inside `admin_networks`.**
+
+Enforced server-side, in three places, because a URL only tenants know about is not a
+boundary — it is a wish:
+
+1. An admin **cannot log in** from outside the admin networks.
+2. An admin **session** that arrives from outside is refused — even the console
+   websocket. A cookie travels with the browser: sign in at home, open the same laptop
+   on café wifi, and the cookie is still valid. The check lives at the session layer,
+   so every authenticated path passes through it exactly once.
+3. Admin routes 403 from outside regardless.
+
+A tenant, meanwhile, sees exactly one VM — which the panel already enforces on every
+route (`_ensure_vm_access`).
+
+---
+
+## 1. Teach the panel who is calling
+
+Behind a reverse proxy, every request arrives *from the proxy*. Attribute requests to
+the socket peer and the audit log records `127.0.0.1` for everything anyone ever does,
+and the per-IP login limiter becomes one shared bucket that a single attacker fills on
+everybody's behalf.
+
+```nix
+services.hlidskjalf.trustedProxies = [ "127.0.0.1/32" ];   # traefik / cloudflared, same host
+```
+
+Forwarded headers (`X-Forwarded-For`, `CF-Connecting-IP`) are believed **only** when the
+socket peer is one of these. Anyone can *send* `X-Forwarded-For: 100.64.0.1`; only a
+proxy you named may speak for someone else. With no trusted proxy declared, the headers
+are ignored entirely.
+
+## 2. Decide where admin lives
+
+```nix
+services.hlidskjalf.adminNetworks = [ "100.64.0.0/10" ];   # your tailnet
+```
+
+**A tailnet is a better admin boundary than a LAN.** It follows you (you can administer
+from anywhere you are logged into Tailscale), and it does not trust every device that
+happens to be on your home wifi. `100.64.0.0/10` is Tailscale's range.
+
+Empty (the default) means *anywhere*, which is correct for a LAN-only panel — and the
+module warns if you declare `trustedProxies` without `adminNetworks`, because that is
+the combination that puts admin on the internet.
+
+## 3. Put a tunnel in front
+
+A Cloudflare tunnel needs no port forward, no public IP, and does not expose the origin.
+`cloudflared` runs beside the panel and dials *out*.
+
+```nix
+# hosts/<host>/modules/system/cloudflared.nix
+{ config, ... }:
+{
+  services.cloudflared = {
+    enable = true;
+    tunnels."<tunnel-uuid>" = {
+      credentialsFile = "/var/lib/cloudflared/<tunnel-uuid>.json";
+      ingress."panel.example.com".service = "http://127.0.0.1:8787";
+      default = "http_status:404";
+    };
+  };
+}
+```
+
+Create the tunnel and its DNS route once, on the host:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create hlidskjalf
+cloudflared tunnel route dns hlidskjalf panel.example.com
+```
+
+The credentials file is a secret: root-owned, `0600`, and **not** in your config repo.
+
+WebSockets pass through Cloudflare, so the tenant console works. Nothing else on the
+host is exposed — the tunnel maps one hostname to one local port.
+
+Keep your existing internal route (Traefik, `lan-only`) for admin. Same panel, two
+doors, and only one of them is on the internet.
+
+### Do you need a separate host for the tunnel?
+
+No — `cloudflared` dials *out*, so there is no inbound path to host and nothing to port
+forward. It runs fine beside the panel.
+
+The argument for a dedicated tunnel host (an LXC is plenty; a VM is heavier than this
+needs) is **blast radius**, not connectivity: it is the one internet-facing daemon you
+run, and putting it on the box that also holds your photos, documents and dashboards
+means a compromise of it lands in the middle of all of them. On its own VLAN, with a
+firewall rule permitting only the panel's port, whoever gets in is in a throwaway
+machine that can talk to exactly one thing.
+
+Weigh it honestly: the realistic threat to an exposed panel is someone guessing a
+password, not a 0-day in a well-audited Go binary making outbound connections — and a
+separate tunnel host does nothing about that. It is defence in depth, not the defence.
+
+**If you do add the hop, declare BOTH proxies:**
+
+```nix
+services.hlidskjalf.trustedProxies = [ "127.0.0.1/32" "192.0.2.5/32" ];  # traefik + tunnel host
+```
+
+The panel walks the `X-Forwarded-For` chain from the right, skipping addresses it knows
+are yours, and takes the first one that is not. Declare only the local proxy and every
+tenant on earth is recorded as coming from your tunnel host.
+
+## 4. What an internet-facing login page gets you
+
+- **Per-IP rate limiting** — the right defence against one abusive host.
+- **Per-account backoff** — 10 failures in 15 minutes and the account stops answering,
+  wherever the guesses come from. Per-IP limiting does nothing about a botnet spreading
+  attempts across thousands of addresses, which is exactly what a public login attracts.
+  It expires: a permanent lock is a denial of service any stranger can inflict by typing
+  your username wrong ten times.
+- **argon2** password hashing, sessions bound to the password epoch (a password change
+  invalidates every older session), CSRF on every mutation.
+- Cloudflare's own bot/rate rules, if you want them, are free and sit in front of all of
+  this.
+
+## 5. What is still true
+
+- The panel is **not** multi-tenant isolation in the hostile sense. A tenant reaches one
+  VM through a panel that holds a token which can reach *all* of them. The authorisation
+  is real and tested — but the blast radius of a panel-level RCE is the whole fleet, and
+  exposing it puts that in front of the internet. That is the trade you are making.
+- Give tenants **their own accounts**, never share one.
+- Keep `protected_vmids` set, including the guest the panel itself runs on.

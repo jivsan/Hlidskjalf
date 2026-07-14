@@ -37,6 +37,8 @@ let
     HLIDSKJALF_UPDATE_CHECK_ENABLED = lib.boolToString cfg.updateCheckEnabled;
     HLIDSKJALF_DEBUG = if cfg.debug then "true" else null;
     HLIDSKJALF_LOG_LEVEL = cfg.logLevel;
+    HLIDSKJALF_TRUSTED_PROXIES = lib.concatStringsSep "," cfg.trustedProxies;
+    HLIDSKJALF_ADMIN_NETWORKS = lib.concatStringsSep "," cfg.adminNetworks;
 
     # The Proxmox connection: null unless declared, so the wizard owns it.
     HLIDSKJALF_PVE_HOST = cfg.settings.pveHost;
@@ -110,6 +112,42 @@ in
         repo, fail-soft). It can only ever *report* on a Nix install: applying an
         update means updating this flake input and running nixos-rebuild, so the
         panel shows that command instead of an apply button.
+      '';
+    };
+
+    trustedProxies = lib.mkOption {
+      type = with lib.types; listOf str;
+      default = [ ];
+      example = [ "127.0.0.1/32" ];
+      description = ''
+        Reverse proxies whose forwarded headers (X-Forwarded-For, CF-Connecting-IP)
+        may be believed. Behind Traefik or cloudflared on the same host this is
+        `[ "127.0.0.1/32" ]`.
+
+        Empty (default) = no proxy: the socket peer IS the client and forwarded
+        headers are ignored entirely. Get this wrong in the permissive direction and
+        anyone can claim any address; get it wrong in the other and every request is
+        attributed to the proxy, which makes the audit log useless and the per-IP
+        login limiter one shared bucket.
+      '';
+    };
+
+    adminNetworks = lib.mkOption {
+      type = with lib.types; listOf str;
+      default = [ ];
+      example = [ "100.64.0.0/10" "192.168.1.0/24" ];
+      description = ''
+        Networks from which admin is permitted. **Empty (default) = anywhere**, which
+        is right for a LAN-only panel.
+
+        Set it when the panel is reachable from the internet (a Cloudflare tunnel, a
+        port forward): tenants can then sign in from anywhere and manage their one VM,
+        while admin exists ONLY inside these networks. Enforced server-side at login,
+        at session use, and on every admin route — an admin session that leaves the
+        network stops working, because a session cookie travels with the browser.
+
+        `100.64.0.0/10` is the Tailscale range; a tailnet is a better admin boundary
+        than a LAN, since it follows you and does not trust every device at home.
       '';
     };
 
@@ -264,7 +302,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    warnings = lib.optional (cfg.settings.protectedVmids == [ ]) ''
+    warnings = lib.optional (cfg.trustedProxies != [ ] && cfg.adminNetworks == [ ]) ''
+      services.hlidskjalf declares trustedProxies but no adminNetworks. If this panel is
+      reachable from the internet, ADMIN IS TOO — anyone who guesses an admin password
+      gets your whole fleet. Set adminNetworks (e.g. your tailnet) so the public side is
+      tenants-only.
+    '' ++ lib.optional (cfg.settings.protectedVmids == [ ]) ''
       services.hlidskjalf.settings.protectedVmids is empty: NOTHING is protected from
       destroy/reinstall, including the machine this panel runs on. Set it to the VMID
       of this guest (and anything else precious) before giving anyone an admin login.

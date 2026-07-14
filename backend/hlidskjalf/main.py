@@ -11,7 +11,7 @@ from .deps import get_db
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth, journal
+from . import auth, journal, netzone
 from .accumulator import Accumulator
 from .config import apply_stored, get_settings, unseal
 
@@ -276,8 +276,16 @@ class LoginBody(BaseModel):
 
 @app.post("/api/login")
 async def login(body: LoginBody, request: Request, response: Response, db: Db = Depends(get_db)):
-    client_ip = request.client.host if request.client else "-"
+    settings = get_settings()
+    # The REAL caller — behind a proxy the socket peer is the proxy, and rate limiting
+    # every login against "127.0.0.1" is one shared bucket that a single attacker fills
+    # on everyone's behalf.
+    client_ip = netzone.client_ip(request, settings.trusted_proxies)
     auth.check_login_rate(client_ip)
+    # ...and back the ACCOUNT off too: per-IP limiting does nothing about a botnet
+    # spreading its guesses across thousands of addresses, which is what a login page
+    # on the internet gets.
+    auth.check_account_lockout(body.username)
 
     # Try DB user first
     user = await auth.verify_user(db, body.username, body.password)
@@ -288,6 +296,7 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
         # an accepted login path — otherwise a stale/weak env hash would be a
         # permanent backdoor even after the admin password is changed in the DB.
         if await db.list_users() or not auth._legacy_verify(body.username, body.password):
+            auth.record_login_failure(body.username)
             await journal.record(
                 db, request, body.username, journal.LOGIN_FAILED, ok=False
             )
@@ -299,10 +308,22 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
             "vmid": None,
         }
 
+    # An admin may not sign in from outside the admin networks — not "may not see the
+    # admin pages": may not hold a session at all. The panel is on the internet for
+    # tenants; an admin credential typed into the public login page must not become a
+    # working admin session, whatever the client then chooses to request.
+    if auth.is_admin(user) and not netzone.is_admin_zone(request, settings):
+        await journal.record(
+            db, request, body.username, journal.LOGIN_FAILED,
+            detail="refused: admin login from outside the admin networks", ok=False,
+        )
+        raise HTTPException(403, netzone.admin_zone_error(settings))
+
     # Bind the session to the password it was issued under, so a later password
     # change invalidates it (see auth.session_epoch).
     epoch = await auth.current_epoch(body.username, db)
     csrf = auth.start_session(response, body.username, epoch)
+    auth.clear_login_failures(body.username)
     await journal.record(db, request, body.username, journal.LOGIN)
     return {
         "ok": True,
