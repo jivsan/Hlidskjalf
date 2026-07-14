@@ -369,6 +369,9 @@ export interface VersionInfo {
   repo: string;
   branch_tracked: string;
   latest: RemoteCommit | null;
+  /** Newest published tag. What a non-git install (nix/docker/pip) compares against —
+   *  those move between releases, not commits. */
+  latest_release: string | null;
   update_available: boolean;
   behind_by: number;
   commits: { sha: string; message: string }[];
@@ -399,4 +402,61 @@ export interface UpdateResult {
 
 export function applyUpdate(target: string): Promise<UpdateResult> {
   return api.post<UpdateResult>("/api/update", { confirm: "update", target });
+}
+
+// --- Proxmox connection (admin only) ----------------------------------------
+// Editable AFTER setup: the wizard closes forever once a user exists, so without
+// this a rotated token, a renewed certificate or a moved host would mean editing
+// the database by hand. The secret is never sent back to the browser.
+
+export interface PveConnection {
+  host: string;
+  port: number;
+  node: string;
+  scheme: "https" | "http";
+  token_id: string;
+  /** Whether a secret is stored. The secret itself never leaves the server. */
+  token_secret_set: boolean;
+  fingerprint: string;
+  /** "pin" = one exact certificate (self-signed PVE). "system" = CA chain +
+   *  hostname (an ACME cert, whose fingerprint changes on every renewal). */
+  tls: "pin" | "system";
+  /** Keys supplied via HLIDSKJALF_* env vars — env wins, so these cannot be edited. */
+  env_locked: string[];
+}
+
+export interface PveConnectionUpdate {
+  host: string;
+  port: number;
+  node: string;
+  scheme: "https" | "http";
+  token_id: string;
+  /** Empty = keep the stored secret. */
+  token_secret: string;
+  fingerprint: string;
+  tls: "pin" | "system";
+}
+
+export interface PveProbeResult {
+  ok: boolean;
+  node: string;
+  guests: number;
+  nodes: string[];
+}
+
+export function getPveConnection(): Promise<PveConnection> {
+  return api.get<PveConnection>("/api/settings/pve");
+}
+
+/** Dry run — persists nothing. Same probe the setup wizard uses. */
+export function testPveConnection(body: PveConnectionUpdate): Promise<PveProbeResult> {
+  return api.post<PveProbeResult>("/api/settings/pve/test", body);
+}
+
+/** Saves ONLY if Proxmox answers: a saved-but-broken connection would leave the
+ *  panel unable to reach Proxmox with no way back except the database. */
+export function putPveConnection(
+  body: PveConnectionUpdate,
+): Promise<PveConnection & { tested: PveProbeResult }> {
+  return api.put<PveConnection & { tested: PveProbeResult }>("/api/settings/pve", body);
 }

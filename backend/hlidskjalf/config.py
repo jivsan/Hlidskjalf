@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     pve_node: str = "pve"
     pve_token_id: str = "hlidskjalf@pve!panel"
     pve_token_secret: str = ""
+    # How https is verified: "pin" (SHA-256 fingerprint of one exact certificate —
+    # the only option for a self-signed PVE cert) or "system" (normal CA chain +
+    # hostname check — the right option behind an ACME cert, whose fingerprint
+    # changes on every renewal and would take a pinned panel offline with it).
+    pve_tls: str = "pin"
     # SHA-256 cert fingerprint, colon-separated hex. Empty disables pinning
     # (dev only — the mock PVE server speaks plain http).
     pve_fingerprint: str = ""
@@ -226,6 +231,7 @@ SETUP_WRITABLE = frozenset(
         "pve_token_id",
         "pve_token_secret",
         "pve_fingerprint",
+        "pve_tls",
         "session_secret",
     }
 )
@@ -238,6 +244,19 @@ ADMIN_WRITABLE = frozenset(
         "vlan_gateways",
         "clone_storage",
         "pve_bridge",
+        # The Proxmox connection itself. It used to be settable ONLY in the
+        # first-run wizard, which closes forever once a user exists — so a rotated
+        # token, a renewed certificate or a moved host meant editing the database
+        # by hand. An admin (with CSRF, and a live connection test that must pass
+        # before anything is written) can change it now.
+        "pve_host",
+        "pve_port",
+        "pve_node",
+        "pve_scheme",
+        "pve_token_id",
+        "pve_token_secret",
+        "pve_fingerprint",
+        "pve_tls",
     }
 )
 
@@ -263,14 +282,21 @@ def unseal(values: dict[str, str], settings: Settings) -> dict[str, str]:
     return secretbox.decrypt_config(values, encryption_key(settings))
 
 
-def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
+def apply_stored(settings: Settings, stored: dict[str, str]) -> list[tuple[str, str, str]]:
     """Overlay config persisted by the setup wizard / admin settings onto
     `settings`, in place.
 
     **Environment always wins.** A field explicitly provided via env lands in
     ``model_fields_set``, and we skip those — so an operator keeping secrets in
     agenix / sops / systemd-creds is never overridden by whatever is in the DB.
+
+    Returns the keys where env *shadowed* a different stored value, as
+    ``(key, env_value, stored_value)``. Silence here is how a deployment ends up
+    asking Proxmox for a node the operator never typed: the wizard saved one thing,
+    an env default said another, and nothing ever said so out loud. The caller
+    logs these.
     """
+    shadowed: list[tuple[str, str, str]] = []
     from typing import get_origin
 
     for key, raw in stored.items():
@@ -282,6 +308,8 @@ def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
             # defined but EMPTY (common in .env / compose files) is not a
             # configuration choice, so we let the stored value through instead of
             # leaving the panel permanently unconfigured.
+            if raw and str(current) != str(raw) and key != "pve_token_secret":
+                shadowed.append((key, str(current), str(raw)))
             continue
         field = Settings.model_fields.get(key)
         if field is None:
@@ -301,3 +329,4 @@ def apply_stored(settings: Settings, stored: dict[str, str]) -> None:
             except ValueError:
                 continue
         object.__setattr__(settings, key, value)
+    return shadowed

@@ -62,7 +62,20 @@ async def lifespan(app: FastAPI):
     # Overlay any configuration written by the first-run setup wizard. Env always
     # wins (see config.apply_stored), so this cannot override an ops-managed deploy.
     # Stored secrets are encrypted at rest (secretbox.py) — decrypt on the way in.
-    apply_stored(settings, unseal(await app.state.db.get_config(), settings))
+    shadowed = apply_stored(settings, unseal(await app.state.db.get_config(), settings))
+    for key, env_value, stored_value in shadowed:
+        # The panel is about to use a value the operator did not choose here. This
+        # is the rule working as designed (env wins, so an ops-managed deploy is
+        # never overridden by the database) — but it is also how a NixOS module
+        # default of pve_node="pve" silently overrode a wizard that had been told
+        # "hella", and every node-scoped page then failed with a DNS error nobody
+        # could trace back. Say it out loud, once, at startup.
+        log.warning(
+            "config: the environment sets %s=%r, overriding %r saved in the panel. "
+            "The panel will use the environment value — unset HLIDSKJALF_%s to manage "
+            "this from the UI.",
+            key, env_value, stored_value, key.upper(),
+        )
 
     # Bootstrap initial admin user from env if this is a fresh DB (dev + first remote deploy)
     await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)

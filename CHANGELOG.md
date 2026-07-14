@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2-alpha] — 2026-07-14
+
+**The release that found out what a real deployment does to you.** Hlidskjalf now runs
+on NixOS behind Traefik, and everything below is a bug that only a live deploy could
+have produced.
+
+### Fixed — the NixOS module silently overrode the setup wizard
+The module emitted its own defaults as environment variables — `HLIDSKJALF_PVE_NODE=pve`
+among them — and **environment always wins** over what the wizard stored. So a panel whose
+operator had typed the node name `hella` asked Proxmox for a node called `pve` on every
+request. Proxmox answers a request for a node it does not have by trying to *proxy* it to
+that hostname, so every node-scoped page failed with
+`hostname lookup 'pve' failed — Name or service not known`, which points at DNS and not at
+the cause. It took a live deployment to find, and an hour to trace.
+
+- **The module now emits nothing it was not explicitly told.** Every wizard-owned option
+  (`pveHost`, `pvePort`, `pveNode`, `pveTokenId`, `pveFingerprint`, `pveTls`, `adminUser`)
+  is `nullOr` and defaults to `null` — declare one only to *take it away* from the UI.
+- **`backend/tests/test_nix_module.py`** fails the build if any of them ever grows a
+  non-null default again. No Nix needed: the failure mode is invisible to Nix's own type
+  checking, which is exactly why it shipped.
+- **The panel now says so out loud.** When the environment shadows a stored value,
+  startup logs `config: the environment sets pve_node='pve', overriding 'hella' saved in
+  the panel`. One line, and this class of bug is a five-second diagnosis forever after.
+
+### Fixed — Proxmox's errors, translated into what they mean
+- `hostname lookup 'X' failed` now reads **"This Proxmox has no node named 'X'"**, with
+  where to fix it. Same cause, said in the operator's language rather than Proxmox's.
+- A TLS pin mismatch was reported as **"Proxmox rejected the credentials"**, sending
+  people to re-check a token that was never the problem. Unreachable host, rejected
+  credentials, and refused request are now three different messages.
+
+### Added — Settings → Proxmox: the connection is editable after setup
+It used to be settable **only** in the first-run wizard, which closes forever once a user
+exists. Rotating a token, re-pinning a renewed certificate, or moving the host meant
+editing sqlite by hand on the server.
+
+Admin + CSRF + a **live connection test that must pass before anything is written**, and
+the change takes effect without a restart (the client is reconfigured *in place* — the
+metrics source and the bandwidth accumulator hold a reference to it, so a rebind would
+leave them talking to a closed client). Every change is audited; the token secret is never
+sent to the browser, and may be left blank to keep the stored one.
+
+**There is deliberately no "reset to wizard" button.** The setup endpoints are
+unauthenticated by construction; reopening them would give anyone who can reach the panel
+a window to make themselves an admin. A factory reset needs shell access on the host —
+stop the service, delete the state directory — and that is the point. A test asserts the
+setup endpoints stay closed.
+
+### Added — TLS: pin the certificate, or verify it like a browser
+`HLIDSKJALF_PVE_TLS` / Settings → Proxmox:
+
+- **`pin`** (default): accept exactly one certificate, by SHA-256 fingerprint. Correct for
+  the self-signed certificate Proxmox ships, which no CA can vouch for.
+- **`system`**: ordinary CA-chain + hostname verification. Correct when Proxmox serves an
+  ACME/Let's Encrypt certificate — whose fingerprint **changes on every renewal**, taking a
+  pinned panel offline every ~60 days, on a schedule nobody remembers.
+
+There is still no "just trust it" mode, and there never will be.
+
+### Fixed — update detection on installs that have no git checkout
+A Nix or Docker panel lives in an immutable store path, so commit comparison could only
+ever answer *"this install does not expose a git commit"* — the Updates tab was decoration
+on exactly the deployments most people run. Those installs move between **releases**, so
+that is now what they compare, against the newest published tag. Version normalisation
+included, because setuptools rewrites `0.4.2-alpha` to `0.4.2a0` and the tag never matches
+the running version otherwise.
+
+The Updates tab now tells a Nix deployment **how** to update — the two commands, in the two
+places they run, with a copy button — instead of printing a single line that was a
+half-truth.
+
+### Fixed — the Debug page was empty and would not say why
+The in-memory log and error buffers are only attached when `HLIDSKJALF_DEBUG=true` (or
+`LOG_LEVEL=DEBUG`), and the NixOS module exposed neither. So the page showed "No recent
+logs" — indistinguishable from a healthy, quiet panel. It now says the recorder is off and
+how to switch it on, and the module has `debug` and `logLevel` options.
+
 ### Changed — a `git clone` is now a fresh install, not a copy of someone's homelab
 The repo carried the author's setup around in it: the Proxmox **cert fingerprint** sat in
 `handoff.md`, the host's IP was the **default** for `services.hlidskjalf.settings.pveHost`
@@ -278,7 +356,6 @@ A pass over the gaps the v0.3.6 audit did not cover. Each of these was real:
 
 182 backend tests.
 
-
 ### Security — secrets at rest
 - **The Proxmox API token is never written to the database in plaintext.** New
   `secretbox.py` encrypts stored secrets (Fernet / AES-CBC+HMAC); non-secret config
@@ -301,7 +378,6 @@ A pass over the gaps the v0.3.6 audit did not cover. Each of these was real:
   visible in `/proc` and leaks into logs, crash dumps and `docker inspect`.
 - Tests read the raw sqlite file off disk and assert the token does not appear in it.
 - `cryptography` moved from a test extra to a runtime dependency.
-
 
 ## [v0.3.6-alpha] - 2026-07-13
 
@@ -561,7 +637,6 @@ See `docs/screenshots/v0.3.2-alpha/README.md` for visual comparison (admin fleet
 - PRs/branches coordinated and changes merged into feat/switch-react-faceplate (local + prior API merges).
 
 
-
 ### Changed
 - **Switch faceplate refactored to declarative React components** (divs, buttons + Tailwind/CSS, no Canvas/SVG):
   - Pure React: `<Rj45Port>` and `<QsfpPort>` small components receiving name/status/active/selected/lldpNeighbor/onClick/onHover.
@@ -616,7 +691,6 @@ See `docs/screenshots/v0.3-alpha/README.md` for visual comparison notes. Screens
 - Non cartoon, human like Flux.
 - PR #12.
 - Screenshots updated with realistic images.
-
 
 ## [0.2.0-alpha] - 2026-07-12
 

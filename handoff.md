@@ -1,6 +1,28 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-13 (**v0.4.0-alpha — tested against real hardware**; PRs #32–#41, 219 tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
+_Last updated: 2026-07-14 (**v0.4.2-alpha — deployed on NixOS behind Traefik**; PRs #46–#49, 285 tests)._
+
+## ✅ v0.4.2-alpha — THE PANEL IS DEPLOYED
+
+It runs on a real NixOS host, behind Traefik, against a real Proxmox. **Every bug in this
+release was found by deploying it** — none by the test suite, which was green throughout:
+
+| found by deploying | verdict |
+|---|---|
+| NixOS module emitted `HLIDSKJALF_PVE_NODE=pve` from its own default, and **env beats the wizard** — every node-scoped page died with `hostname lookup 'pve' failed` | **module** was wrong: options are `nullOr`/null now, and `test_nix_module.py` fails the build if that ever regresses |
+| `nix/package.nix` was missing `cryptography` — Nix gives a Python app ONLY what the list names, so it would have built green and crashed on first request | **package** was wrong (#48); `pythonImportsCheck` + `test_nix_package.py` |
+| The panel's own error text blamed the credentials for a **TLS pin mismatch** | **panel** was wrong: unreachable / rejected / refused are three messages now |
+| Proxmox's cert was **Let's Encrypt**, not `pve-ssl.pem` — pveproxy serves `pveproxy-ssl.pem` when a custom cert exists, and the pin dies on every renewal | **panel** was wrong: `pve_tls = "system"` verifies chain + hostname instead |
+| The Proxmox connection was settable **only in the wizard**, which closes forever | **panel** was wrong: Settings → Proxmox, admin + CSRF + live test, audited |
+| Debug page permanently empty on Nix (buffers need `HLIDSKJALF_DEBUG`) and would not say why | **panel + module** were wrong |
+| Update detection is **useless without a git checkout** — a Nix/Docker panel could only say "cannot compare commits" | **panel** was wrong: non-git installs compare **releases** now |
+
+**There is deliberately no "reset to wizard".** The setup endpoints are unauthenticated by
+construction; reopening them would be a takeover window on the LAN. A factory reset takes
+shell access on the host (stop, delete the state dir, start) — and that is the point.
+`test_pve_connection.py` asserts the setup endpoints stay shut.
+
+_Previously updated: 2026-07-13 (**v0.4.0-alpha — tested against real hardware**; PRs #32–#41, 219 tests). The design source of truth is `plan.md`; this file is only "what is done / what's next"._
 
 ## ✅ v0.4.0-alpha — THE PANEL HAS RUN AGAINST A REAL PROXMOX HOST
 

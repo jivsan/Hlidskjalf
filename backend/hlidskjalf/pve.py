@@ -1,12 +1,18 @@
 """Thin async Proxmox VE API client.
 
-Auth via API token header; TLS verified against a pinned SHA-256 certificate
-fingerprint instead of a CA chain (a stock PVE cert is self-signed). The pin is
-enforced inside the TLS handshake on BOTH of Python's handshake paths: a custom
-SSLObject subclass covers the memory-BIO path (`SSLContext.wrap_bio` — what
-httpx (REST) and websockets (VNC proxy) use), and a custom SSLSocket subclass
-covers the plain-socket path (`SSLContext.wrap_socket`), so no caller can
-bypass the pin by picking the other API.
+Auth via an API token header. TLS is verified one of two ways, and there is no
+third — the panel never talks to an unverified Proxmox over https:
+
+- `pve_tls="pin"` (default): the peer certificate must hash to a pinned SHA-256
+  fingerprint. Right for a stock PVE cert, which is self-signed and therefore
+  unverifiable by any CA. The pin is enforced inside the handshake on BOTH of
+  Python's paths: a custom SSLObject subclass covers the memory-BIO path
+  (`SSLContext.wrap_bio` — what httpx (REST) and websockets (console) use), and a
+  custom SSLSocket subclass covers the plain-socket path (`wrap_socket`), so no
+  caller can bypass the pin by picking the other API.
+- `pve_tls="system"`: ordinary CA-chain + hostname verification. Right for a
+  Proxmox behind an ACME/Let's Encrypt certificate, where a pin would break on
+  every renewal.
 """
 
 import asyncio
@@ -75,21 +81,55 @@ def make_pinned_ssl_context(fingerprint: str) -> ssl.SSLContext:
     return ctx
 
 
+def make_system_ssl_context() -> ssl.SSLContext:
+    """Ordinary TLS: the CA chain and the hostname are both verified.
+
+    For a Proxmox serving a certificate from a real CA — a Let's Encrypt / ACME
+    cert, or an internal CA in the trust store. Pinning is the *wrong* tool there:
+    an ACME certificate is reissued every ~60 days and the pin dies with it, so a
+    pinned panel goes dark on a renewal, on a schedule nobody remembers. Trusting
+    the signature instead survives renewal, and still refuses an impostor.
+
+    `create_default_context()` already verifies the chain and the hostname; this
+    function exists to say so out loud, and to be the thing tests assert on.
+    """
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = True
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    return ctx
+
+
 class PveClient:
     def __init__(self, settings: Settings):
+        self._build(settings)
+
+    async def reconfigure(self, settings: Settings) -> None:
+        """Point this client at a different Proxmox, in place.
+
+        In place, and not by swapping `app.state.pve`, because the metrics source
+        and the bandwidth accumulator hold a *reference* to this object: replacing
+        the attribute would leave them talking to a client we just closed. Every
+        holder follows a mutation; none follows a rebind.
+        """
+        old = self._client
+        self._build(settings)
+        await old.aclose()
+
+    def _build(self, settings: Settings) -> None:
         self.settings = settings
         self.node = settings.pve_node
+        self.ssl_context: ssl.SSLContext | None = None
         if settings.pve_scheme == "https":
-            if not settings.pve_fingerprint:
+            if settings.pve_tls == "system":
+                self.ssl_context = make_system_ssl_context()
+            elif not settings.pve_fingerprint:
                 raise RuntimeError(
-                    "HLIDSKJALF_PVE_FINGERPRINT is required with https "
-                    "(refusing to connect unverified)"
+                    "HLIDSKJALF_PVE_FINGERPRINT is required with https when "
+                    "HLIDSKJALF_PVE_TLS=pin (refusing to connect unverified). Set "
+                    "HLIDSKJALF_PVE_TLS=system if the certificate comes from a real CA."
                 )
-            self.ssl_context: ssl.SSLContext | None = make_pinned_ssl_context(
-                settings.pve_fingerprint
-            )
-        else:
-            self.ssl_context = None
+            else:
+                self.ssl_context = make_pinned_ssl_context(settings.pve_fingerprint)
         self._client = httpx.AsyncClient(
             base_url=settings.pve_base_url,
             headers={
@@ -117,6 +157,18 @@ class PveClient:
                     detail = f"{detail}: {body['message']}"
             except Exception:
                 pass
+            # Proxmox answers a request for a node it does not have by trying to
+            # PROXY it to that name, and reports the DNS failure — "hostname lookup
+            # 'pve' failed". Every node-scoped page then shows that, and nobody
+            # guesses it means "your node name is wrong". Say what it means.
+            if "hostname lookup" in detail and f"'{self.node}'" in detail:
+                raise PveError(
+                    resp.status_code,
+                    f"This Proxmox has no node named '{self.node}'. That is the node "
+                    "name this panel is configured with — fix it in Settings → Proxmox "
+                    "(or HLIDSKJALF_PVE_NODE, which overrides it). Proxmox said: "
+                    f"{detail}",
+                )
             raise PveError(resp.status_code, f"PVE {method} {path} failed ({detail})")
         return resp.json().get("data")
 

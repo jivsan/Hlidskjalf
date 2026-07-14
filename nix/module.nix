@@ -13,22 +13,38 @@ flake: { config, lib, pkgs, ... }:
 let
   cfg = config.services.hlidskjalf;
 
-  # Only pass through what the operator actually set. An empty env var is not a
-  # configuration choice, and shipping HLIDSKJALF_PVE_HOST="" would be noise.
+  # THE ENVIRONMENT WINS over anything the setup wizard saved — that is deliberate
+  # (an ops-managed deploy must not be editable out from under itself). It also
+  # means this module must emit NOTHING it was not explicitly told, or its own
+  # defaults silently overrule the operator.
+  #
+  # That is not hypothetical: this module used to default pveNode = "pve" and emit
+  # it always. A wizard configured with node "hella" was overridden on every
+  # request, and Proxmox answered by trying to PROXY to a node called "pve" and
+  # failing DNS — so every node-scoped page showed "hostname lookup 'pve' failed"
+  # and nothing pointed at the cause. Hence: null means "not set", and not-set
+  # means "not emitted".
   nonEmpty = lib.filterAttrs (_: v: v != null && v != "" && v != "{}" && v != "[]");
 
+  optionalStr = v: if v == null then null else toString v;
+
   settingsEnv = nonEmpty {
+    # Panel-level: owned by the deployment, not by the wizard.
     HLIDSKJALF_HOST = cfg.bindAddress;
     HLIDSKJALF_PORT = toString cfg.port;
     HLIDSKJALF_STATE_DIR = "/var/lib/hlidskjalf";
     HLIDSKJALF_COOKIE_SECURE = lib.boolToString cfg.cookieSecure;
     HLIDSKJALF_UPDATE_CHECK_ENABLED = lib.boolToString cfg.updateCheckEnabled;
+    HLIDSKJALF_DEBUG = if cfg.debug then "true" else null;
+    HLIDSKJALF_LOG_LEVEL = cfg.logLevel;
 
+    # The Proxmox connection: null unless declared, so the wizard owns it.
     HLIDSKJALF_PVE_HOST = cfg.settings.pveHost;
-    HLIDSKJALF_PVE_PORT = toString cfg.settings.pvePort;
+    HLIDSKJALF_PVE_PORT = optionalStr cfg.settings.pvePort;
     HLIDSKJALF_PVE_NODE = cfg.settings.pveNode;
     HLIDSKJALF_PVE_TOKEN_ID = cfg.settings.pveTokenId;
     HLIDSKJALF_PVE_FINGERPRINT = cfg.settings.pveFingerprint;
+    HLIDSKJALF_PVE_TLS = cfg.settings.pveTls;
 
     HLIDSKJALF_PROTECTED_VMIDS =
       lib.concatStringsSep "," (map toString cfg.settings.protectedVmids);
@@ -97,6 +113,23 @@ in
       '';
     };
 
+    debug = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Keep the in-memory log and error buffers that the admin Debug page reads.
+        Without this (or logLevel = "DEBUG") that page is simply empty — the
+        buffers are never attached. Off by default: it keeps recent requests and
+        tracebacks in memory.
+      '';
+    };
+
+    logLevel = lib.mkOption {
+      type = with lib.types; nullOr (enum [ "DEBUG" "INFO" "WARNING" "ERROR" ]);
+      default = null;
+      description = "Log level. Unset = the panel's own default (INFO).";
+    };
+
     environmentFile = lib.mkOption {
       type = with lib.types; nullOr path;
       default = null;
@@ -112,30 +145,60 @@ in
     };
 
     settings = {
+      # Every one of these is null by default, meaning "the wizard owns it".
+      # Declare one only to take it away from the UI — the environment wins, and a
+      # value set here CANNOT be changed in Settings.
       pveHost = lib.mkOption {
-        type = lib.types.str;
-        default = "";
+        type = with lib.types; nullOr str;
+        default = null;
         example = "192.0.2.10";
-        description = "Proxmox host or IP. Empty = ask in the setup wizard.";
+        description = "Proxmox host or IP. Null = ask in the setup wizard.";
       };
-      pvePort = lib.mkOption { type = lib.types.port; default = 8006; };
+      pvePort = lib.mkOption {
+        type = with lib.types; nullOr port;
+        default = null;
+        description = "Null = the panel's default, 8006.";
+      };
       pveNode = lib.mkOption {
-        type = lib.types.str;
-        default = "pve";
+        type = with lib.types; nullOr str;
+        default = null;
+        example = "pve";
         description = ''
-          The node name Proxmox itself reports (the one in its web UI tree). Every
-          node-scoped page 404s if this is wrong.
+          The node name Proxmox itself reports (the one in its web UI tree).
+
+          Null = whatever the wizard was told, which is almost always what you want.
+          Setting it here OVERRIDES the wizard: if it does not match the real node
+          name, every node-scoped page fails, because Proxmox tries to proxy the
+          request to a host by that name and cannot resolve it.
         '';
       };
-      pveTokenId = lib.mkOption { type = lib.types.str; default = "hlidskjalf@pve!panel"; };
+      pveTokenId = lib.mkOption {
+        type = with lib.types; nullOr str;
+        default = null;
+        example = "hlidskjalf@pve!panel";
+        description = "Null = ask in the setup wizard.";
+      };
       pveFingerprint = lib.mkOption {
-        type = lib.types.str;
-        default = "";
+        type = with lib.types; nullOr str;
+        default = null;
         description = ''
           SHA-256 fingerprint of the Proxmox API TLS cert, colon-separated hex:
-          `openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256`.
-          Empty = ask in the wizard. There is no unpinned https: the panel refuses
-          to connect over https without a pin.
+          `openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256`
+          — but note pveproxy serves `pveproxy-ssl.pem` instead when a custom
+          certificate is installed, so read the one actually being served.
+
+          Null = ask in the wizard. Ignored when pveTls = "system".
+        '';
+      };
+      pveTls = lib.mkOption {
+        type = with lib.types; nullOr (enum [ "pin" "system" ]);
+        default = null;
+        description = ''
+          How https is verified. "pin" (default) accepts exactly one certificate,
+          by SHA-256 fingerprint — correct for the self-signed cert Proxmox ships.
+          "system" does ordinary CA-chain + hostname verification — correct when
+          Proxmox serves an ACME/Let's Encrypt certificate, whose fingerprint
+          changes on every renewal and would take a pinned panel offline with it.
         '';
       };
 
@@ -188,9 +251,14 @@ in
         example = "local:iso/systemrescue-12.01-amd64.iso";
       };
       adminUser = lib.mkOption {
-        type = lib.types.str;
-        default = "admin";
-        description = "Username of the bootstrap admin. A role, not a person.";
+        type = with lib.types; nullOr str;
+        default = null;
+        example = "admin";
+        description = ''
+          Username of the bootstrap admin. Null = the wizard asks. Declaring it
+          here overrides what the wizard saved, so leave it null unless the account
+          is created from `environmentFile` (HLIDSKJALF_ADMIN_PASSWORD_HASH).
+        '';
       };
     };
   };

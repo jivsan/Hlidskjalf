@@ -24,22 +24,12 @@ from .. import auth
 from ..config import SETUP_WRITABLE, get_settings
 from ..db import Db
 from ..deps import get_db
-from ..pve import PveClient, PveError
+from ..probe import PveConn, probe
 
 log = logging.getLogger("hlidskjalf.setup")
 router = APIRouter()
 
 MIN_PASSWORD_LEN = 8
-
-
-class PveConn(BaseModel):
-    host: str = Field(min_length=1)
-    port: int = 8006
-    node: str = Field(min_length=1)
-    scheme: str = "https"
-    token_id: str = Field(min_length=1)
-    token_secret: str = Field(min_length=1)
-    fingerprint: str = ""
 
 
 class Account(BaseModel):
@@ -66,69 +56,6 @@ async def _require_setup_open(db: Db) -> None:
         raise HTTPException(409, "Setup has already been completed")
 
 
-def _probe_settings(conn: PveConn):
-    """A throwaway Settings carrying only the connection under test."""
-    s = get_settings().model_copy()
-    object.__setattr__(s, "pve_host", conn.host)
-    object.__setattr__(s, "pve_port", conn.port)
-    object.__setattr__(s, "pve_node", conn.node)
-    object.__setattr__(s, "pve_scheme", conn.scheme)
-    object.__setattr__(s, "pve_token_id", conn.token_id)
-    object.__setattr__(s, "pve_token_secret", conn.token_secret)
-    object.__setattr__(s, "pve_fingerprint", conn.fingerprint)
-    return s
-
-
-async def _probe(conn: PveConn) -> dict:
-    """Talk to Proxmox with the supplied credentials. Raises HTTPException(400)."""
-    # There is no unpinned-https mode: pve.py accepts exactly one certificate.
-    if conn.scheme == "https" and not conn.fingerprint:
-        # pve.py refuses https without a fingerprint (it pins by design). Say so
-        # plainly rather than letting the client see an opaque startup error.
-        raise HTTPException(
-            400,
-            "An https connection needs the Proxmox certificate fingerprint. Run "
-            "`openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256` "
-            "on the host and paste the value.",
-        )
-    client = PveClient(_probe_settings(conn))
-    try:
-        nodes = await client.get("/nodes") or []
-        names = [n.get("node") for n in nodes if n.get("node")]
-        if conn.node not in names:
-            raise HTTPException(
-                400,
-                f"Connected, but this Proxmox has no node named '{conn.node}'. "
-                f"Found: {', '.join(names) or 'none'}.",
-            )
-        resources = await client.cluster_resources() or []
-        # Hand back the actual guests, so the wizard can offer a picker for the
-        # first user's VM instead of asking someone to type a VMID from memory.
-        guest_list = sorted(
-            (
-                {"vmid": r["vmid"], "name": r.get("name") or f"vm {r['vmid']}"}
-                for r in resources
-                if r.get("type") in ("qemu", "lxc") and r.get("vmid") is not None
-            ),
-            key=lambda g: g["vmid"],
-        )
-        return {
-            "ok": True,
-            "node": conn.node,
-            "guests": len(guest_list),
-            "guest_list": guest_list,
-            "nodes": names,
-        }
-    except HTTPException:
-        raise
-    except PveError as e:
-        raise HTTPException(400, f"Proxmox rejected the credentials: {e}")
-    except Exception as e:  # connection refused, TLS pin mismatch, DNS, timeout…
-        raise HTTPException(400, f"Could not reach Proxmox at {conn.host}:{conn.port} — {e}")
-    finally:
-        await client.aclose()
-
-
 @router.get("/api/setup/status")
 async def setup_status(db: Db = Depends(get_db)):
     """Always reachable. Reveals only whether setup is required."""
@@ -140,7 +67,7 @@ async def setup_test(conn: PveConn, request: Request, db: Db = Depends(get_db)):
     """Dry run — validate the connection without persisting anything."""
     await _require_setup_open(db)
     auth.check_login_rate(request.client.host if request.client else "-")
-    return await _probe(conn)
+    return await probe(conn)
 
 
 @router.post("/api/setup")
@@ -158,7 +85,7 @@ async def setup_commit(
 
     # Prove the connection works BEFORE persisting anything — a half-configured
     # panel that can't reach Proxmox is worse than one that is still unconfigured.
-    await _probe(body.pve)
+    await probe(body.pve)
 
     settings = get_settings()
     stored: dict[str, str] = {
@@ -169,6 +96,7 @@ async def setup_commit(
         "pve_token_id": body.pve.token_id,
         "pve_token_secret": body.pve.token_secret,
         "pve_fingerprint": body.pve.fingerprint,
+        "pve_tls": body.pve.tls,
     }
     # Without a session secret nothing can be signed. Mint a strong one on first
     # run so the operator never has to think about it.

@@ -13,6 +13,12 @@ export function Debug() {
   const errors = usePoll(() => debug.getErrors(), 10000);
   const acc = usePoll(() => debug.getAccumulator(), 15000);
 
+  // The log/error buffers are attached at startup ONLY when debug is on (or the
+  // log level is DEBUG). When they are not, these lists are empty forever — which
+  // looks identical to "the panel is healthy and quiet". Say which it is.
+  const buffersOff =
+    health.data != null && !health.data.debug && health.data.log_level !== "DEBUG";
+
   const doRefresh = (p: { refresh: () => void }) => {
     p.refresh();
   };
@@ -149,10 +155,20 @@ export function Debug() {
               </tbody>
             </table>
           </div>
+        ) : buffersOff ? (
+          <EmptyState message="log capture is off — nothing is being recorded" />
         ) : (
           <EmptyState message="No recent logs" />
         )}
-        <div className="text-[10px] text-muted mt-2">Buffered in-memory (up to 100). Enable DEBUG for more detail.</div>
+        {buffersOff ? (
+          <div className="text-[10px] text-amber mt-2">
+            The in-memory log buffer is only attached when the panel runs with
+            HLIDSKJALF_DEBUG=true (or HLIDSKJALF_LOG_LEVEL=DEBUG). It is off, so this page
+            will stay empty however long you wait. On NixOS: services.hlidskjalf.debug = true.
+          </div>
+        ) : (
+          <div className="text-[10px] text-muted mt-2">Buffered in-memory (up to 100).</div>
+        )}
       </Card>
 
       {/* Recent Errors */}
@@ -191,6 +207,8 @@ export function Debug() {
               </tbody>
             </table>
           </div>
+        ) : buffersOff ? (
+          <EmptyState message="error capture is off — nothing is being recorded" />
         ) : (
           <EmptyState message="No recent errors" />
         )}

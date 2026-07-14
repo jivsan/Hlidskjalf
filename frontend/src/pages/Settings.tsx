@@ -10,6 +10,9 @@ import { ErrorState, LoadingState, PageHeader } from "../components/ui";
 const UpdatesTab = lazy(() =>
   import("./settings/UpdatesTab").then((m) => ({ default: m.UpdatesTab })),
 );
+const ProxmoxTab = lazy(() =>
+  import("./settings/ProxmoxTab").then((m) => ({ default: m.ProxmoxTab })),
+);
 
 const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
 
@@ -68,7 +71,7 @@ function LockedNote() {
   return <p className="text-xs text-muted mt-1">set by environment — locked</p>;
 }
 
-const TABS = ["provisioning", "updates"] as const;
+const TABS = ["provisioning", "proxmox", "updates"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Settings is the panel's own config surface: what provisioning offers, and
@@ -105,7 +108,7 @@ export function SettingsPage() {
         <ProvisioningTab />
       ) : (
         <Suspense fallback={<LoadingState />}>
-          <UpdatesTab />
+          {tab === "proxmox" ? <ProxmoxTab /> : <UpdatesTab />}
         </Suspense>
       )}
     </div>
