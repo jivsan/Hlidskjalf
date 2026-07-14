@@ -99,3 +99,72 @@ def test_create_vm_non_template_400(auth_client):
     )
     assert r.status_code == 400
     assert "template" in r.json()["detail"]
+
+
+# --- choosing the VMID yourself ---------------------------------------------
+# A clone writes to whatever newid it is given. If the panel ever passed a VMID
+# that is already in use, or a protected one, Proxmox would refuse (or worse) —
+# so the refusals below are the whole point of letting anyone type a number.
+
+
+def test_create_vm_with_chosen_vmid(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-chosen", vmid=942, ip_cidr="10.0.20.242/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["vmid"] == 942
+
+    fleet = {v["vmid"]: v for v in auth_client.get("/api/vms").json()}
+    assert fleet[942]["name"] == "scratch-chosen"
+
+
+def test_create_vm_omitting_vmid_still_takes_the_next_free_one(auth_client):
+    used = set(auth_client.get("/api/provision/defaults").json()["used_vmids"])
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-auto", ip_cidr="10.0.20.243/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    vmid = r.json()["vmid"]
+    assert vmid >= 200 and vmid not in used
+
+
+def test_create_vm_with_taken_vmid_409(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-taken", vmid=105, ip_cidr="10.0.20.244/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 409
+    assert "105" in r.json()["detail"]
+
+
+def test_create_vm_with_protected_vmid_403(auth_client):
+    """151 is in HLIDSKJALF_PROTECTED_VMIDS — cloning onto it would displace it."""
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-protected", vmid=151, ip_cidr="10.0.20.245/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 403
+    assert "protected" in r.json()["detail"]
+
+
+def test_create_vm_with_vmid_below_proxmox_floor_422(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-lowid", vmid=99, ip_cidr="10.0.20.246/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 422
+
+
+def test_defaults_reports_used_and_protected_vmids(auth_client):
+    d = auth_client.get("/api/provision/defaults").json()
+    assert 105 in d["used_vmids"]
+    assert d["protected_vmids"] == [101, 151]
+    assert d["next_vmid"] not in d["used_vmids"]
+    assert d["min_vmid"] == 100

@@ -172,11 +172,19 @@ export interface ProvisionDefaults {
   default_ssh_keys: string;
   next_vmid: number;
   storages: string[];
+  /** Every VMID already on the node — so the form can say "taken" before submit. */
+  used_vmids: number[];
+  /** HLIDSKJALF_PROTECTED_VMIDS: the backend refuses to clone onto these. */
+  protected_vmids: number[];
+  min_vmid: number;
+  max_vmid: number;
 }
 
 export interface ProvisionRequest {
   name: string;
   template_vmid: number;
+  /** Omit to let the panel take the next free VMID. */
+  vmid?: number;
   cores: number;
   memory_mb: number;
   disk_gb: number;

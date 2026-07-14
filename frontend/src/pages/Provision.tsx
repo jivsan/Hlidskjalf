@@ -22,6 +22,24 @@ interface Submitted {
   upids: string[];
 }
 
+/** What the VMID box says about what's currently typed in it. */
+type VmidCheck =
+  | { ok: true; auto: boolean; note: string }
+  | { ok: false; note: string };
+
+function checkVmid(raw: string, d: ProvisionDefaults): VmidCheck {
+  const s = raw.trim();
+  if (s === "") return { ok: true, auto: true, note: `auto — takes ${d.next_vmid}, the next free id` };
+  if (!/^\d+$/.test(s)) return { ok: false, note: "digits only" };
+  const vmid = Number(s);
+  if (vmid < d.min_vmid || vmid > d.max_vmid)
+    return { ok: false, note: `Proxmox VMIDs run from ${d.min_vmid} to ${d.max_vmid}` };
+  if (d.protected_vmids.includes(vmid))
+    return { ok: false, note: "protected — the panel refuses to clone onto this guest" };
+  if (d.used_vmids.includes(vmid)) return { ok: false, note: "already in use on this node" };
+  return { ok: true, auto: false, note: "free" };
+}
+
 export function Provision() {
   const toast = useToast();
   const [defaults, setDefaults] = useState<ProvisionDefaults | null>(null);
@@ -29,6 +47,7 @@ export function Provision() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [vmid, setVmid] = useState("");
   const [templateVmid, setTemplateVmid] = useState<number | "">("");
   const [cores, setCores] = useState(2);
   const [memoryMb, setMemoryMb] = useState(2048);
@@ -52,6 +71,7 @@ export function Provision() {
         setDefaults(d);
         setTemplates(t);
         setSshKeys(d.default_ssh_keys);
+        setVmid(String(d.next_vmid));
         if (d.vlans.length > 0) {
           setVlan(d.vlans[0]);
           setGateway(d.vlan_gateways[d.vlans[0]] ?? "");
@@ -68,7 +88,10 @@ export function Provision() {
 
   const nameOk = HOSTNAME_RE.test(name);
   const ipOk = validCidr(ipCidr);
-  const formOk = nameOk && ipOk && templateVmid !== "" && vlan !== "" && cores >= 1 && memoryMb >= 128 && diskGb >= 1;
+  const vmidCheck = defaults ? checkVmid(vmid, defaults) : null;
+  const formOk =
+    nameOk && ipOk && (vmidCheck?.ok ?? false) && templateVmid !== "" && vlan !== "" &&
+    cores >= 1 && memoryMb >= 128 && diskGb >= 1;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -78,6 +101,8 @@ export function Provision() {
       const body: ProvisionRequest = {
         name,
         template_vmid: templateVmid,
+        // empty box = let the backend pick; it re-checks whatever we do send
+        ...(vmid.trim() ? { vmid: Number(vmid.trim()) } : {}),
         cores,
         memory_mb: memoryMb,
         disk_gb: diskGb,
@@ -143,7 +168,7 @@ export function Provision() {
       )}
       <form onSubmit={submit} className="card p-5 space-y-6">
         {/* identity */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="label" htmlFor="p-name">hostname</label>
             <input
@@ -176,6 +201,38 @@ export function Provision() {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between">
+              <label className="label" htmlFor="p-vmid">VMID</label>
+              {vmid.trim() !== String(defaults.next_vmid) && (
+                <button
+                  type="button"
+                  className="text-xs text-cyan hover:underline"
+                  onClick={() => setVmid(String(defaults.next_vmid))}
+                >
+                  next free
+                </button>
+              )}
+            </div>
+            <input
+              id="p-vmid"
+              className="input metric"
+              value={vmid}
+              onChange={(e) => setVmid(e.target.value)}
+              placeholder={`${defaults.next_vmid} (auto)`}
+              inputMode="numeric"
+              spellCheck={false}
+            />
+            {vmidCheck && (
+              <p
+                className={`text-xs mt-1 ${
+                  !vmidCheck.ok ? "text-red" : vmidCheck.auto ? "text-muted" : "text-cyan"
+                }`}
+              >
+                {vmidCheck.note}
+              </p>
+            )}
           </div>
         </div>
 
@@ -310,7 +367,9 @@ export function Provision() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-muted">
-            next free vmid <span className="metric text-fg">{defaults.next_vmid}</span>
+            {defaults.used_vmids.length} vmid
+            {defaults.used_vmids.length === 1 ? "" : "s"} in use · next free{" "}
+            <span className="metric text-fg">{defaults.next_vmid}</span>
           </div>
           <button type="submit" className="btn-pink" disabled={!formOk || busy || templates.length === 0}>
             {busy ? "creating…" : "create VM"}

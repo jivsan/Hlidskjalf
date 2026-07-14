@@ -90,8 +90,9 @@ Found and fixed while the panel was up (all merged):
 **Phase 3 — writes. NEXT SESSION. Scratch VM only, VMID ≥ 900.**
 1. Set `HLIDSKJALF_CLONE_STORAGE=vm-drives`, then in **Settings → provisioning**
    add VLAN `20 → 10.0.20.1` and bridge `vmbr1` (hella's guests are NOT on vmbr0).
-2. Provision a scratch guest *from the panel*, from the Debian template. Then, on
-   that guest only:
+2. Provision a scratch guest *from the panel*, from the Debian template — **type
+   `900` in the new VMID box**, so everything below stays inside the ≥ 900 fence by
+   construction rather than by luck. Then, on that guest only:
 3. Power-cycle it, and **watch the task poll actually complete** (the UPID path —
    validated read-only, never yet driven end-to-end through the panel's poller).
 4. ~~Open the console and type in it~~ — **DONE, both kinds work** (#39, #40).
@@ -110,14 +111,15 @@ and **`scsi0` is hardcoded** for template disk reads and resize (a template on
    without double-counting, and a mid-day reboot produces no negative delta.
 
 ### Also queued (asked for, not yet built)
-- **Choose your own VMID** on the provision form (a box, prefilled with the next
-  free id, validated against the ones in use). Backend `create_vm` currently
-  always picks the next free id itself.
-- **Self-update** (`POST /api/update`). Detection landed in v0.4.0-alpha; applying
-  is deliberately not implemented. If it is built: off unless
-  `HLIDSKJALF_ALLOW_SELF_UPDATE=true`, admin + CSRF + typed confirm, verify the
-  artifact, `git pull --ff-only` into a *new* venv, migrate (the DB backs itself
-  up now), restart, health-check, **roll back on failure**. Never in Docker/Nix.
+- **Choose your own VMID** — ✅ **done, unreleased** (branch `feat/choose-vmid`). The
+  Provision form has a VMID box prefilled with the next free id; empty still means
+  "next free". `vmid` is optional on `POST /api/vms`, and the backend refuses a taken
+  one (409) or a protected one (403, audited) — a clone writes to whatever `newid` it
+  is handed, so that check is the whole point. `GET /api/provision/defaults` now
+  returns `used_vmids` / `protected_vmids` so the form can say so before you submit.
+  **Untested on real hardware** — it is a write path (see Phase 3).
+- **Self-update** (`POST /api/update`) — ✅ landed in v0.4.1-alpha, opt-in behind
+  `HLIDSKJALF_ALLOW_SELF_UPDATE`, verified live against GitHub. See the changelog.
 - **The switch faceplate is still hardcoded** to a 48-port Arista DCS-7050TX-48.
   Christian's call: this one may stay site-specific for now. Everything else must
   be generic — no homelab baked into code.
