@@ -26,6 +26,10 @@ from ..pve import PveClient
 router = APIRouter()
 
 NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+# A cloud-init login user must be a valid Linux username: start with a letter or
+# underscore, then letters/digits/underscore/hyphen. cloud-init creates this user.
+CIUSER_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+MIN_CI_PASSWORD_LEN = 8
 # Where the panel starts looking when it picks a VMID itself. A VMID typed by an
 # admin only has to clear Proxmox's own floor (100) — the panel does not get to
 # reserve 100-199 for itself.
@@ -106,6 +110,13 @@ class CreateVm(BaseModel):
     ip_cidr: str  # e.g. 192.168.20.50/24
     gateway: str = ""  # empty allowed (gateway-less VLANs, e.g. storage)
     ssh_keys: str = ""
+    # The guest's OS login. ci_user defaults to the panel's admin_user (the old
+    # behaviour); ci_password enables console/password login. A cloud image sets no
+    # password on its own, so without one — and without an SSH key — the VM has no
+    # way in. cipassword is passed straight to Proxmox (which hashes it) and is never
+    # logged or returned by the panel.
+    ci_user: str = ""
+    ci_password: str = ""
     start: bool = True
 
 
@@ -120,8 +131,12 @@ async def _apply_cloudinit_and_size(
         "net0": _net0(body.vlan, mac),
         "agent": "enabled=1",
         "onboot": 1,
-        "ciuser": settings().admin_user,
+        "ciuser": body.ci_user.strip() or settings().admin_user,
     }
+    if body.ci_password:
+        # Proxmox hashes cipassword server-side. httpx form-encodes it; do not
+        # log it, do not return it.
+        config["cipassword"] = body.ci_password
     if body.ip_cidr:
         config["ipconfig0"] = f"ip={body.ip_cidr}" + (
             f",gw={body.gateway}" if body.gateway else ""
@@ -158,6 +173,21 @@ def _validate_create(body: CreateVm) -> None:
         raise HTTPException(400, "ip_cidr must look like 192.168.20.50/24")
     if body.gateway and not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", body.gateway):
         raise HTTPException(400, "gateway must be an IPv4 address or empty")
+    if body.ci_user and not CIUSER_RE.match(body.ci_user.strip()):
+        raise HTTPException(
+            400, "login user must be a valid Linux username (a-z, 0-9, _ and -; "
+            "starting with a letter or underscore)")
+    if body.ci_password and len(body.ci_password) < MIN_CI_PASSWORD_LEN:
+        raise HTTPException(
+            400, f"login password must be at least {MIN_CI_PASSWORD_LEN} characters")
+    # The trap: a cloud image sets no password of its own. A VM with neither a
+    # password nor an SSH key boots with a user nobody can authenticate as — which
+    # looks exactly like "username or password is wrong" at the console.
+    has_key = bool(body.ssh_keys.strip() or s.default_ssh_keys.strip())
+    if not body.ci_password and not has_key:
+        raise HTTPException(
+            400, "This VM would have no way to log in: set a login password or an "
+            "SSH key (or a default SSH key in Settings).")
 
 
 @router.post("/api/vms", status_code=201)

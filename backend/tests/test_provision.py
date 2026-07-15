@@ -101,6 +101,85 @@ def test_create_vm_non_template_400(auth_client):
     assert "template" in r.json()["detail"]
 
 
+# --- cloud-init login credentials -------------------------------------------
+# A cloud image sets no password of its own: cloud-init is the only thing that
+# gives the guest a way in. The panel used to write ciuser + sshkeys but never a
+# password, so a VM created without an SSH key you hold was unloginnable — it
+# looked exactly like "username or password is wrong" at the console.
+
+
+def test_create_vm_sets_login_user_and_password(auth_client, mock_pve_url):
+    secret = "corr3ct-horse"
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-creds", ip_cidr="192.168.20.250/24",
+                   ci_user="tenant", ci_password=secret),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    vmid = r.json()["vmid"]
+    cfg = httpx.get(
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/{vmid}/config"
+    ).json()["data"]
+    assert cfg["ciuser"] == "tenant"
+    assert cfg["cipassword"] == secret
+    # the panel must never echo the password back to the caller
+    assert secret not in r.text
+
+
+def test_create_vm_password_never_reaches_the_audit_log(auth_client):
+    secret = "sup3rsecret-pw"
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-audit", ip_cidr="192.168.20.251/24",
+                   ci_password=secret),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    audit = auth_client.get("/api/debug/audit").json()
+    assert secret not in str(audit)
+
+
+def test_create_vm_with_no_password_and_no_key_400(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-noway", ip_cidr="192.168.20.252/24", ssh_keys=""),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 400
+    assert "no way to log in" in r.json()["detail"]
+
+
+def test_create_vm_with_password_but_no_key_ok(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-pwonly", ip_cidr="192.168.20.253/24",
+                   ssh_keys="", ci_password="letmein-please"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+
+
+def test_create_vm_bad_login_user_400(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-baduser", ci_user="1nvalid Name"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 400
+    assert "username" in r.json()["detail"]
+
+
+def test_create_vm_short_password_400(auth_client):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-shortpw", ci_password="short"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 400
+    assert "8 characters" in r.json()["detail"]
+
+
 # --- choosing the VMID yourself ---------------------------------------------
 # A clone writes to whatever newid it is given. If the panel ever passed a VMID
 # that is already in use, or a protected one, Proxmox would refuse (or worse) —

@@ -192,6 +192,10 @@ export interface ProvisionRequest {
   ip_cidr: string;
   gateway: string;
   ssh_keys: string;
+  /** OS login user for cloud-init; blank = the panel's admin_user. */
+  ci_user?: string;
+  /** OS login password; blank = no password (SSH-key login only). */
+  ci_password?: string;
   start: boolean;
 }
 

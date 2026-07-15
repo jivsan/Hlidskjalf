@@ -175,6 +175,18 @@ anyway, prefer it over the port-forward — never publish the origin IP.
   is a friend with a shell inside whatever network that VM sits on.
 
 ### Also queued (asked for, not yet built)
+- **Choose VM login credentials at provision time** — ✅ **done, unreleased** (branch
+  `feat/provision-credentials`). Root cause of "username or password is wrong" on a fresh
+  clone: the panel wrote `ciuser` + `sshkeys` but **never `cipassword`**, and a cloud
+  image has no password of its own. The Provision form now takes a login user +
+  password; the backend writes `cipassword` (Proxmox hashes it) and never logs or returns
+  it. It also **refuses** a create with no password and no SSH key — the exact trap —
+  with a test that would have caught it. **Two gaps, on purpose:** (1) reinstall does not
+  yet take credentials, so a reinstalled VM still relies on `default_ssh_keys`; (2) an
+  *already-created* unloginnable VM (e.g. the first newt attempt) must be **destroyed and
+  re-created** with a password. **Untested on real hardware** — it is a write path
+  (Phase 3); the mock stores `cipassword` verbatim, real PVE hashes it and redacts it on
+  read, but the panel never reads it back so that difference is invisible to us.
 - **Choose your own VMID** — ✅ **done, unreleased** (branch `feat/choose-vmid`). The
   Provision form has a VMID box prefilled with the next free id; empty still means
   "next free". `vmid` is optional on `POST /api/vms`, and the backend refuses a taken

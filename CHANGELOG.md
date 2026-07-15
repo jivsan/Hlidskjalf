@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — choose a VM's login credentials when you provision it
+A cloud image sets **no password of its own** — cloud-init is the only thing that gives
+the guest a way in. The provisioner wrote `ciuser` and any SSH keys, but never a
+password, so a VM created without an SSH key you hold was unloginnable: the console just
+answered "username or password is wrong", because there was no password at all.
+
+- **Provision form gains a login user + password** (`ci_user` / `ci_password`). `ci_user`
+  defaults to the panel's `admin_user` as before; `ci_password` is passed straight to
+  Proxmox (which hashes it) and is **never logged or returned** — a test asserts it does
+  not appear in the create response or the audit trail.
+- **The trap is now a hard refusal.** Creating a VM with *neither* a password *nor* an SSH
+  key (nor a default SSH key in Settings) returns 400 with a message that says why —
+  because that combination is exactly the unloginnable VM described above. Enforced
+  server-side and disabled in the form.
+- Only newly-created VMs are affected; **an already-provisioned unloginnable VM must be
+  re-created** with a password (or a key you hold). Reinstall does not yet take
+  credentials.
+
 ### Added — the panel can be exposed to the internet, for tenants only
 The VPS model wants friends to reach their own VM from anywhere. The panel now supports
 exactly one shape of that, and it is not "put it on the internet and hope":
