@@ -90,6 +90,16 @@ host is exposed — the tunnel maps one hostname to one local port.
 Keep your existing internal route (Traefik, `lan-only`) for admin. Same panel, two
 doors, and only one of them is on the internet.
 
+### Alternative: a self-hosted tunnel (Pangolin + Newt)
+
+Cloudflare is not the only shape. A **self-hosted** tunnel — e.g. [Pangolin](https://pangolin.net)
+fronting a `newt` agent that dials out from beside the panel — works the same way from the
+panel's point of view: the agent forwards from `127.0.0.1`, and Pangolin's reverse proxy
+sets `X-Forwarded-For`, so `trustedProxies = [ "127.0.0.1/32" ]` and `adminNetworks` stay
+exactly as above. You own the edge instead of renting it, and — unlike Cloudflare's proxy,
+which carries HTTP/HTTPS only — such a tunnel can also forward **raw TCP/UDP** (SSH, VNC),
+which matters if you want to give tenants a direct path into their VM, not just the panel.
+
 ### Do you need a separate host for the tunnel?
 
 No — `cloudflared` dials *out*, so there is no inbound path to host and nothing to port
