@@ -218,6 +218,7 @@ def test_provision_uses_configured_bridge_and_vlan(
             "vlan": "40",
             "ip_cidr": "192.168.40.201/24",
             "gateway": "192.168.40.1",
+            "ci_password": "provision-pw",  # a way in, so the create is valid
             "start": False,
         },
         headers=csrf_headers(auth_client),

@@ -56,6 +56,8 @@ export function Provision() {
   const [ipCidr, setIpCidr] = useState("");
   const [gateway, setGateway] = useState("");
   const [sshKeys, setSshKeys] = useState("");
+  const [ciUser, setCiUser] = useState("");
+  const [ciPassword, setCiPassword] = useState("");
   const [start, setStart] = useState(true);
 
   const [busy, setBusy] = useState(false);
@@ -89,9 +91,14 @@ export function Provision() {
   const nameOk = HOSTNAME_RE.test(name);
   const ipOk = validCidr(ipCidr);
   const vmidCheck = defaults ? checkVmid(vmid, defaults) : null;
+  const ciUserOk = ciUser.trim() === "" || /^[a-z_][a-z0-9_-]{0,31}$/.test(ciUser.trim());
+  const passwordOk = ciPassword === "" || ciPassword.length >= 8;
+  // A cloud image sets no password itself; with neither a password nor a key the
+  // VM boots with a user nobody can log in as — the exact "wrong password" trap.
+  const hasWayIn = ciPassword.length >= 8 || sshKeys.trim() !== "";
   const formOk =
     nameOk && ipOk && (vmidCheck?.ok ?? false) && templateVmid !== "" && vlan !== "" &&
-    cores >= 1 && memoryMb >= 128 && diskGb >= 1;
+    cores >= 1 && memoryMb >= 128 && diskGb >= 1 && ciUserOk && passwordOk && hasWayIn;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -110,6 +117,8 @@ export function Provision() {
         ip_cidr: ipCidr,
         gateway,
         ssh_keys: sshKeys,
+        ...(ciUser.trim() ? { ci_user: ciUser.trim() } : {}),
+        ...(ciPassword ? { ci_password: ciPassword } : {}),
         start,
       };
       const res = await api.post<Submitted>("/api/vms", body);
@@ -342,6 +351,41 @@ export function Provision() {
         {/* access */}
         <div className="space-y-3">
           <div className="eyebrow">access</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="p-ciuser">login user</label>
+              <input
+                id="p-ciuser"
+                className="input metric"
+                value={ciUser}
+                onChange={(e) => setCiUser(e.target.value.toLowerCase())}
+                placeholder="admin (default)"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {!ciUserOk && (
+                <p className="text-red text-xs mt-1">
+                  a-z, 0-9, _ and -; start with a letter or underscore
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="label" htmlFor="p-cipassword">login password</label>
+              <input
+                id="p-cipassword"
+                className="input metric"
+                type="password"
+                value={ciPassword}
+                onChange={(e) => setCiPassword(e.target.value)}
+                placeholder="(min 8 chars, optional if SSH key set)"
+                autoComplete="new-password"
+                spellCheck={false}
+              />
+              {!passwordOk && (
+                <p className="text-red text-xs mt-1">at least 8 characters</p>
+              )}
+            </div>
+          </div>
           <div>
             <label className="label" htmlFor="p-ssh">SSH authorized keys</label>
             <textarea
@@ -352,6 +396,12 @@ export function Provision() {
               spellCheck={false}
             />
           </div>
+          {!hasWayIn && (
+            <p className="text-amber text-xs">
+              set a login password or an SSH key — a cloud image has no password of
+              its own, so without one of these the VM has no way to log in.
+            </p>
+          )}
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
