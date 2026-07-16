@@ -56,7 +56,8 @@ def client_ip(request: Request | None) -> str:
     from .config import get_settings
     from .netzone import client_ip as real_client_ip
 
-    return real_client_ip(request, get_settings().trusted_proxies)
+    s = get_settings()
+    return real_client_ip(request, s.trusted_proxies, s.cloudflare)
 
 
 async def record(

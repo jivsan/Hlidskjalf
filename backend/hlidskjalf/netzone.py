@@ -62,7 +62,7 @@ def in_networks(addr: str, cidrs: list[str]) -> bool:
     return any(ip in net for net in _networks(cidrs))
 
 
-def client_ip(request: Request | None, trusted_proxies: list[str]) -> str:
+def client_ip(request: Request | None, trusted_proxies: list[str], trust_cf: bool = False) -> str:
     """The address the request really came from.
 
     Forwarded headers are honoured ONLY when the socket peer is a trusted proxy —
@@ -75,9 +75,15 @@ def client_ip(request: Request | None, trusted_proxies: list[str]) -> str:
     if not trusted_proxies or not in_networks(peer, trusted_proxies):
         return peer  # not a proxy we trust: its own address is the only truth here
 
-    cf = request.headers.get(_CF_HEADER)
-    if cf and _ip(cf):
-        return cf.strip()
+    # CF-Connecting-IP is a single client-settable value with no chain to walk. Only
+    # Cloudflare's edge overwrites it, so it may be believed ONLY in cloudflare mode;
+    # any other proxy (Traefik, nginx, Newt/Pangolin) forwards whatever the client
+    # sent, so trusting it unconditionally lets anyone spoof their source address —
+    # and with it the admin-network boundary and the per-IP login limiter.
+    if trust_cf:
+        cf = request.headers.get(_CF_HEADER)
+        if cf and _ip(cf):
+            return cf.strip()
 
     xff = request.headers.get(_XFF_HEADER)
     if xff:
@@ -99,7 +105,9 @@ def is_admin_zone(request: Request | None, settings) -> bool:
     """
     if not settings.admin_networks:
         return True
-    return in_networks(client_ip(request, settings.trusted_proxies), settings.admin_networks)
+    return in_networks(
+        client_ip(request, settings.trusted_proxies, settings.cloudflare), settings.admin_networks
+    )
 
 
 def admin_zone_error(settings) -> str:

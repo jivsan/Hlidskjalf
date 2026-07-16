@@ -280,7 +280,7 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
     # The REAL caller — behind a proxy the socket peer is the proxy, and rate limiting
     # every login against "127.0.0.1" is one shared bucket that a single attacker fills
     # on everyone's behalf.
-    client_ip = netzone.client_ip(request, settings.trusted_proxies)
+    client_ip = netzone.client_ip(request, settings.trusted_proxies, settings.cloudflare)
     auth.check_login_rate(client_ip)
     # ...and back the ACCOUNT off too: per-IP limiting does nothing about a botnet
     # spreading its guesses across thousands of addresses, which is what a login page
