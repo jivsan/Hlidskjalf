@@ -1,7 +1,7 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> **v0.4.2-alpha** · running on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
+> **v0.4.4-alpha** · internet-facing (tenants) with admin on the tailnet, on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
 
 A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live graphs,
 per-VM bandwidth accounting with monthly charts and quotas, provisioning from cloud-init
@@ -245,7 +245,7 @@ refusal — is audited.
 
 ## Real-hardware status
 
-**v0.4.2-alpha runs on real hardware**: deployed on NixOS behind a Traefik reverse
+**v0.4.4-alpha runs on real hardware**: deployed on NixOS behind a Traefik reverse
 proxy, against a real Proxmox VE 9.2.3 host. The first-run
 wizard, fleet, node, graphs and both consoles work there. That run found five defects
 that months of green tests never did — see [`CHANGELOG.md`](CHANGELOG.md) and

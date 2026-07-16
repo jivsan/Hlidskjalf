@@ -1,6 +1,27 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-14 (**v0.4.2-alpha — deployed on NixOS behind Traefik**; PRs #46–#49, 285 tests)._
+_Last updated: 2026-07-16 (**v0.4.4-alpha — internet-facing for tenants, admin on the tailnet, hardened**; PRs #56–#58)._
+
+## ✅ v0.4.4-alpha — EXPOSED TO THE INTERNET, TENANT-ONLY, HARDENED
+
+The panel is now reachable from the internet for tenants, with admin pinned to the
+tailnet — and the exposure was audited and hardened before and after going live.
+
+- **`public` interlock (#56):** `HLIDSKJALF_PUBLIC` refuses to start unless
+  `admin_networks` + `trusted_proxies` are both set, so an unsafe exposure (admin login
+  open to the world, or blind to the caller) cannot be deployed by accident.
+- **CF-Connecting-IP spoof fixed (#57, HIGH):** the header is ignored unless
+  `HLIDSKJALF_CLOUDFLARE` is set. A non-Cloudflare proxy (Traefik, Newt/Pangolin)
+  forwards it verbatim, so trusting it let a client name any source IP and land inside
+  `admin_networks` — reaching admin login from the internet and evading the per-IP login
+  limiter. Now off by default; only the `X-Forwarded-For` walk is trusted.
+- **Defense-in-depth (#58):** `GET /api/switch/ports` is admin-only (was a tenant L2
+  topology leak); `POST /api/setup` + `/api/setup/test` respect `admin_networks`;
+  `POST /api/logout` requires CSRF.
+- Front it with a tunnel/reverse proxy and set `public`, `admin_networks`,
+  `trusted_proxies` (and `cloudflare` only behind Cloudflare). **Tenant VMs are not
+  exposed** — a tenant reaches their one VM *through* the panel (console/SSH) after
+  logging in. Full model + the `cloudflare` nuance in `docs/public-access.md`.
 
 ## ✅ v0.4.2-alpha — THE PANEL IS DEPLOYED
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4-alpha] - 2026-07-16
+
 ### Security — defense-in-depth from the internet-facing audit
 Three lower-severity findings from the exposure audit, closed:
 - **`GET /api/switch/ports` is now admin-only.** It was gated only on a valid session, so
