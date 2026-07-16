@@ -40,6 +40,7 @@ let
     HLIDSKJALF_TRUSTED_PROXIES = lib.concatStringsSep "," cfg.trustedProxies;
     HLIDSKJALF_ADMIN_NETWORKS = lib.concatStringsSep "," cfg.adminNetworks;
     HLIDSKJALF_PUBLIC = lib.boolToString cfg.public;
+    HLIDSKJALF_CLOUDFLARE = lib.boolToString cfg.cloudflare;
 
     # The Proxmox connection: null unless declared, so the wizard owns it.
     HLIDSKJALF_PVE_HOST = cfg.settings.pveHost;
@@ -165,6 +166,22 @@ in
         from anywhere, and without `trustedProxies` it cannot tell tenants apart from
         the proxy. Turn this on the moment you put a tunnel or port-forward in front of
         the panel; leave it off for a LAN-only deployment.
+      '';
+    };
+
+    cloudflare = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Set this ONLY if the trusted proxy in front of the panel is Cloudflare.
+        Cloudflare overwrites the `CF-Connecting-IP` header at its edge, so it can be
+        believed. Any other proxy — Traefik, nginx, Newt/Pangolin, a non-Cloudflare
+        cloudflared tunnel — forwards a client-supplied `CF-Connecting-IP` unchanged,
+        so trusting it would let anyone spoof their source address and, with it, the
+        `adminNetworks` boundary and the per-IP login limiter.
+
+        Off (default): `CF-Connecting-IP` is ignored and only the `X-Forwarded-For`
+        chain (walked right-to-left past `trustedProxies`) is believed.
       '';
     };
 

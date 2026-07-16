@@ -116,6 +116,24 @@ The panel walks the `X-Forwarded-For` chain from the right, skipping addresses i
 are yours, and takes the first one that is not. Declare only the local proxy and every
 tenant on earth is recorded as coming from your tunnel host.
 
+### `CF-Connecting-IP` is only believed behind Cloudflare
+
+`X-Forwarded-For` is a chain the panel can walk, so a client-prepended entry loses to the
+real one your proxy appends. `CF-Connecting-IP` is a *single* value with no chain — only
+Cloudflare's edge overwrites it. Any other proxy (Traefik, nginx, Newt/Pangolin) forwards
+whatever the client sent, so believing it would let anyone name their own source address
+and step straight into `admin_networks`.
+
+So the panel ignores `CF-Connecting-IP` entirely unless you opt in:
+
+```nix
+services.hlidskjalf.cloudflare = true;   # ONLY if Cloudflare is the trusted proxy
+```
+
+Off (the default), only the `X-Forwarded-For` walk is trusted. Behind a non-Cloudflare
+proxy leave it off — and, belt and braces, configure that proxy to strip any inbound
+`CF-Connecting-IP` (and client-supplied `X-Forwarded-For`).
+
 ## 4. What an internet-facing login page gets you
 
 - **Per-IP rate limiting** — the right defence against one abusive host.

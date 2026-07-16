@@ -76,9 +76,18 @@ def test_forwarded_headers_are_believed_from_the_trusted_proxy():
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
 
 
-def test_cloudflare_header_wins_when_present():
+def test_cloudflare_header_wins_only_in_cloudflare_mode():
     req = _Req(PROXY, {"cf-connecting-ip": OUTSIDE, "x-forwarded-for": f"{INSIDE}, {PROXY}"})
-    assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
+    assert client_ip(req, [f"{PROXY}/32"], trust_cf=True) == OUTSIDE
+
+
+def test_cf_connecting_ip_is_ignored_when_not_behind_cloudflare():
+    """A non-Cloudflare proxy forwards a client-set CF-Connecting-IP verbatim. Off
+    cloudflare mode (the default) it must be ignored and the X-Forwarded-For chain
+    used instead — otherwise anyone could name a tailnet address and be an admin."""
+    req = _Req(PROXY, {"cf-connecting-ip": INSIDE, "x-forwarded-for": OUTSIDE})
+    assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE            # default: cf ignored
+    assert client_ip(req, [f"{PROXY}/32"], trust_cf=False) == OUTSIDE
 
 
 def test_a_prepended_forwarded_address_cannot_forge_the_client():
@@ -106,6 +115,19 @@ def test_admin_login_is_refused_from_the_public_internet(anon, exposed):
     assert r.status_code == 403
     assert "local network" in r.json()["detail"]
     assert not r.cookies  # and no session was issued
+
+
+def test_spoofed_cf_connecting_ip_does_not_grant_admin(anon, exposed):
+    """The netzone finding, end to end: not behind Cloudflare (the default), a caller
+    must not forge admin-zone membership with CF-Connecting-IP. A public request that
+    names a tailnet address in that header is still an outside request and is refused."""
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers={"X-Forwarded-For": OUTSIDE, "CF-Connecting-IP": INSIDE},
+    )
+    assert r.status_code == 403, "spoofed CF-Connecting-IP was believed; admin login allowed from outside"
+    assert not r.cookies
 
 
 def test_admin_login_works_from_the_tailnet(anon, exposed):

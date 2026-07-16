@@ -95,6 +95,14 @@ class Settings(BaseSettings):
     # proxy). Default False, so a fresh clone / LAN-only panel is unaffected.
     # See docs/public-access.md.
     public: bool = False
+    # Whether the fronting proxy is Cloudflare. Cloudflare overwrites CF-Connecting-IP
+    # at its edge, so that header can be believed. ANY other proxy (Traefik, nginx,
+    # Newt/Pangolin, a non-CF cloudflared tunnel) forwards a client-supplied
+    # CF-Connecting-IP verbatim — trusting it would let anyone spoof their source IP,
+    # and with it the admin_networks boundary and the per-IP login limiter. Default
+    # False: CF-Connecting-IP is ignored and only the X-Forwarded-For chain (walked
+    # right-to-left past trusted_proxies) is believed. Set True ONLY behind Cloudflare.
+    cloudflare: bool = False
 
     # --- Update detection (routes/version.py) --------------------------------
     # The panel compares its running commit with the tip of `update_branch` in

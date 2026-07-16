@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — `CF-Connecting-IP` is no longer trusted unless you are behind Cloudflare
+`client_ip()` derived the caller's address from `CF-Connecting-IP` whenever the socket
+peer was a trusted proxy — but only Cloudflare's edge overwrites that header. Behind
+**Traefik, nginx, or Newt/Pangolin** (the common self-host case), a client could send
+`CF-Connecting-IP: <a tailnet address>` and be placed **inside `admin_networks`** —
+reaching the admin login from the internet and evading the per-IP login rate limiter by
+rotating the header per request. The `X-Forwarded-For` path was already safe (walked
+right-to-left past trusted hops); only `CF-Connecting-IP` was believed blindly.
+
+- New **`HLIDSKJALF_CLOUDFLARE`** (default **false**). Off, `CF-Connecting-IP` is ignored
+  entirely and only the `X-Forwarded-For` chain is believed. Set it true **only** when
+  the trusted proxy really is Cloudflare (which overwrites inbound `CF-Connecting-IP`).
+- `services.hlidskjalf.cloudflare` in the NixOS module. A regression test asserts a
+  spoofed `CF-Connecting-IP` naming a tailnet address cannot reach admin off-Cloudflare.
+
 ### Added — `public` refuses to expose the panel unsafely
 Exposing the panel is now a deliberate switch with an interlock. **`HLIDSKJALF_PUBLIC=true`**
 declares the panel reachable from the internet — and makes it **refuse to start** unless
