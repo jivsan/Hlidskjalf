@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import get_current_user, is_admin, require_csrf, require_session
+from ..auth import get_current_user, is_admin, require_admin_user, require_csrf, require_session
 from ..db import Db
 from ..deps import get_db, get_switch
 from ..switch import AristaClient, PortInfo
@@ -22,7 +22,7 @@ router = APIRouter()
 async def list_ports(
     client: AristaClient = Depends(get_switch),
     db: Db = Depends(get_db),
-    _=Depends(require_session),
+    _admin: dict = Depends(require_admin_user),
 ) -> dict:
     """Return { ports: [...], error?: string }.
 

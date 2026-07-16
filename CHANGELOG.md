@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — defense-in-depth from the internet-facing audit
+Three lower-severity findings from the exposure audit, closed:
+- **`GET /api/switch/ports` is now admin-only.** It was gated only on a valid session, so
+  any tenant could read the whole switch faceplate — every port's VLAN, description and
+  LLDP neighbour, i.e. the L2 topology. (LOW–MED info disclosure.)
+- **Setup endpoints respect `admin_networks`.** `POST /api/setup` and `/api/setup/test`
+  now refuse from outside the admin zone when it is set — a tunnel attached before
+  first-run can't let the internet seize an unconfigured panel. No-op on a LAN-only
+  install (`admin_networks` empty = anywhere). (MED.)
+- **`POST /api/logout` requires CSRF**, like every other mutation. (LOW; already
+  mitigated by `SameSite=Strict`, closed for consistency.)
+
 ### Security — `CF-Connecting-IP` is no longer trusted unless you are behind Cloudflare
 `client_ip()` derived the caller's address from `CF-Connecting-IP` whenever the socket
 peer was a trusted proxy — but only Cloudflare's edge overwrites that header. Behind
