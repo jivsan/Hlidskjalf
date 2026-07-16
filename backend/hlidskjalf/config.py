@@ -128,6 +128,31 @@ class Settings(BaseSettings):
     # yourself" (right for a supervisor that pins the code, e.g. a read-only image).
     self_update_restart: bool = True
 
+    # --- Pangolin SSH-tunnel integration (optional) --------------------------
+    # When configured, the panel auto-creates a Pangolin TCP resource that
+    # tunnels SSH (port 22) to each VM it provisions, and deletes that resource
+    # when the VM is destroyed. Friends then reach the VM with
+    # `ssh -p <proxy_port> user@<your-pangolin-domain>` — no direct exposure of
+    # the VM. Best-effort: a Pangolin outage never fails a VM create/destroy.
+    # The integration is OFF unless api_url, api_key, org_id, site_id and
+    # ssh_port_start are ALL set (see `pangolin_enabled`), so a fresh clone is
+    # unaffected. See docs/pangolin.md.
+    #
+    # Base URL of the Pangolin Integration API, no trailing slash, e.g.
+    # "https://api.example.com/v1". Empty (default) disables the integration.
+    pangolin_api_url: str = ""
+    # SECRET: a Pangolin API key (org-scoped). Bearer-authed, FILE_BACKED,
+    # encrypted at rest, redacted from every API response — like pve_token_secret.
+    pangolin_api_key: str = ""
+    # The Pangolin organization id the resources are created under.
+    pangolin_org_id: str = ""
+    # The numeric Newt site id targets are attached to (the site that can reach
+    # the VMs). 0 (default) = unset.
+    pangolin_site_id: int = 0
+    # Base of the per-VM SSH port pool, e.g. 2200. Each provisioned VM is given
+    # the next free port at or above this. 0 (default) = unset.
+    pangolin_ssh_port_start: int = 0
+
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
     metrics_source: str = "rrd"
@@ -240,6 +265,19 @@ class Settings(BaseSettings):
         return self
 
     @property
+    def pangolin_enabled(self) -> bool:
+        """The Pangolin SSH-tunnel integration is live only when every knob it
+        needs is set. Any one left empty/0 disables it — so a fresh clone, and
+        any deployment that never configures it, is entirely unaffected."""
+        return bool(
+            self.pangolin_api_url
+            and self.pangolin_api_key
+            and self.pangolin_org_id
+            and self.pangolin_site_id
+            and self.pangolin_ssh_port_start
+        )
+
+    @property
     def pve_base_url(self) -> str:
         return f"{self.pve_scheme}://{self.pve_host}:{self.pve_port}/api2/json"
 
@@ -260,6 +298,7 @@ FILE_BACKED = (
     "switch_password",
     "prometheus_token",
     "prometheus_password",
+    "pangolin_api_key",
     "secret_key",
 )
 
@@ -315,6 +354,13 @@ ADMIN_WRITABLE = frozenset(
         "clone_storage",
         "pve_bridge",
         "default_nameserver",
+        # Pangolin SSH-tunnel integration — the NON-secret knobs are admin-editable.
+        # The api key is NOT here: it is a secret, set only via env/_FILE, and never
+        # returned by any API (see FILE_BACKED + secretbox.SECRET_KEYS).
+        "pangolin_api_url",
+        "pangolin_org_id",
+        "pangolin_site_id",
+        "pangolin_ssh_port_start",
         # The Proxmox connection itself. It used to be settable ONLY in the
         # first-run wizard, which closes forever once a user exists — so a rotated
         # token, a renewed certificate or a moved host meant editing the database

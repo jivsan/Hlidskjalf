@@ -104,6 +104,22 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        3,
+        "pangolin SSH-tunnel resources (optional integration)",
+        """
+        -- Maps a provisioned VM to the Pangolin TCP resource that tunnels SSH to
+        -- it. One row per VM: created on provision, deleted on destroy. proxy_port
+        -- is the per-VM port friends use (`ssh -p <port> user@<domain>`), drawn
+        -- from a pool at/above pangolin_ssh_port_start. Only ever populated when
+        -- the optional Pangolin integration is configured.
+        CREATE TABLE IF NOT EXISTS pangolin_resources (
+            vmid        INTEGER PRIMARY KEY,
+            resource_id INTEGER NOT NULL,
+            proxy_port  INTEGER NOT NULL
+        );
+        """,
+    ),
 ]
 
 LATEST = max(v for v, _, _ in MIGRATIONS)

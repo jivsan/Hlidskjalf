@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — auto-provision a Pangolin SSH tunnel per VM (optional)
+When configured, the panel creates a Pangolin **TCP resource** tunnelling SSH (port 22)
+to each VM it provisions, and deletes it on destroy — so a friend reaches their VM with
+`ssh -p <port> user@<your-pangolin-domain>`: no WAN port opened, no direct exposure.
+
+- `HLIDSKJALF_PANGOLIN_API_URL` / `_API_KEY` (secret — encrypted at rest, `*_FILE` twin) /
+  `_ORG_ID` / `_SITE_ID` / `_SSH_PORT_START`. All five required; any unset = integration
+  off, so a fresh clone is unaffected. Non-secret knobs are admin-editable and exposed as
+  `services.hlidskjalf.settings.pangolin*`.
+- **SSH/TCP only, never HTTP** — the guardrail lives in the client *and* the provision
+  path and is asserted in tests; the raw-HTTP exposure that must stay closed cannot be
+  created here.
+- **Best-effort**: a Pangolin outage never fails a VM create/destroy — the result carries
+  a `pangolin` note instead. Each VM gets a distinct port from a pool at/above
+  `ssh_port_start`. See `docs/pangolin.md`.
+
 ### Added — `default_nameserver` for provisioned VMs
 - New **`HLIDSKJALF_DEFAULT_NAMESERVER`** (default empty): a per-deployment DNS resolver
   written into every provisioned VM's cloud-init config (Proxmox `nameserver`,

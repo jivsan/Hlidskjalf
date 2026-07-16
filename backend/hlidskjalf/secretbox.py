@@ -47,6 +47,7 @@ SECRET_KEYS = frozenset(
         "switch_password",
         "prometheus_token",
         "prometheus_password",
+        "pangolin_api_key",
     }
 )
 

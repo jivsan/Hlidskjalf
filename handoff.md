@@ -1,6 +1,6 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-16 (**v0.4.4-alpha — internet-facing for tenants, admin on the tailnet, hardened**; PRs #56–#58)._
+_Last updated: 2026-07-16 (**v0.4.4-alpha released; unreleased on top: `default_nameserver` (#60) + Pangolin SSH-tunnel auto-provisioning**)._
 
 ## ✅ v0.4.4-alpha — EXPOSED TO THE INTERNET, TENANT-ONLY, HARDENED
 
