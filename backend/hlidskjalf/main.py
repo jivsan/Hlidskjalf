@@ -341,6 +341,7 @@ async def logout(
     response: Response,
     session: tuple[str, str, str] = Depends(auth.require_session_full),
     db: Db = Depends(get_db),
+    _csrf=Depends(auth.require_csrf),
 ):
     """Log out — and actually mean it.
 
