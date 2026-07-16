@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # JSON env var, e.g. '{"20": "192.168.20.1", "30": ""}'. Empty = no VLAN tagging
     # offered in the provision form.
     vlan_gateways: dict[str, str] = {}
+    # DNS resolver written into every provisioned VM's cloud-init config (Proxmox
+    # `nameserver`, space-separated IPs). Per-deployment, never hardcoded: a
+    # locked-down DMZ may permit DNS to only one resolver, so tenant VMs must be
+    # pointed at it. Empty (default) = leave cloud-init's nameserver untouched.
+    default_nameserver: str = ""
     clone_storage: str = "local-lvm"  # Proxmox's usual default storage
     # The bridge every panel-written net0 attaches to. "vmbr0" is Proxmox's
     # stock bridge name; real deployments often keep guests on another one
@@ -309,6 +314,7 @@ ADMIN_WRITABLE = frozenset(
         "vlan_gateways",
         "clone_storage",
         "pve_bridge",
+        "default_nameserver",
         # The Proxmox connection itself. It used to be settable ONLY in the
         # first-run wizard, which closes forever once a user exists — so a rotated
         # token, a renewed certificate or a moved host meant editing the database

@@ -141,6 +141,11 @@ async def _apply_cloudinit_and_size(
         config["ipconfig0"] = f"ip={body.ip_cidr}" + (
             f",gw={body.gateway}" if body.gateway else ""
         )
+    # A per-deployment DNS resolver (e.g. the only one a locked-down DMZ permits).
+    # Empty = leave cloud-init's nameserver untouched. Applies to both create and
+    # reinstall, since both flows land here.
+    if settings().default_nameserver:
+        config["nameserver"] = settings().default_nameserver
     keys = body.ssh_keys.strip() or settings().default_ssh_keys.strip()
     if keys:
         config["sshkeys"] = urllib.parse.quote(keys, safe="")

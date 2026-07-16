@@ -53,6 +53,42 @@ def test_create_vm_happy_path(auth_client, mock_pve_url):
     assert fleet[vmid]["maxdisk"] == 10 << 30
 
 
+# --- default nameserver (a DMZ that permits DNS to only one resolver) --------
+# Per-deployment, never hardcoded: empty default leaves cloud-init's nameserver
+# untouched; a configured value is written into every provisioned VM.
+
+
+def test_create_vm_no_nameserver_by_default(auth_client, mock_pve_url):
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-nodns", ip_cidr="192.168.20.210/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    vmid = r.json()["vmid"]
+    cfg = httpx.get(
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/{vmid}/config"
+    ).json()["data"]
+    assert "nameserver" not in cfg
+
+
+def test_create_vm_sets_default_nameserver(auth_client, mock_pve_url, monkeypatch):
+    from hlidskjalf.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "default_nameserver", "9.9.9.9")
+    r = auth_client.post(
+        "/api/vms",
+        json=_body(name="scratch-dns", ip_cidr="192.168.20.211/24"),
+        headers=csrf_headers(auth_client),
+    )
+    assert r.status_code == 201, r.text
+    vmid = r.json()["vmid"]
+    cfg = httpx.get(
+        f"{mock_pve_url}/api2/json/nodes/pve/qemu/{vmid}/config"
+    ).json()["data"]
+    assert cfg["nameserver"] == "9.9.9.9"
+
+
 def test_create_vm_duplicate_name_409(auth_client):
     r = auth_client.post(
         "/api/vms",

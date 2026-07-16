@@ -56,6 +56,7 @@ let
     HLIDSKJALF_DEFAULT_SSH_KEYS = cfg.settings.defaultSshKeys;
     HLIDSKJALF_VLAN_GATEWAYS = builtins.toJSON cfg.settings.vlanGateways;
     HLIDSKJALF_CLONE_STORAGE = cfg.settings.cloneStorage;
+    HLIDSKJALF_DEFAULT_NAMESERVER = cfg.settings.defaultNameserver;
     HLIDSKJALF_PVE_BRIDGE = cfg.settings.pveBridge;
     HLIDSKJALF_RESCUE_ISO = cfg.settings.rescueIso;
     HLIDSKJALF_ADMIN_USER = cfg.settings.adminUser;
@@ -316,6 +317,17 @@ in
         default = "";
         example = "vmbr0";
         description = "Bridge new NICs attach to. Empty = manage it in Settings.";
+      };
+      defaultNameserver = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "9.9.9.9";
+        description = ''
+          DNS resolver written into every provisioned VM's cloud-init config
+          (space-separated IPs for more than one). Point tenant VMs at the one
+          resolver a locked-down DMZ permits. Empty = leave cloud-init's
+          nameserver untouched; also editable in Settings.
+        '';
       };
       rescueIso = lib.mkOption {
         type = lib.types.str;

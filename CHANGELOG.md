@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `default_nameserver` for provisioned VMs
+- New **`HLIDSKJALF_DEFAULT_NAMESERVER`** (default empty): a per-deployment DNS resolver
+  written into every provisioned VM's cloud-init config (Proxmox `nameserver`,
+  space-separated IPs), applied on both create and reinstall. For a locked-down DMZ that
+  permits DNS to only one resolver — never hardcoded. Empty leaves cloud-init's nameserver
+  untouched. Admin-editable in Settings and exposed as `services.hlidskjalf.settings.defaultNameserver`.
+
 ## [0.4.4-alpha] - 2026-07-16
 
 ### Security — defense-in-depth from the internet-facing audit
