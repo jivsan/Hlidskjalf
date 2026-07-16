@@ -137,3 +137,22 @@ tenant on earth is recorded as coming from your tunnel host.
   exposing it puts that in front of the internet. That is the trade you are making.
 - Give tenants **their own accounts**, never share one.
 - Keep `protected_vmids` set, including the guest the panel itself runs on.
+
+## 6. The interlock: `public` makes the safe config mandatory
+
+Everything above is only a defence if it was actually configured. The failure this
+exists to prevent is a panel put on the internet with `admin_networks` empty (admin
+login from anywhere) or `trusted_proxies` empty (blind to the caller) — each one unset
+env var away.
+
+```nix
+services.hlidskjalf.public = true;
+```
+
+`public` changes no behaviour by itself. It is a declaration — *this panel is exposed* —
+and with it set the panel **refuses to start** unless both `adminNetworks` and
+`trustedProxies` are configured, naming whichever is missing. All three are env-only
+(never wizard- or Settings-writable), so the check is final at load: an unsafe exposure
+cannot be deployed by accident. Turn it on the moment a tunnel or port-forward goes in
+front of the panel; leave it off for a LAN-only deployment (the default), which stays
+unconstrained.
