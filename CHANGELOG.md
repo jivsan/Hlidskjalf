@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `public` refuses to expose the panel unsafely
+Exposing the panel is now a deliberate switch with an interlock. **`HLIDSKJALF_PUBLIC=true`**
+declares the panel reachable from the internet — and makes it **refuse to start** unless
+both `admin_networks` is set (or admin login is open to the whole world) and
+`trusted_proxies` is set (or the panel cannot tell who is calling, and the per-IP limiter
+and audit log collapse onto the proxy). It changes nothing on its own; it makes the two
+settings that make exposure safe impossible to forget — the exact gap behind an
+internet-facing panel that trusted no boundaries. Off by default, so a LAN-only panel and
+a fresh clone are unaffected. `services.hlidskjalf.public` in the NixOS module; see
+`docs/public-access.md`.
+
 ### Added — choose a VM's login credentials when you provision it
 A cloud image sets **no password of its own** — cloud-init is the only thing that gives
 the guest a way in. The provisioner wrote `ciuser` and any SSH keys, but never a

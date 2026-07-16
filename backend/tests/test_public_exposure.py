@@ -20,7 +20,9 @@ Three things have to be true, and each is a separate way to get this wrong:
 import pytest
 from conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_headers
 
-from hlidskjalf.config import get_settings
+from pydantic import ValidationError
+
+from hlidskjalf.config import Settings, get_settings
 from hlidskjalf.netzone import client_ip, in_networks
 
 TAILNET = "100.64.0.0/10"
@@ -233,3 +235,55 @@ def test_a_successful_sign_in_clears_the_backoff(anon, exposed):
     )
     assert r.status_code == 200, r.text
     assert not auth._failed_by_user.get(ADMIN_USER)
+
+
+# --- 5. the interlock: `public` refuses an unsafe config ---------------------
+#
+# netzone.py only defends a panel that was actually TOLD its boundaries. The
+# footgun is exposing the panel while admin_networks is empty (admin from
+# anywhere) or trusted_proxies is empty (blind to the real caller). `public`
+# makes that combination refuse to load at all — and because these three fields
+# are env-only (never wizard/DB-writable), the check is final at construction.
+
+
+def _settings(**kw) -> Settings:
+    """Settings from explicit values, immune to the ambient test environment."""
+    base = dict(
+        public=True,
+        admin_networks=["100.64.0.0/10"],
+        trusted_proxies=["127.0.0.1/32"],
+    )
+    base.update(kw)
+    return Settings(**base)
+
+
+def test_public_without_admin_networks_refuses_to_load():
+    with pytest.raises(ValidationError) as e:
+        _settings(admin_networks=[])
+    msg = str(e.value)
+    assert "admin_networks" in msg and "HLIDSKJALF_PUBLIC" in msg
+
+
+def test_public_without_trusted_proxies_refuses_to_load():
+    with pytest.raises(ValidationError) as e:
+        _settings(trusted_proxies=[])
+    assert "trusted_proxies" in str(e.value)
+
+
+def test_public_without_either_boundary_names_both():
+    with pytest.raises(ValidationError) as e:
+        _settings(admin_networks=[], trusted_proxies=[])
+    msg = str(e.value)
+    assert "admin_networks" in msg and "trusted_proxies" in msg
+
+
+def test_public_with_both_boundaries_loads():
+    s = _settings()
+    assert s.public and s.admin_networks and s.trusted_proxies
+
+
+def test_a_lan_only_panel_is_never_constrained():
+    """public=False (the default) may leave both empty — the LAN-only posture is
+    unchanged, and a fresh clone must keep booting."""
+    s = Settings(public=False, admin_networks=[], trusted_proxies=[])
+    assert not s.public

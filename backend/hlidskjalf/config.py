@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     # from anywhere and manage their one VM, while admin exists only inside these
     # networks — enforced at login, at session use, and on every admin route.
     admin_networks: Annotated[list[str], NoDecode] = []
+    # Declares intent to put the panel on the internet. It changes nothing on its
+    # own — admin_networks and trusted_proxies do the actual work — but setting it
+    # makes the panel REFUSE TO START unless both of those are configured. Without
+    # that interlock the two most dangerous misconfigurations are one unset env var
+    # away: admin_networks empty = admin login from anywhere, and trusted_proxies
+    # empty = the panel cannot tell who is calling (every request looks like the
+    # proxy). Default False, so a fresh clone / LAN-only panel is unaffected.
+    # See docs/public-access.md.
+    public: bool = False
 
     # --- Update detection (routes/version.py) --------------------------------
     # The panel compares its running commit with the tip of `update_branch` in
@@ -188,6 +197,34 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return json.loads(v) if v.strip() else {}
         return v
+
+    @model_validator(mode="after")
+    def _public_requires_admin_boundary(self):
+        """A panel told it is public must not run without the two settings that make
+        public exposure safe. `public`, `admin_networks` and `trusted_proxies` are
+        all env-only (never wizard/DB-writable), so they are final here — fail closed,
+        loudly, at load, rather than serve an open admin login to the internet."""
+        if not self.public:
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("admin_networks", self.admin_networks),
+                ("trusted_proxies", self.trusted_proxies),
+            )
+            if not value
+        ]
+        if missing:
+            joined = " and ".join(missing)
+            raise ValueError(
+                "HLIDSKJALF_PUBLIC is set, which puts the panel on the internet, but "
+                f"{joined} {'is' if len(missing) == 1 else 'are'} empty. Without "
+                "admin_networks, admin login is allowed from anywhere; without "
+                "trusted_proxies, the panel believes no forwarded headers and cannot "
+                "tell who is calling. Set both, or unset HLIDSKJALF_PUBLIC. "
+                "See docs/public-access.md."
+            )
+        return self
 
     @property
     def pve_base_url(self) -> str:

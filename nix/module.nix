@@ -39,6 +39,7 @@ let
     HLIDSKJALF_LOG_LEVEL = cfg.logLevel;
     HLIDSKJALF_TRUSTED_PROXIES = lib.concatStringsSep "," cfg.trustedProxies;
     HLIDSKJALF_ADMIN_NETWORKS = lib.concatStringsSep "," cfg.adminNetworks;
+    HLIDSKJALF_PUBLIC = lib.boolToString cfg.public;
 
     # The Proxmox connection: null unless declared, so the wizard owns it.
     HLIDSKJALF_PVE_HOST = cfg.settings.pveHost;
@@ -148,6 +149,22 @@ in
 
         `100.64.0.0/10` is the Tailscale range; a tailnet is a better admin boundary
         than a LAN, since it follows you and does not trust every device at home.
+      '';
+    };
+
+    public = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Declare that this panel is reachable from the internet. It changes nothing on
+        its own — `trustedProxies` and `adminNetworks` do the actual work — but with it
+        set the panel **refuses to start** unless BOTH of those are configured.
+
+        This is the interlock that makes an unsafe exposure impossible to deploy by
+        accident: without `adminNetworks` an internet-facing panel accepts admin login
+        from anywhere, and without `trustedProxies` it cannot tell tenants apart from
+        the proxy. Turn this on the moment you put a tunnel or port-forward in front of
+        the panel; leave it off for a LAN-only deployment.
       '';
     };
 
