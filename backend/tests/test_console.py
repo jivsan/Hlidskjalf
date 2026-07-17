@@ -123,7 +123,8 @@ def cookie(panel):
     /api/login is rate-limited (5/min) and the panel is a separate process, so
     the in-process ``auth._login_attempts`` reset used elsewhere can't help
     here. The signed session cookie is valid for hours, so one login is reused
-    across every test; the per-test console ticket GET is not rate-limited.
+    across every test. The console ticket GET is rate-limited too (30/hour per
+    user); this module mints eight tickets in a session, well under the cap.
     """
     base_url, _ = panel
     r = httpx.post(

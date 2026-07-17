@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Console ticket mint is rate-limited**: `GET /api/vms/{vmid}/console` was the
+  one PVE-hitting verb the v0.3.6 hardening pass missed — every call is a
+  vncproxy/termproxy POST against Proxmox, so a tenant looping it was looping
+  the hypervisor. Now 30/hour per user, keyed like every other bucket.
+- **The audit log is actually pruned**: `audit_prune(keep=20000)` existed but
+  nothing called it, so the table grew without bound (a failed-login spray adds
+  ~7,000 rows/day per source IP). It now rides the accumulator loop — once at
+  startup, then at most once a day, and a prune failure can never take the
+  bandwidth loop down.
+
 ## [0.5.1-alpha] - 2026-07-17
 
 ### Added — cyberpunk iteration, round two

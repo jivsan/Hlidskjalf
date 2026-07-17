@@ -39,7 +39,7 @@ from fastapi import (
 )
 import websockets
 
-from ..auth import require_session, session_from_request
+from ..auth import rate_limited, session_from_request
 from ..db import Db
 from ..deps import get_db, get_pve
 from ..pve import PveClient, PveError
@@ -79,7 +79,13 @@ async def console_ticket(
     vmid: int,
     pve: PveClient = Depends(get_pve),
     db: Db = Depends(get_db),
-    username: str = Depends(require_session),
+    # The one PVE-hitting verb the v0.3.6 hardening pass missed: every call here
+    # is a vncproxy/termproxy POST against Proxmox, so an unthrottled loop here
+    # is an unthrottled loop against the hypervisor. 30/hour per user — a human
+    # mints a ticket per page load and per reconnect (a handful an hour at
+    # most), so this only ever bites something scripted. Keyed per user like
+    # every other bucket, so one tenant cannot throttle the rest.
+    username: str = Depends(rate_limited("vm.console", 30, 3600.0)),
 ):
     # Per-user VM scoping: admins pass; a regular user is 403'd unless the
     # requested vmid is the one VM assigned to them. Without this a tenant could
