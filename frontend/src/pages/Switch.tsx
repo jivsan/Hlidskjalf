@@ -89,6 +89,11 @@ export function SwitchPage() {
   const topTalkers = [...data]
     .sort((a, b) => (b.inputRate + b.outputRate) - (a.inputRate + a.outputRate))
     .slice(0, 5);
+  // Bars scale relative to the loudest talker (0 guards the all-idle case).
+  const maxTalkerTotal = topTalkers.reduce(
+    (m, p) => Math.max(m, (p.inputRate || 0) + (p.outputRate || 0)),
+    0
+  );
 
   const selectedPort = selected ? portMap.get(selected) : null;
 
@@ -313,14 +318,24 @@ export function SwitchPage() {
                     <div
                       key={p.name}
                       onClick={() => selectPort(p.name)}
-                      className={`flex items-center justify-between rounded px-2 py-1 text-xs cursor-pointer transition-colors hover:bg-border-token/40 ${isSel ? "bg-border-token/50" : ""}`}
+                      className={`rounded px-2 py-1 text-xs cursor-pointer transition-colors hover:bg-border-token/40 ${isSel ? "bg-border-token/50" : ""}`}
                     >
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span className="w-3 text-right text-muted tabular-nums">{i + 1}</span>
-                        <span>{p.name.replace("Ethernet", "Et")}</span>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUp ? "bg-green" : "bg-red"}`} />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span className="w-3 text-right text-muted tabular-nums">{i + 1}</span>
+                          <span>{p.name.replace("Ethernet", "Et")}</span>
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUp ? "bg-green" : "bg-red"}`} />
+                        </div>
+                        <span className="tabular-nums text-muted text-[10px]">{formatBitsPerSec(total)}</span>
                       </div>
-                      <span className="tabular-nums text-muted text-[10px]">{formatBitsPerSec(total)}</span>
+                      {/* rate-bar: a 2px instrument under the reading, easing to
+                          each poll. Decorative — the value is printed above. */}
+                      <div className="mt-1 h-0.5 rounded-full bg-cyan/10 overflow-hidden" aria-hidden="true">
+                        <div
+                          className="h-full w-full rounded-full bg-cyan/40 rate-bar"
+                          style={{ transform: `scaleX(${maxTalkerTotal > 0 ? total / maxTalkerTotal : 0})` }}
+                        />
+                      </div>
                     </div>
                   );
                 })}

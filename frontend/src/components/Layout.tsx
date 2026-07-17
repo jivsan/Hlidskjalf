@@ -221,10 +221,15 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
 
       <main className="flex-1 min-w-0">
         <div className="max-w-6xl mx-auto p-4 md:p-6">
-          {/* A crash on one page must not blank the panel; reset per navigation. */}
-          <ErrorBoundary label="page" resetKey={location.pathname}>
-            <Outlet />
-          </ErrorBoundary>
+          {/* page-settle: keyed on the path so the content settles in ONCE per
+              navigation (the remount restarts the animation); a same-path
+              re-render keeps the node and never replays it. */}
+          <div key={location.pathname} className="page-settle">
+            {/* A crash on one page must not blank the panel; reset per navigation. */}
+            <ErrorBoundary label="page" resetKey={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
         </div>
       </main>
     </div>

@@ -100,6 +100,14 @@ export function Provision() {
     nameOk && ipOk && (vmidCheck?.ok ?? false) && templateVmid !== "" && vlan !== "" &&
     cores >= 1 && memoryMb >= 128 && diskGb >= 1 && ciUserOk && passwordOk && hasWayIn;
 
+  // ignite-once: the deploy button catches light the first time the form is
+  // complete — one breath of glow, then it settles. Latches true and never
+  // re-arms, so later edits (and "provision another") don't replay it.
+  const [ignited, setIgnited] = useState(false);
+  useEffect(() => {
+    if (formOk) setIgnited(true);
+  }, [formOk]);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!formOk) return;
@@ -421,7 +429,11 @@ export function Provision() {
             {defaults.used_vmids.length === 1 ? "" : "s"} in use · next free{" "}
             <span className="metric text-fg">{defaults.next_vmid}</span>
           </div>
-          <button type="submit" className="btn-pink" disabled={!formOk || busy || templates.length === 0}>
+          <button
+            type="submit"
+            className={`btn-pink ${ignited ? "ignite-once" : ""}`}
+            disabled={!formOk || busy || templates.length === 0}
+          >
             {busy ? "creating…" : "create VM"}
           </button>
         </div>

@@ -96,7 +96,9 @@ export function StatusDot({ status }: { status: string }) {
 
 /**
  * Meter/progress bar. Fill carries severity; the unfilled track is a darker
- * step of the same family (via low-opacity fill color).
+ * step of the same family (via low-opacity fill color). The fill is full-width
+ * and scaled on X (transform-only, no layout) — bar-fill draws it in from
+ * empty once on mount, then it eases to each new reading.
  */
 export function ProgressBar({
   fraction,
@@ -107,7 +109,7 @@ export function ProgressBar({
   color?: "cyan" | "pink" | "amber" | "red";
   className?: string;
 }) {
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
+  const f = Math.max(0, Math.min(1, fraction));
   const auto: "cyan" | "amber" | "pink" =
     fraction >= 1 ? "pink" : fraction >= 0.8 ? "amber" : "cyan";
   const c = color ?? auto;
@@ -124,8 +126,8 @@ export function ProgressBar({
   return (
     <div className={`h-2 rounded-full overflow-hidden ${track} ${className}`}>
       <div
-        className={`h-full rounded-full ${fill}`}
-        style={{ width: `${pct}%`, transition: "width 150ms ease" }}
+        className={`h-full w-full rounded-full ${fill} bar-fill`}
+        style={{ transform: `scaleX(${f})` }}
       />
     </div>
   );
