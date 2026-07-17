@@ -143,6 +143,38 @@ class Db:
         cur = await self.conn.execute("SELECT name, note FROM switch_port_notes")
         return {r["name"]: r["note"] for r in await cur.fetchall()}
 
+    # --- pangolin SSH-tunnel resources (optional integration) ------------------
+
+    async def pangolin_insert(self, vmid: int, resource_id: int, proxy_port: int) -> None:
+        await self.conn.execute(
+            """INSERT OR REPLACE INTO pangolin_resources (vmid, resource_id, proxy_port)
+               VALUES (?, ?, ?)""",
+            (vmid, resource_id, proxy_port),
+        )
+        await self.conn.commit()
+
+    async def pangolin_get(self, vmid: int) -> dict | None:
+        cur = await self.conn.execute(
+            "SELECT vmid, resource_id, proxy_port FROM pangolin_resources WHERE vmid = ?",
+            (vmid,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+    async def pangolin_delete(self, vmid: int) -> None:
+        await self.conn.execute("DELETE FROM pangolin_resources WHERE vmid = ?", (vmid,))
+        await self.conn.commit()
+
+    async def pangolin_next_free_port(self, start: int) -> int:
+        """The lowest port >= `start` not already handed to a VM. The pool is
+        small and per-VM, so a linear scan over the used set is plenty."""
+        cur = await self.conn.execute("SELECT proxy_port FROM pangolin_resources")
+        used = {r["proxy_port"] for r in await cur.fetchall()}
+        port = start
+        while port in used:
+            port += 1
+        return port
+
     # --- runtime config (written by the setup wizard) --------------------------
 
     async def get_config(self) -> dict[str, str]:

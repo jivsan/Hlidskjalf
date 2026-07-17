@@ -60,6 +60,14 @@ let
     HLIDSKJALF_PVE_BRIDGE = cfg.settings.pveBridge;
     HLIDSKJALF_RESCUE_ISO = cfg.settings.rescueIso;
     HLIDSKJALF_ADMIN_USER = cfg.settings.adminUser;
+
+    # Pangolin SSH-tunnel integration (optional). The api key is a SECRET and
+    # goes via environmentFile (HLIDSKJALF_PANGOLIN_API_KEY), never here. These
+    # non-secret knobs are emitted only when set; empty = the integration is off.
+    HLIDSKJALF_PANGOLIN_API_URL = cfg.settings.pangolinApiUrl;
+    HLIDSKJALF_PANGOLIN_ORG_ID = cfg.settings.pangolinOrgId;
+    HLIDSKJALF_PANGOLIN_SITE_ID = optionalStr cfg.settings.pangolinSiteId;
+    HLIDSKJALF_PANGOLIN_SSH_PORT_START = optionalStr cfg.settings.pangolinSshPortStart;
   };
 in
 {
@@ -209,8 +217,9 @@ in
       example = "/run/secrets/hlidskjalf.env";
       description = ''
         Optional root-owned 0600 env file for secrets — HLIDSKJALF_PVE_TOKEN_SECRET,
-        HLIDSKJALF_ADMIN_PASSWORD_HASH, HLIDSKJALF_SESSION_SECRET. Each also takes a
-        `*_FILE` twin, for agenix/sops/systemd-creds.
+        HLIDSKJALF_ADMIN_PASSWORD_HASH, HLIDSKJALF_SESSION_SECRET, and (if the
+        Pangolin SSH-tunnel integration is used) HLIDSKJALF_PANGOLIN_API_KEY. Each
+        also takes a `*_FILE` twin, for agenix/sops/systemd-creds.
 
         Leave it null to configure through the **setup wizard** instead: the panel
         stores the token encrypted at rest and generates its own session key.
@@ -342,6 +351,47 @@ in
           Username of the bootstrap admin. Null = the wizard asks. Declaring it
           here overrides what the wizard saved, so leave it null unless the account
           is created from `environmentFile` (HLIDSKJALF_ADMIN_PASSWORD_HASH).
+        '';
+      };
+
+      # --- Pangolin SSH-tunnel integration (optional) ------------------------
+      # When ALL of the four below plus the api key (via environmentFile) are set,
+      # the panel auto-creates a Pangolin TCP resource tunnelling SSH to each VM it
+      # provisions, and deletes it on destroy. Empty = the integration is off, and
+      # a fresh install is unaffected. See docs/pangolin.md.
+      pangolinApiUrl = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "https://api.example.com/v1";
+        description = ''
+          Base URL of the Pangolin Integration API, no trailing slash. Empty
+          (default) disables the SSH-tunnel integration. The api key itself is a
+          secret — set HLIDSKJALF_PANGOLIN_API_KEY via `environmentFile`, never here.
+        '';
+      };
+      pangolinOrgId = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "myorg";
+        description = "Pangolin organization id resources are created under.";
+      };
+      pangolinSiteId = lib.mkOption {
+        type = with lib.types; nullOr int;
+        default = null;
+        example = 1;
+        description = ''
+          Numeric Pangolin (Newt) site id that can reach the VMs — targets attach
+          to it. Null = unset (integration off).
+        '';
+      };
+      pangolinSshPortStart = lib.mkOption {
+        type = with lib.types; nullOr int;
+        default = null;
+        example = 2200;
+        description = ''
+          Base of the per-VM SSH port pool. Each provisioned VM gets the next free
+          port at/above this; friends connect with `ssh -p <port> user@<domain>`.
+          Null = unset (integration off).
         '';
       };
     };
