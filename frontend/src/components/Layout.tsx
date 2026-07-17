@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getNodeName, logout } from "../api";
 import type { CurrentUser } from "../App";
@@ -26,11 +26,12 @@ function getNavForRole(user: CurrentUser | null) {
 }
 
 function navClass(isActive: boolean): string {
-  // Active links carry a left aurora bar + a raised surface; the seat marks
-  // where you're looking. Inactive links stay quiet.
+  // Active links carry a raised surface; on desktop the sliding indicator
+  // marks the seat's position (see the nav below), so the ::before bar only
+  // shows on mobile. Inactive links stay quiet.
   return [
     "group relative flex items-center rounded-card px-3 py-2 text-sm transition-colors",
-    "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-0.5 before:rounded-full before:transition-all",
+    "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-0.5 before:rounded-full before:transition-all md:before:content-none",
     isActive
       ? "text-fg bg-surface-2 before:bg-cyan"
       : "text-muted hover:text-fg hover:bg-surface/60 before:bg-transparent",
@@ -40,8 +41,9 @@ function navClass(isActive: boolean): string {
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`wordmark ${className}`}>
-      <span className="text-pink">hlid</span>
-      <span className="text-cyan">skjalf</span>
+      {/* the sign over the seat — the one place text is allowed to glow */}
+      <span className="text-pink glow-pink">hlid</span>
+      <span className="text-cyan glow-cyan">skjalf</span>
     </span>
   );
 }
@@ -49,10 +51,10 @@ export function Wordmark({ className = "" }: { className?: string }) {
 function RoleBadge({ role }: { role: string }) {
   return (
     <span
-      className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+      className={`text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 shard-sm ${
         role === "admin"
-          ? "text-pink border-pink/40 bg-pink/5"
-          : "text-cyan border-cyan/30 bg-cyan/5"
+          ? "text-pink bg-pink/10"
+          : "text-cyan bg-cyan/10"
       }`}
     >
       {role}
@@ -67,6 +69,30 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
   const [menuOpen, setMenuOpen] = useState(false);
 
   const NAV = getNavForRole(currentUser);
+
+  // nav-slide: one indicator that GLIDES to the active item instead of a bar
+  // teleporting per link. Measures the active NavLink (aria-current="page")
+  // inside the desktop rail and transitions to it.
+  const navRef = useRef<HTMLElement>(null);
+  const [indicator, setIndicator] = useState<{ top: number; height: number; on: boolean }>({
+    top: 0,
+    height: 16,
+    on: false,
+  });
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const active = nav.querySelector('[aria-current="page"]');
+    if (active instanceof HTMLElement) {
+      setIndicator({
+        top: active.offsetTop + active.offsetHeight / 2 - 8,
+        height: 16,
+        on: true,
+      });
+    } else {
+      setIndicator((i) => ({ ...i, on: false }));
+    }
+  }, [location.pathname, NAV.length]);
 
   const doLogout = async () => {
     try {
@@ -107,7 +133,7 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
               title={getNodeName()}
             >
               <span className="relative inline-flex shrink-0">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan" />
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan dot-bloom" />
                 <span className="absolute inset-0 rounded-full bg-cyan/60 animate-ping" aria-hidden="true" />
               </span>
               <span className="truncate">{getNodeName()}</span>
@@ -115,7 +141,18 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
           </div>
         </div>
 
-        <nav className="reveal space-y-0.5 flex-1" style={{ ["--step" as string]: 1 }}>
+        <nav ref={navRef} className="reveal relative space-y-0.5 flex-1" style={{ ["--step" as string]: 1 }}>
+          {/* the sliding seat marker — glides to the active item, blooms */}
+          <span
+            aria-hidden="true"
+            className="absolute left-0 w-0.5 rounded-full bg-cyan transition-all duration-200 ease-out"
+            style={{
+              top: indicator.top,
+              height: indicator.height,
+              opacity: indicator.on ? 1 : 0,
+              boxShadow: "0 0 8px 1px var(--c-cyan), 0 0 2px var(--c-cyan)",
+            }}
+          />
           {links()}
         </nav>
 
