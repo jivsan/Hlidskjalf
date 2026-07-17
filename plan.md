@@ -1,11 +1,36 @@
-# Hlidskjalf — self-hosted VPS panel for the pve Proxmox host
+# Hlidskjalf — self-hosted VPS panel for a Proxmox host
 
-> A NorwayVPS/"flux"-style control panel, self-hosted on **panel-host**, talking to the
-> Proxmox API on **pve** (<pve-host>) with a **non-root, scoped API token**.
+> A NorwayVPS/"flux"-style control panel, self-hosted on its own VM, talking to the
+> Proxmox API on the node with a **non-root, scoped API token**.
 > Norse naming: *Hliðskjálf*, Odin's high seat from which he watches over all the realms —
-> this is the high seat overlooking pve. `hlidskjalf` is used consistently below.
+> this is the high seat overlooking the node. `hlidskjalf` is used consistently below.
 
 ---
+
+## 0. Status (2026-07) — read this first
+
+**This file was the founding plan; the panel has since shipped.** M0–M5 are done,
+the read-only surface is validated against real hardware (PVE 9.2.3), and the
+living documents have moved:
+
+- `handoff.md` — what's done / what's next, kept current every session.
+- `docs/design/v0.5.0-cyberpunk.md` — the current visual language (supersedes
+  §5's Tokyo Night section below and `docs/design/v0.3.5-design-system.md`).
+- `docs/bootstrap.md` / `docs/setup.md` — provisioning the token/template,
+  now mostly handled by the in-app setup wizard.
+- `CHANGELOG.md` — release history.
+
+What shipped beyond this plan: **multi-user tenancy** (admins see the fleet,
+regular users are scoped to exactly one VM — the §1 non-goal became the VPS
+model), a first-run setup wizard, the switch faceplate page, update detection,
+and tenant access via tunnels (Pangolin/Newt — see `docs/`).
+
+What is still true below: the architecture (§2), the PVE API mapping (§4), the
+bandwidth accumulator design (§4.1), and the safety rails. Where the text below
+disagrees with `handoff.md`/`CLAUDE.md`, **the newer docs win.** The roadmap
+now: **M6 — the v0.5.0 cyberpunk design pass** (in progress), then **Phase 3 —
+real-hardware validation of the write paths** (provision/reinstall/rescue/
+destroy on scratch VMIDs ≥ 900).
 
 ## 1. Goal
 
@@ -22,22 +47,23 @@ Clone the essential UX of a commercial Proxmox VPS panel for a single-admin home
   showing utilization % (like the "6.16 / 8000 GB" card in the reference panel).
 - Fleet list page showing all VMs/LXCs on the node at a glance.
 
-Explicit non-goals (v1): multi-tenancy, billing, multiple Proxmox nodes, LXC provisioning
-(LXC start/stop/monitor is fine — they come free from the same endpoints).
+Explicit non-goals: multiple Proxmox nodes (a cluster shows just the one configured
+node), LXC provisioning (LXC list/power/console work; create does not), billing.
+Multi-user shipped: admins see the fleet, tenants are scoped to exactly one VM.
 
 ## 2. Architecture
 
 ```
-mjolnir (dev/deploy) ──git push──▶ github.com/jivsan/Hlidskjalf
-                                        │ flake input
-                                        ▼
-panel-host (NixOS VM on the Proxmox node)
+dev box ──git push──▶ github.com/jivsan/Hlidskjalf
+                            │ flake input
+                            ▼
+panel VM (NixOS, on the Proxmox node)
   ├─ hlidskjalf.service (systemd, DynamicUser)
   │    FastAPI backend ── serves built React SPA as static files
   │    │
   │    ├── REST → https://<pve-host>:8006/api2/json  (PVE API, token auth)
   │    └── WS proxy → wss://<pve-host>:8006 ... vncwebsocket  (console)
-  └─ Traefik ──▶ https://hlidskjalf.oryxserver.org  (existing *.oryxserver.org wildcard)
+  └─ reverse proxy ──▶ https://<panel-domain>  (LAN, or tunnel for tenants)
 ```
 
 - **Backend**: Python 3.12, FastAPI + uvicorn + httpx (async) + `websockets` for the VNC proxy.
@@ -49,81 +75,24 @@ panel-host (NixOS VM on the Proxmox node)
   and `nixosModules.hlidskjalf`. The dotfiles repo adds it as a flake input and enables
   the module in `hosts/panel-host/`.
 
-## 3. Manual bootstrap (done once, on the Proxmox shell / PVE UI)
+## 3. Manual bootstrap
 
-Claude Code: put these in `docs/bootstrap.md` verbatim; do not try to automate them.
+**Now handled by the in-app setup wizard** (first run, unauthenticated only until
+the first user exists) — it generates the exact `pveum` commands from the token id
+you type, including the four narrow roles and the mandatory `--privsep 0`. The
+canonical text lives in `docs/bootstrap.md` / `docs/setup.md`; the short version:
 
-### 3.1 PVE user, role scoping, API token (no root)
-
-```bash
-# On pve (Proxmox shell)
-pveum user add hlidskjalf@pve --comment "hlidskjalf panel service account"
-
-# Read-only audit of everything (stats, node info, storage listing)
-pveum aclmod / --users hlidskjalf@pve --roles PVEAuditor
-
-# Full VM lifecycle (includes VM.Allocate, VM.Clone, VM.Config.*, VM.PowerMgmt,
-# VM.Console, VM.Monitor, VM.Snapshot, VM.Audit) — scoped to /vms, NOT /
-pveum aclmod /vms --users hlidskjalf@pve --roles PVEVMAdmin
-
-# Allow allocating disk space on the storage used for VM disks + reading ISOs.
-# Adjust storage IDs to reality (check: pvesm status)
-pveum aclmod /storage/local-lvm --users hlidskjalf@pve --roles PVEDatastoreUser
-pveum aclmod /storage/local     --users hlidskjalf@pve --roles PVEDatastoreUser
-
-# PVE 8+: using a bridge from the API requires SDN.Use on that bridge
-pveum aclmod /sdn/zones/localnetwork/vmbr0 --users hlidskjalf@pve --roles PVESDNUser
-
-# Token WITH privilege separation. Privsep means the token's effective perms are
-# the INTERSECTION of user ACLs and token ACLs — so repeat the ACLs for the token:
-pveum user token add hlidskjalf@pve panel --privsep 1
-pveum aclmod /      --tokens 'hlidskjalf@pve!panel' --roles PVEAuditor
-pveum aclmod /vms   --tokens 'hlidskjalf@pve!panel' --roles PVEVMAdmin
-pveum aclmod /storage/local-lvm --tokens 'hlidskjalf@pve!panel' --roles PVEDatastoreUser
-pveum aclmod /storage/local     --tokens 'hlidskjalf@pve!panel' --roles PVESDNUser  # typo guard: use PVEDatastoreUser here
-pveum aclmod /sdn/zones/localnetwork/vmbr0 --tokens 'hlidskjalf@pve!panel' --roles PVESDNUser
-```
-
-> ⚠️ `pveum user token add` prints the secret **once**. It goes into the env file on
-> panel-host (§7), never into git.
-
-Pin the API TLS cert (self-signed) by SHA-256 fingerprint:
-
-```bash
-openssl s_client -connect <pve-host>:8006 </dev/null 2>/dev/null \
-  | openssl x509 -fingerprint -sha256 -noout
-```
-
-### 3.2 Cloud-init template (Debian 13, VMID 9000)
-
-```bash
-cd /var/lib/vz/template   # or wherever there's space
-wget https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
-
-qm create 9000 --name debian13-template --memory 2048 --cores 2 \
-  --net0 virtio,bridge=vmbr0,tag=20,firewall=0 \
-  --scsihw virtio-scsi-single --agent enabled=1 --ostype l26
-qm set 9000 --scsi0 local-lvm:0,import-from=/var/lib/vz/template/debian-13-genericcloud-amd64.qcow2
-qm set 9000 --ide2 local-lvm:cloudinit --boot order=scsi0 --serial0 socket --vga serial0
-qm template 9000
-```
-
-> ⚠️ **`firewall=0` is mandatory** on every NIC with a VLAN tag — `firewall=1`
-> silently breaks tag propagation through the firewall bridge (documented fleet-wide bug).
-> The panel must enforce `firewall=0` on every NIC it ever creates or edits. Hard rule.
-
-Optionally repeat for Ubuntu 24.04 (VMID 9001). Any VM with `template=1` is
-auto-discovered by the panel — no config needed per template.
-
-### 3.3 Rescue ISO
-
-```bash
-# Into the ISO storage ('local' by default)
-cd /var/lib/vz/template/iso
-wget https://fastly-cdn.system-rescue.org/releases/latest/systemrescue-*-amd64.iso
-```
-
-The ISO volid (e.g. `local:iso/systemrescue-12.01-amd64.iso`) goes into the panel config.
+- scoped non-root user `hlidskjalf@pve`, roles `PVEVMAdmin` on `/vms`,
+  `PVEDatastoreUser` on `/storage`, `PVEAuditor` on `/`, **`PVESDNUser` on
+  `/sdn/zones` (not optional on PVE 9)** — never `root@pam`, never `PVEAdmin`.
+- token with `--privsep 0` (privilege separation OFF — otherwise the token gets
+  its own empty ACL and can do nothing). The secret prints once → env file,
+  never git.
+- PVE TLS cert pinned by SHA-256 fingerprint (`openssl x509 -in
+  /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256`).
+- a Debian cloud-init template (any VMID with `template=1` is auto-discovered)
+  with `firewall=0` on every tagged NIC — still a hard rule below — and a
+  SystemRescue ISO on the ISO storage.
 
 ## 4. Backend spec
 
@@ -238,8 +207,9 @@ banner on any VM whose boot order targets the rescue ISO.
 ### Safety rails (non-negotiable)
 
 - `HLIDSKJALF_PROTECTED_VMIDS` (env, comma-sep): destroy/reinstall/stop/reset are **refused
-  server-side** for these. Default must include panel-host's own VMID (the panel would saw
-  off its own branch), hermes-agent, HAOS, and PBS (151). `shutdown`/`reboot` allowed.
+  server-side** for these. **The default is EMPTY — nothing is protected.** Set it to the
+  VMID of the panel's own host (and anything else precious) before first start, or an
+  admin can saw off the branch the panel sits on.
 - Destroy/reinstall require typing the exact VM name (checked server-side).
 - Every NIC write path hardcodes `firewall=0`.
 - All mutating endpoints require the session cookie + `X-Hlidskjalf-CSRF` header check.
@@ -277,26 +247,16 @@ Poll `/api/vms` every 5 s on Fleet, `status/current` every 3 s on VM page.
 Task-spawning actions poll the UPID until `stopped` and toast `OK`/`ERROR` with the
 task exit status.
 
-### Design language — Tokyo Night, not a NorwayVPS clone
+### Design language — superseded; see `docs/design/`
 
-Do not copy NorwayVPS branding/logo/layout pixel-for-pixel; take the information
-architecture, restyle it as a native Tokyo Night instrument panel.
-
-Tokens:
-- bg `#1a1b26`, surface/cards `#24283b`, borders `#2f3549`, text `#c0caf5`, muted `#565f89`
-- accents: **pink `#ff4fa3`** (primary actions, active tab underline, gauge sweep),
-  **cyan `#2de2e6`** (positive/running, chart line 1), red `#f7768e` (destructive),
-  amber `#e0af68` (rescue banner, warnings)
-- Font: `JetBrainsMono Nerd Font, JetBrains Mono, monospace` everywhere — this is a
-  terminal-native panel; the all-mono typography *is* the signature. Tabular numbers
-  for all metrics.
-- Charts: cyan→pink gradient fills at low opacity (echoes the rack-LED gradient),
-  1.5px lines, no legends when a single series, grid lines `#2f3549`.
-- Signature element: the VM header status chip renders like a systemd unit line —
-  `● vps-alpha — active (running) · 192.168.20.15 · up 4d 2h` — green/red dot,
-  mono, copy-on-click IP.
-- Radius 8px, no glassmorphism, no gradients on surfaces, restrained motion
-  (150 ms ease on tab underline and gauge sweep only).
+~~Tokyo Night, all-mono~~ is long gone. The current language is the v0.5.0
+**cyberpunk pass**: palette pink `#ff4fa3` / cyan `#2de2e6` / deep night
+`#15161f` (tokens in `frontend/tailwind.config.js`, emitted as `--c-*` CSS
+vars — the single source of truth), Archivo for the human interface and
+JetBrains Mono (`.metric`) for machine data. Glow is budgeted to live things
+only; shape comes from chamfered shards and corner brackets; animation from a
+fixed vocabulary. The spec, including the not-cringe guardrails:
+`docs/design/v0.5.0-cyberpunk.md`.
 
 ## 6. Repo layout & flake (jivsan/hlidskjalf)
 
@@ -332,7 +292,7 @@ services.hlidskjalf = {
     pveTokenId = lib.mkOption { default = "hlidskjalf@pve!panel"; };
     pveFingerprint = lib.mkOption { type = lib.types.str; };    # sha256 pin
     rescueIso = lib.mkOption { type = lib.types.str; };         # "local:iso/systemrescue-...iso"
-    protectedVmids = lib.mkOption { type = with lib.types; listOf int; default = [ 151 ]; };
+    protectedVmids = lib.mkOption { type = with lib.types; listOf int; default = [ ]; };
     bandwidthQuotas = lib.mkOption {
       type = with lib.types; attrsOf int;   # vmid (as string) -> GB per month, display-only
       default = { };
@@ -363,32 +323,12 @@ HLIDSKJALF_SESSION_SECRET=<openssl rand -hex 32>
 (Generate hash: `nix run nixpkgs#python312 -- -c "..."` or `echo -n 'pw' | argon2 ...` —
 document exact command in bootstrap.md.)
 
-### Traefik wiring (panel-host already runs Traefik + wildcard cert)
+### Reverse proxy + exposure
 
-Add to panel-host's Traefik dynamic config in the dotfiles repo:
-
-```nix
-services.traefik.dynamicConfigOptions.http = {
-  routers.hlidskjalf = {
-    rule = "Host(`hlidskjalf.oryxserver.org`)";
-    entryPoints = [ "websecure" ];
-    service = "hlidskjalf";
-    tls.certResolver = "cloudflare";
-  };
-  services.hlidskjalf.loadBalancer.servers = [ { url = "http://127.0.0.1:8787"; } ];
-};
-```
-
-WebSockets pass through Traefik untouched — no extra config needed for the console.
-DNS: `hlidskjalf.oryxserver.org` → 192.168.20.17 (match however grafana.oryxserver.org is done).
-LAN-only exposure is assumed; do not add a public ingress.
-
-### Dotfiles integration (Claude Code, in nixos-dotfiles repo)
-
-1. `flake.nix`: input `hlidskjalf.url = "github:jivsan/Hlidskjalf";`
-2. New `hosts/panel-host/modules/services/hlidskjalf.nix` importing the module + options above.
-3. Deploy per house style: edit on mjolnir → push → pull on panel-host →
-   `nixos-rebuild switch --flake`. Never hand-edit on the VM.
+Any reverse proxy that passes WebSockets works (no special config — the console
+is a plain WS upgrade). LAN-only by default; tenants reach the panel through a
+tunnel (see `docs/public-access.md` and `docs/newt-pangolin-tunnel.md`) with
+`admin_networks` pinning admin functions to the LAN.
 
 ## 8. Phase 2 (later): Prometheus datasource
 
@@ -400,39 +340,21 @@ graphs (rrddata month granularity is coarse). The `MetricsSource` protocol from 
 one makes this a drop-in: config flag `HLIDSKJALF_METRICS_SOURCE=rrd|prometheus`.
 Grafana dashboards remain the deep-dive tool; the panel is the control surface.
 
-## 9. Milestones for Claude Code
+## 9. Milestones — M0–M5 shipped; this is the roadmap now
 
-- **M0 — Skeleton**: repo, flake, devShell, FastAPI hello + Vite app served, login flow,
-  NixOS module builds in a `nix flake check` VM test.
-- **M1 — Read-only**: PVE client with fingerprint pinning, Fleet page, VM overview
-  (status, config, agent IPs), rrddata graphs with timeframe picker, node page,
-  **bandwidth accumulator + sqlite + Bandwidth Statistics tab** (accumulator is
-  read-only against PVE, so it belongs here — the sooner it starts, the sooner
-  history exists). *Acceptance: panel on panel-host shows live data for all pve VMs;
-  after 24 h uptime, daily bandwidth rows exist for every running VM and survive a
-  `systemctl restart hlidskjalf` without double-counting; a mid-day VM reboot does not
-  produce a negative or absurd delta; token has never been root; nothing mutates.*
-- **M2 — Power + console**: start/shutdown/reboot/stop with UPID polling and toasts;
-  noVNC console via WS proxy. *Acceptance: full power-cycle of a scratch VM and an
-  interactive console session through hlidskjalf.oryxserver.org.*
-- **M3 — Provision + destroy**: template discovery, create form, clone flow with
-  cloud-init + VLAN + `firewall=0` enforcement, destroy with name confirmation,
-  protected-VMID guard, tasks log tab. *Acceptance: create a scratch Debian VM on
-  VLAN 20 with static IP entirely from the panel, SSH into it, destroy it.*
-- **M4 — Rescue + reinstall**: ISO rescue enter/exit with banner; reinstall preserving
-  VMID/MAC/IP. *Acceptance: scratch VM rescued into SystemRescue and back; reinstall
-  returns it to a fresh template state with the same IP.*
-- **M5 — Polish**: Tokyo Night pass per §5, empty/error states, mobile-usable fleet
-  page, README with screenshots.
-
-Test everything against **scratch VMIDs ≥ 900** only. Never run destructive actions
-against panel-host, hermes-agent, HAOS, or PBS (151) during development.
-
-## 10. Open items to confirm before/while M1 lands
-
-- [ ] Actual storage IDs on the node for VM disks + ISOs (§3.1 assumes `local-lvm` / `local`).
-- [ ] panel-host's, hermes-agent's, and HAOS's VMIDs → `protectedVmids`.
-- [ ] Preferred subdomain (`hlidskjalf.oryxserver.org` assumed).
+- **M0–M5 — done.** Skeleton, read-only surface, power + console, provision +
+  destroy, rescue + reinstall, and the first design pass all shipped and were
+  validated read-only against real hardware (PVE 9.2.3, 2026-07-13). See
+  `CHANGELOG.md` and `handoff.md`.
+- **M6 — cyberpunk pass (v0.5.0, in progress)**: single source of truth for
+  color (done), ambient scene, shard/glow language, signature surfaces, charts
+  polish. Spec: `docs/design/v0.5.0-cyberpunk.md`.
+- **Phase 3 — write-path validation (next)**: provision / reinstall / rescue /
+  destroy against a real node, **scratch VMIDs ≥ 900 only**, with
+  `HLIDSKJALF_PROTECTED_VMIDS` set before the panel ever starts. The mock suite
+  being green means self-consistent, not correct — see CLAUDE.md for the
+  assumptions most likely to be wrong (`scsi0` hardcoding, LXC destroy params,
+  MAC/IP preservation, accumulator edge cases, cluster-vs-single-node).
 - [ ] Secrets mechanism on panel-host today (plain root-owned env file vs sops/agenix).
 - [ ] VLAN 30 gateway (storage VLAN may be gateway-less — provisioning form should
       allow empty gateway).
