@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3-alpha] - 2026-07-17
+
+### Added — cyberpunk round three (motion, with the pins to match)
+- **Console warm-up**: both consoles (noVNC + xterm) settle in with a one-shot
+  CRT-style screen-on when the connection lands, and the console frame wears
+  always-on corner brackets — it's a signature surface. (#85)
+- **Tasks & logs motion**: task rows enter with a one-shot fade/settle (gated by
+  UPID, so poll re-renders never replay), and running tasks get the live `dot-bloom`
+  LED. (#85)
+- **Route settle**: page content settles in once per navigation (180ms,
+  opacity + 2px, keyed on the path — same-path re-renders never replay). (#84)
+- **Instrument bars**: progress bars are transform-only now (`scaleX`) with a
+  one-shot draw-in on first mount; the Switch page's top talkers each gain a
+  scaleX rate bar easing to each new reading; the provision deploy button ignites
+  once the first time the form goes valid. (#84)
+- All of it fires once and settles, all of it dies under `prefers-reduced-motion`.
+
+### Security — anti-clickjacking pinned, phishing posture documented
+- The transport headers that make a credential phish impossible by construction
+  (`frame-ancestors 'none'` / `X-Frame-Options: DENY`, the strict single-origin
+  CSP, nosniff, no-referrer, `no-store` on `/api/`, HSTS only over TLS) had **no
+  test coverage** — three tests now pin them on an API route and the SPA path,
+  so a stray middleware edit cannot drop them silently. (#83)
+- `docs/public-access.md` §7 documents the anti-phishing posture: clickjacking
+  closed by construction, the panel never sends messages (any "reset" mail is
+  fake by definition), ~36 unverifiable guesses/hour, sessions bound to the
+  password epoch and revocable, and admin that only exists inside
+  `admin_networks`. (#83)
 
 ## [0.5.2-alpha] - 2026-07-17
 

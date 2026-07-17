@@ -1,6 +1,17 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.2-alpha — the security release**; PRs #74–#82, 352 tests)._
+_Last updated: 2026-07-17 (**v0.5.3-alpha — cyberpunk round three**; PRs #83–#86, 355 tests)._
+
+## ✅ v0.5.3-alpha — CYBERPUNK ROUND THREE
+
+Motion with the pins to match, all screenshot-verified against the mock stack:
+console CRT warm-up + frame brackets and tasks-row motion with a running-task
+bloom (#85); 180ms route settle, transform-only instrument bars with draw-in,
+Switch rate bars, provision deploy ignite (#84). Underneath: the anti-clickjacking
+headers (frame-ancestors/CSP/nosniff/no-store/HSTS) pinned by three new tests so
+they can never silently regress, and `docs/public-access.md` §7 — the
+anti-phishing posture, written down (#83). Every animation fires once and
+settles; `prefers-reduced-motion` kills all of it.
 
 ## 🔒 Security hardening on top of v0.5.1 (from the adversarial audit)
 
