@@ -88,10 +88,8 @@ export function StatusDot({ status }: { status: string }) {
   const live = status === "running";
   return (
     <span className="relative inline-flex" title={status} aria-label={status}>
-      <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
-      {live && (
-        <span className="absolute inset-0 rounded-full bg-cyan/60 animate-ping" aria-hidden="true" />
-      )}
+      {/* a live dot is an LED: it blooms (dot-bloom), it does not ping */}
+      <span className={`inline-block w-2 h-2 rounded-full ${color} ${live ? "dot-bloom" : ""}`} />
     </span>
   );
 }
@@ -136,7 +134,7 @@ export function ProgressBar({
 export function KindBadge({ kind }: { kind: string }) {
   if (kind !== "lxc") return null;
   return (
-    <span className="text-[10px] uppercase tracking-wider border border-border-token rounded px-1 py-px text-muted align-middle">
+    <span className="text-[10px] uppercase tracking-wider shard-sm bg-surface-2/70 px-1.5 py-px text-muted align-middle">
       lxc
     </span>
   );
