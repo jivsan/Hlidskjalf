@@ -123,7 +123,11 @@ export function Layout({ currentUser, onLogout }: { currentUser: CurrentUser; on
       <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-border-token min-h-screen p-3 sticky top-0 h-screen bg-surface/25">
         {/* Identity */}
         <div className="reveal px-2 pt-2 pb-4" style={{ ["--step" as string]: 0 }}>
-          <Wordmark className="text-[22px]" />
+          {/* Only the sign ignites (its own entrance) — the hairline and node
+              chip keep the plain reveal from the parent. */}
+          <div className="neon-ignite">
+            <Wordmark className="text-[22px]" />
+          </div>
           <div className="hairline my-3" />
           <div className="flex items-center justify-between gap-2">
             <span className="eyebrow">high seat</span>

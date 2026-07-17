@@ -201,7 +201,7 @@ function ProvisioningTab() {
         </div>
       )}
 
-      <form onSubmit={submit} className="card p-5 space-y-6">
+      <form onSubmit={submit} className="card card-brackets-hover p-5 space-y-6">
         <div className="eyebrow">provisioning</div>
         <p className="text-muted text-sm">
           What the provision form offers a new VM: which networks it may join, where its
