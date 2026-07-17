@@ -323,7 +323,12 @@ export function Gauge({
             strokeWidth="7"
             strokeDasharray={`${dash} ${c}`}
             strokeLinecap="round"
-            style={{ transition: "stroke-dasharray 150ms ease, stroke 150ms ease" }}
+            // The arc is a live reading — it carries the same faint neon bloom
+            // as MetricAreaChart's main line, in its own threshold color.
+            style={{
+              transition: "stroke-dasharray 150ms ease, stroke 150ms ease",
+              filter: `drop-shadow(0 0 3px color-mix(in srgb, ${color} 55%, transparent))`,
+            }}
           />
         </g>
         <text
