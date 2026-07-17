@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **A deleted env-seeded admin's sessions die with the account**: the session
+  epoch check and the user lookup both fell back to `HLIDSKJALF_ADMIN_PASSWORD_HASH`
+  / `admin_user` *unconditionally* when the session's username had no DB row, so
+  deleting the bootstrap admin left every session issued to them valid
+  (role=admin) for the rest of its 12h life. The env-hash fallback is now gated
+  on an empty users table — the same condition the login path already required.
+- **The startup config-shadow warning no longer logs secret values**: when the
+  environment overrode a wizard-saved `session_secret`, the warning printed both
+  the env value and the stored value in plaintext — the key that signs every
+  session cookie, in the log file. Values on the secret key list are redacted;
+  the warning still names the shadowed keys and shows non-secret values.
+- **The out-of-zone admin login refusal is no longer a credential oracle**:
+  login verified the password first and then answered a distinct 403 for a
+  *valid* admin credential arriving from outside `admin_networks`, confirming
+  the password to anyone on the internet (wrong passwords got 401). The client
+  now gets the same generic 401 either way; the refusal is logged and audited
+  server-side with the real reason.
+- **`/api/session` enforces the admin-zone boundary**: the liveness endpoint the
+  SPA trusts (it returns role + a CSRF token) went through `require_session_full`,
+  which skipped `deny_admin_outside_zone`, so an admin cookie from the internet
+  looked alive there while every real route refused it. `/api/logout` stays
+  zone-free on purpose — revocation can only reduce access.
 - **Console ticket mint is rate-limited**: `GET /api/vms/{vmid}/console` was the
   one PVE-hitting verb the v0.3.6 hardening pass missed — every call is a
   vncproxy/termproxy POST against Proxmox, so a tenant looping it was looping

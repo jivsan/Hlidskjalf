@@ -80,6 +80,46 @@ def test_logging_out_one_session_leaves_the_others_alone(client):
     assert client.get("/api/session").status_code == 200  # still alive
 
 
+def test_deleting_the_env_seeded_admin_kills_their_sessions(client, user_factory):
+    """Deleting a user must kill their sessions. For the env-seeded bootstrap
+    admin this did not hold: the session-epoch check fell back to the env
+    HLIDSKJALF_ADMIN_PASSWORD_HASH *unconditionally* when the username had no DB
+    row, so a session issued before the delete kept validating (role=admin) for
+    the rest of its 12h life. The fallback is for first bootstrap only — once
+    any user row exists, a deleted account is simply gone."""
+    # A second admin first: the last-admin guard (correctly) refuses otherwise.
+    assert (
+        user_factory("admin-deputy", password="deputypass1", role="admin").status_code
+        == 201
+    )
+    try:
+        login(client)  # a session for the env-seeded bootstrap admin
+        issued = dict(client.cookies)
+        assert client.get("/api/session").status_code == 200
+
+        # The deputy deletes the bootstrap admin.
+        login(client, "admin-deputy", "deputypass1")
+        r = client.delete(f"/api/users/{ADMIN_USER}", headers=csrf_headers(client))
+        assert r.status_code == 200, r.text
+
+        # Replay the pre-deletion cookie, exactly as a thief would.
+        client.cookies.clear()
+        for k, v in issued.items():
+            client.cookies.set(k, v)
+        assert client.get("/api/session").status_code == 401
+        assert client.get("/api/vms").status_code == 401
+    finally:
+        # Restore the bootstrap admin (same username + password), or every later
+        # test in this session-scoped suite loses its login.
+        login(client, "admin-deputy", "deputypass1")
+        r = client.post(
+            "/api/users",
+            json={"username": ADMIN_USER, "password": ADMIN_PASSWORD, "role": "admin"},
+            headers=csrf_headers(client),
+        )
+        assert r.status_code in (201, 409), r.text
+
+
 # --- CSRF rotates with the password ------------------------------------------
 
 

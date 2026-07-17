@@ -164,8 +164,81 @@ def test_legacy_admin_disabled_when_users_exist(anon, monkeypatch):
     assert r.status_code == 401
 
 
-# --- Fix 5: per-IP login rate limit -----------------------------------------
+# --- Finding: the startup shadow warning must not log secret values ----------
 
+
+def test_shadowed_config_warning_never_logs_secret_values(client, monkeypatch, caplog):
+    """The "environment overrides the wizard" startup warning must name the KEY
+    that is shadowed — never print the VALUE of a secret. It used to log both
+    the env value and the stored value of session_secret in plaintext: the key
+    that signs every session cookie, sitting in the log file.
+
+    Boots a real app (lifespan and all) against a fresh state dir whose stored
+    config the environment shadows: a session secret (the secret under test)
+    and a node name (a non-secret, whose value must still be shown — the
+    warning has to stay useful).
+    """
+    import asyncio
+    import importlib
+    import logging
+    import tempfile
+
+    ENV_SECRET = "0123456789abcdef" * 4  # what conftest's env sets
+    STORED_SECRET = "stored-session-secret-must-not-appear"
+
+    state = tempfile.mkdtemp(prefix="hlidskjalf-shadow-test-")
+    monkeypatch.setenv("HLIDSKJALF_STATE_DIR", state)
+    monkeypatch.setenv("HLIDSKJALF_PVE_HOST", "")  # unconfigured: no PVE stack to wait on
+
+    from hlidskjalf import config
+
+    config.get_settings.cache_clear()
+
+    # Seed the stored (encrypted-at-rest) config BEFORE the app boots, exactly
+    # as the setup wizard would have written it.
+    from hlidskjalf.db import Db
+
+    async def _seed():
+        settings = config.get_settings()
+        db = Db(settings.db_path)
+        await db.open()
+        await db.set_config(
+            config.seal(
+                {"session_secret": STORED_SECRET, "pve_node": "stored-node-name"},
+                settings,
+            )
+        )
+        await db.close()
+
+    asyncio.run(_seed())
+
+    import hlidskjalf.main as main_mod
+
+    importlib.reload(main_mod)
+    try:
+        from fastapi.testclient import TestClient
+
+        with caplog.at_level(logging.WARNING):
+            with TestClient(main_mod.app):
+                pass  # the lifespan boot IS the act under test
+    finally:
+        # Restore the real environment FIRST, then rebuild against it — leaving
+        # the settings cache pointing at this temp dir would poison later tests.
+        monkeypatch.undo()
+        config.get_settings.cache_clear()
+        importlib.reload(main_mod)
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    joined = "\n".join(messages)
+    assert STORED_SECRET not in joined, "the stored session secret reached the logs"
+    assert ENV_SECRET not in joined, "the environment session secret reached the logs"
+    # ...but the warning still fires and names the shadowed key...
+    assert any("session_secret" in m for m in messages), "the shadow warning vanished"
+    # ...and non-secret values are still shown (the warning stays useful).
+    assert any("stored-node-name" in m for m in messages)
+
+
+# --- Fix 5: per-IP login rate limit -----------------------------------------
 
 def test_login_rate_limit_is_per_ip():
     from hlidskjalf import auth

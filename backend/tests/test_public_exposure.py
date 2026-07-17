@@ -183,15 +183,71 @@ def test_non_ip_entries_in_the_chain_cannot_break_the_walk():
 # --- 2. admin cannot log in from outside -------------------------------------
 
 
-def test_admin_login_is_refused_from_the_public_internet(anon, exposed):
+def test_admin_login_is_refused_from_the_public_internet(anon, exposed, caplog):
+    """Refused — and the refusal is INDISTINGUISHABLE from a wrong password.
+    A distinct 403 here answered "was that the right password?" for anyone on
+    the internet: verify guesses until the 403 becomes a session. The client
+    gets the generic 401; the real reason goes to the server log + audit trail,
+    where an operator (not an attacker) reads it."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="hlidskjalf"):
+        r = anon.post(
+            "/api/login",
+            json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+            headers=_as(anon, OUTSIDE),
+        )
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Bad username or password"
+    assert not r.cookies  # and no session was issued
+    # The refusal is NOT silent — it is logged server-side, with the username.
+    assert any(
+        "outside the admin networks" in rec.getMessage() and ADMIN_USER in rec.getMessage()
+        for rec in caplog.records
+    ), "the zone refusal vanished without a server-side trace"
+
+
+def test_the_zone_refusal_is_identical_to_a_wrong_password(anon, exposed):
+    """The oracle, directly: a VALID admin credential from outside must get the
+    same answer as an INVALID one — same status, same body."""
+    good = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers=_as(anon, OUTSIDE),
+    )
+    bad = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": "not-the-password"},
+        headers=_as(anon, OUTSIDE),
+    )
+    assert good.status_code == bad.status_code == 401
+    assert good.json() == bad.json()
+
+
+def test_the_zone_refusal_is_still_audited(anon, exposed):
+    """Refusals must remain in the durable audit trail with the real reason —
+    hiding the 403 from the attacker must not hide it from the operator."""
     r = anon.post(
         "/api/login",
         json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
         headers=_as(anon, OUTSIDE),
     )
-    assert r.status_code == 403
-    assert "local network" in r.json()["detail"]
-    assert not r.cookies  # and no session was issued
+    assert r.status_code == 401
+    # Sign in from INSIDE to read the audit log back.
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers=_as(anon, INSIDE),
+    )
+    assert r.status_code == 200, r.text
+    audit = anon.get(
+        "/api/debug/audit",
+        params={"action": "auth.login_failed"},
+        headers=_as(anon, INSIDE),
+    ).json()
+    assert any(
+        "outside the admin networks" in (e.get("detail") or "") for e in audit
+    ), "the out-of-zone admin login attempt was not audited"
 
 
 def test_spoofed_cf_connecting_ip_does_not_grant_admin(anon, exposed):
@@ -203,7 +259,7 @@ def test_spoofed_cf_connecting_ip_does_not_grant_admin(anon, exposed):
         json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
         headers={"X-Forwarded-For": OUTSIDE, "CF-Connecting-IP": INSIDE},
     )
-    assert r.status_code == 403, "spoofed CF-Connecting-IP was believed; admin login allowed from outside"
+    assert r.status_code == 401, "spoofed CF-Connecting-IP was believed; admin login allowed from outside"
     assert not r.cookies
 
 
@@ -217,7 +273,10 @@ def test_a_spoofed_first_xff_line_does_not_grant_admin(anon, exposed):
         json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
         headers=[("X-Forwarded-For", INSIDE), ("X-Forwarded-For", OUTSIDE)],
     )
-    assert r.status_code == 403, "a spoofed first XFF line was believed; admin login allowed from outside"
+    assert r.status_code == 401, (
+        "a spoofed first XFF line was believed; admin login allowed from outside "
+        "(401 since the login oracle fix — out-of-zone refusals are indistinguishable from a bad password)"
+    )
     assert not r.cookies
 
 
@@ -309,6 +368,44 @@ def test_mutations_are_refused_from_outside(anon, exposed):
         headers={**csrf_headers(auth_client), **_as(auth_client, OUTSIDE)},
     )
     assert r.status_code == 403
+
+
+def test_the_session_check_itself_refuses_an_out_of_zone_admin(anon, exposed):
+    """/api/session is the liveness endpoint the SPA trusts, and it hands back
+    role + a CSRF token. It used to skip the zone boundary (require_session_full
+    has no deny_admin_outside_zone), so an admin cookie from the internet looked
+    alive there while every real route refused it."""
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers=_as(anon, INSIDE),
+    )
+    assert r.status_code == 200, r.text
+    assert anon.get("/api/session", headers=_as(anon, INSIDE)).status_code == 200
+
+    r = anon.get("/api/session", headers=_as(anon, OUTSIDE))
+    assert r.status_code == 403, (
+        "an admin cookie from the internet passed the session liveness check"
+    )
+
+
+def test_the_session_check_still_works_for_a_tenant_from_anywhere(auth_client, anon, exposed):
+    """Only admin is zoned. A tenant's /api/session must answer from anywhere —
+    that is the whole point of exposing the panel."""
+    r = auth_client.post(
+        "/api/users",
+        json={"username": "roamer", "password": "roamer-pass1", "role": "user"},
+        headers={**csrf_headers(auth_client), **_as(auth_client, INSIDE)},
+    )
+    assert r.status_code in (201, 409), r.text
+    anon.cookies.clear()
+    r = anon.post(
+        "/api/login",
+        json={"username": "roamer", "password": "roamer-pass1"},
+        headers=_as(anon, OUTSIDE),
+    )
+    assert r.status_code == 200, r.text
+    assert anon.get("/api/session", headers=_as(anon, OUTSIDE)).status_code == 200
 
 
 def test_nothing_changes_for_a_panel_that_is_not_exposed(auth_client):
