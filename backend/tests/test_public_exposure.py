@@ -273,7 +273,10 @@ def test_a_spoofed_first_xff_line_does_not_grant_admin(anon, exposed):
         json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
         headers=[("X-Forwarded-For", INSIDE), ("X-Forwarded-For", OUTSIDE)],
     )
-    assert r.status_code == 403, "a spoofed first XFF line was believed; admin login allowed from outside"
+    assert r.status_code == 401, (
+        "a spoofed first XFF line was believed; admin login allowed from outside "
+        "(401 since the login oracle fix — out-of-zone refusals are indistinguishable from a bad password)"
+    )
     assert not r.cookies
 
 
