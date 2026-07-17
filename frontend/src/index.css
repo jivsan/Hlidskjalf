@@ -399,6 +399,52 @@
   50% { opacity: 0; }
 }
 
+/* page-settle: each navigation's content settles into place ONCE — a short
+   opacity + 2px drift, a settle rather than a slide show. Layout keys the
+   wrapper on location.pathname so it replays per navigation but never on a
+   same-path re-render. The final frame is transform:none, so fixed-position
+   descendants (dialogs) are unaffected once it lands. */
+.page-settle {
+  animation: page-settle 180ms ease-out both;
+}
+@keyframes page-settle {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Instrument bars (ProgressBar): the fill is full-width and scales on X —
+   transform-only, so a poll never touches layout. bar-draw grows it from
+   empty once on mount (the keyframe's implicit target tracks the live
+   scaleX), then the transition eases it to each new reading like a needle. */
+.bar-fill {
+  transform-origin: left center;
+  transition: transform 400ms ease;
+  animation: bar-draw 400ms ease;
+}
+@keyframes bar-draw {
+  from { transform: scaleX(0); }
+}
+
+/* rate-bar: top-talker bars ease to each new reading (transform-only). */
+.rate-bar {
+  transform-origin: left center;
+  transition: transform 400ms ease;
+}
+
+/* ignite-once: a primary action catches light the moment it first becomes
+   usable — one breath of its accent glow following the clipped silhouette,
+   then it settles back to the shard. The page applies the class once and
+   never re-arms it. No forwards fill, so the hover/focus drop-shadow still
+   wins after the breath. Accent overridable via --ignite-accent. */
+.ignite-once {
+  animation: ignite-once 620ms ease-in-out 1;
+}
+@keyframes ignite-once {
+  0%   { filter: none; }
+  35%  { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--ignite-accent, var(--c-pink)) 75%, transparent)); }
+  100% { filter: none; }
+}
+
 /* Flux-panel inspired: cleaner modern cards, subtle depth, professional cyberpunk (less neon/glow) */
 .rack-bezel {
   background: linear-gradient(160deg, #2c3146 0%, #1f2436 100%);
@@ -972,8 +1018,17 @@
   .power-on,
   .neon-ignite,
   .boot-cursor,
-  .toast {
+  .toast,
+  .page-settle,
+  .ignite-once {
     animation: none;
+  }
+  .bar-fill {
+    animation: none;
+    transition-duration: 0.01ms;
+  }
+  .rate-bar {
+    transition-duration: 0.01ms;
   }
   .dot-bloom {
     animation: none;
