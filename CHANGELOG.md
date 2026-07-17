@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4-alpha] - 2026-07-17
+
+### Added — cyberpunk round four (the chart core)
+- **Live-edge pulse dot**: the last real point of every area chart and sparkline
+  wears a small dot breathing the fleet's `dot-bloom` LED in its own series color
+  (an HTML span in a `foreignObject` — box-shadow is HTML-only — oversized so the
+  bloom never clips, pointer-events off so the tooltip keeps hover). Null tails
+  are handled by scanning back for the last point with a value. (#88)
+- **Gradient depth**: area fills go from two stops to three (0.32 at the stroke →
+  0.10 by 55% → 0.02) — light falling off a signal, not a flat wash. Shared
+  `AreaGradient` across both charts. (#88)
+- **Tooltip shard**: chart tooltips drop the card chrome for the chamfered shard
+  cut with a 3px left accent strip in the first series' color, threaded inline as
+  `--tooltip-accent` (the `.toast` pattern). (#88)
+- **Cursor glow + gauge entrance**: the hover crossline is cyan at 50% with a 1px
+  soft glow; gauges sweep in from empty on the first real reading while the center
+  percentage counts up with it (one 600ms rAF ease-out, then the 150ms transition
+  takes over). `prefers-reduced-motion` freezes the blooms and renders the gauge
+  instantly. (#88)
+- **Hover reticles on the instrument cards**: every gauge/chart/storage/sparkline
+  card on the VM Graphs tabs, the Node page, and the VM Overview gains the
+  hover-reveal `card-brackets-hover` corner ticks — markup only, identical at
+  rest; always-on brackets stay reserved for login / VM header / setup / console.
+  (#87)
+
+### Fixed
+- Removed a stray `<<<<<<< HEAD` merge-artifact line that had been committed in
+  `index.css`. (#88)
+
 ## [0.5.3-alpha] - 2026-07-17
 
 ### Added — cyberpunk round three (motion, with the pins to match)

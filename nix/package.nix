@@ -14,7 +14,7 @@
 }:
 
 let
-  version = "0.5.3-alpha";
+  version = "0.5.4-alpha";
 
   frontend = buildNpmPackage {
     pname = "hlidskjalf-frontend";
@@ -25,7 +25,7 @@ let
     #   nix build .#hlidskjalf 2>&1 | grep 'got:'
     # or, without a full build:
     #   nix run nixpkgs#prefetch-npm-deps -- frontend/package-lock.json
-    npmDepsHash = "sha256-k1NZG3Q5BgwuxmTz/Tc9i515FZwLN7mheCXMN8NLIQI=";
+    npmDepsHash = "sha256-ri0EtSOtZpJXIM7QqB+C1czoeIe6igso7j1je798vvk=";
 
     installPhase = ''
       runHook preInstall

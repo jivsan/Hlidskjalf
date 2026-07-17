@@ -1,7 +1,7 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> **v0.5.3-alpha** · internet-facing (tenants) with admin on the tailnet, on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
+> **v0.5.4-alpha** · internet-facing (tenants) with admin on the tailnet, on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
 
 A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live graphs,
 per-VM bandwidth accounting with monthly charts and quotas, provisioning from cloud-init
