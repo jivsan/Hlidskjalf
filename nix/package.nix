@@ -25,7 +25,7 @@ let
     #   nix build .#hlidskjalf 2>&1 | grep 'got:'
     # or, without a full build:
     #   nix run nixpkgs#prefetch-npm-deps -- frontend/package-lock.json
-    npmDepsHash = "sha256-aYUp1+q4LnayquAhPeyc0mXzlXCcuh6YeIvdsXCWrDM=";
+    npmDepsHash = "sha256-jZZHA1yg8YS1nDPQAOs1fiuSb6WL121+cO1TZ/AxF0I=";
 
     installPhase = ''
       runHook preInstall
