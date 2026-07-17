@@ -85,14 +85,32 @@ def client_ip(request: Request | None, trusted_proxies: list[str], trust_cf: boo
         if cf and _ip(cf):
             return cf.strip()
 
-    xff = request.headers.get(_XFF_HEADER)
-    if xff:
-        # "client, proxy1, proxy2" — walk from the right, skipping proxies we trust,
-        # and take the first address that is not one of ours. Taking the leftmost
-        # entry instead would let a client prepend a forged address.
-        for hop in reversed([h.strip() for h in xff.split(",") if h.strip()]):
-            if _ip(hop) and not in_networks(hop, trusted_proxies):
-                return hop
+    # A header field may arrive as SEVERAL lines (RFC 7230 §3.2.2), and for a
+    # list-valued field like XFF the message is semantically ONE comma-list: the
+    # lines concatenated in arrival order. getlist() preserves that wire order,
+    # and proxies APPEND — a proxy can only add its word after whatever the client
+    # already sent, never before it — so the concatenation of every line, in
+    # order, is the real chain: client claims on the left, the last proxy's word
+    # on the right. Reading only the first line (headers.get) let a client put a
+    # spoofed admin-zone address on line 1 with the honest chain on line 2, and
+    # be believed.
+    #
+    # "client, proxy1, proxy2" — walk from the right, skipping proxies we trust,
+    # and take the first address that is not one of ours. Taking the leftmost
+    # entry instead would let a client prepend a forged address. Because every
+    # trusted proxy's append lands to the RIGHT of all client-supplied values,
+    # this walk always stops at or before the outermost trusted proxy's word for
+    # the real client — a client-supplied entry can never be resolved while a
+    # trusted proxy is in front.
+    hops = [
+        h.strip()
+        for line in request.headers.getlist(_XFF_HEADER)
+        for h in line.split(",")
+        if h.strip()
+    ]
+    for hop in reversed(hops):
+        if _ip(hop) and not in_networks(hop, trusted_proxies):
+            return hop
     return peer
 
 

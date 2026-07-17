@@ -1,10 +1,31 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.1-alpha**; PRs #74–#76 + release PR, 325 tests)._
+_Last updated: 2026-07-17 (**v0.5.1-alpha**; PRs #74–#79 + release PR, 332 tests)._
+
+## 🔒 Security hardening on top of v0.5.1 (from the adversarial audit)
+
+A 7-dimension security audit (auth, per-VM authz, exposure/netzone, secrets,
+pangolin, injection, XSS) ran over the internet-facing deployment model — 22 raw
+findings, 17 confirmed after adversarial verification, each fixed with a
+regression test that was proven RED against the old code first:
+
+- **Duplicate `X-Forwarded-For` lines could forge the admin zone (HIGH, #79):**
+  `netzone.client_ip()` read only the FIRST XFF header line. HTTP allows duplicate
+  lines for list-valued headers (RFC 7230 §3.2.2), so a client behind the trusted
+  proxy could put a spoofed admin-zone address on line 1 and the honest chain on
+  line 2 — and be believed. That is the admin boundary itself. Fixed: read ALL
+  lines (`getlist`, wire order = append order = chain order), concatenate, same
+  right-to-left walk. Unit + end-to-end spoof tests, a legit two-hop admin login,
+  and degenerate-line cases; the `_Req` mock now uses Starlette's real `Headers`
+  (a plain dict cannot hold duplicate lines, so the attack was untestable before).
+- **Console ticket mint rate-limited + audit log actually pruned (#78).**
+- Remaining confirmed findings (env-seeded admin session revocation, session
+  secret in startup log, login oracle, unbounded failure map, /api/session zone
+  check, pangolin lifecycle) land in their own PRs — see below.
 
 ## ✅ v0.5.1-alpha — ITERATION ROUND TWO + PHASE 3 DRIVER
 
-- **Design polish, round two** (agent-built, screenshot-verified): toast shards with
+- **Design polish, round two** (screenshot-verified): toast shards with
   kind-colored accent edges, the hazard-striped RESCUE banner, glowing gauge arcs
   (#74); fleet row hover tick, masthead ignite-on-load, setup wizard + users +
   settings corner brackets (#76).
@@ -12,11 +33,10 @@ _Last updated: 2026-07-17 (**v0.5.1-alpha**; PRs #74–#76 + release PR, 325 tes
   sequence (provision → console ticket → rescue in/out → reinstall → destroy) against
   a real panel's API on a scratch VMID ≥ 900, with per-step PASS/FAIL and a `finally`
   cleanup. Provisioning itself is already proven on real hardware (an operator-driven
-  provision succeeded); rescue/reinstall/destroy are what the driver still has to
-  formally PASS on the real host.
-- A 7-dimension adversarial security audit (auth, per-VM authz, exposure/netzone,
-  secrets, pangolin, injection, XSS) ran over the internet-facing deployment model;
-  any confirmed findings land as fixes on top of this release.
+  provision succeeded, and the driver PASSed provision + cleanup-destroy against the
+  production panel); rescue/reinstall/destroy are what the driver still has to
+  formally PASS on the real host — blocked on `HLIDSKJALF_RESCUE_ISO` being unset
+  in the deployment (set `settings.rescueIso` in the NixOS module and re-run).
 
 ## ✅ v0.5.0-alpha — FULL SEND, NOT CRINGE
 
