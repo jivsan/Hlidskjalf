@@ -29,7 +29,7 @@
       rgba(0, 0, 0, 0.85) 0 1px,
       transparent 1px 3px
     );
-    opacity: 0.035;
+    opacity: 0.05;
   }
   h1, h2, h3, h4 {
     @apply font-display;
@@ -81,19 +81,19 @@
   left: -30%;
   right: -30%;
   bottom: 0;
-  height: 58%;
+  height: 62%;
   background-image:
     repeating-linear-gradient(90deg, var(--c-cyan) 0 1px, transparent 1px 56px),
     repeating-linear-gradient(0deg, var(--c-cyan) 0 1px, transparent 1px 44px);
-  opacity: 0.05;
+  opacity: 0.09;
   transform-origin: 50% 100%;
   animation: grid-drift 60s linear infinite;
-  -webkit-mask-image: linear-gradient(to top, black 25%, transparent 85%);
-  mask-image: linear-gradient(to top, black 25%, transparent 85%);
+  -webkit-mask-image: linear-gradient(to top, black 35%, transparent 92%);
+  mask-image: linear-gradient(to top, black 35%, transparent 92%);
 }
 @keyframes grid-drift {
-  from { transform: perspective(700px) rotateX(62deg) translateY(0); }
-  to   { transform: perspective(700px) rotateX(62deg) translateY(44px); }
+  from { transform: perspective(700px) rotateX(55deg) translateY(0); }
+  to   { transform: perspective(700px) rotateX(55deg) translateY(44px); }
 }
 
 /* 3. Vignette — gentle corner darkening; pulls the eye to the work. Static. */
