@@ -23,12 +23,13 @@ from conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_headers
 from pydantic import ValidationError
 
 from hlidskjalf.config import Settings, get_settings
-from hlidskjalf.netzone import client_ip, in_networks
+from hlidskjalf.netzone import client_ip, in_networks, is_admin_zone
 
 TAILNET = "100.64.0.0/10"
 INSIDE = "100.101.102.103"     # a tailnet address
 OUTSIDE = "203.0.113.7"        # somewhere on the internet
 PROXY = "127.0.0.1"            # traefik / cloudflared, same host
+PROXY2 = "127.0.0.2"           # a second trusted hop (tunnel -> local reverse proxy)
 
 
 @pytest.fixture()
@@ -56,28 +57,38 @@ def _as(client, ip: str) -> dict:
 
 
 class _Req:
-    """Minimal stand-in for a Request: peer address + headers."""
+    """Minimal stand-in for a Request: peer address + headers.
 
-    def __init__(self, peer: str, headers: dict | None = None):
+    The headers MUST be Starlette's, not a dict: client_ip() reads EVERY line of
+    a duplicated header via getlist(), and a plain dict cannot even hold two
+    lines with the same name — a dict-based mock could never express the
+    multi-line spoof this module now has to stop.
+    """
+
+    def __init__(self, peer: str, headers: list[tuple[str, str]] | None = None):
+        from starlette.datastructures import Headers
+
         self.client = type("C", (), {"host": peer})()
-        self.headers = headers or {}
+        self.headers = Headers(
+            raw=[(k.lower().encode(), v.encode()) for k, v in (headers or [])]
+        )
 
 
 def test_forwarded_headers_are_ignored_from_an_untrusted_peer():
     """The whole game. If a direct caller could set X-Forwarded-For, anyone on the
     internet would simply claim a tailnet address and be an admin."""
-    req = _Req(OUTSIDE, {"x-forwarded-for": INSIDE, "cf-connecting-ip": INSIDE})
+    req = _Req(OUTSIDE, [("x-forwarded-for", INSIDE), ("cf-connecting-ip", INSIDE)])
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
     assert not in_networks(client_ip(req, [f"{PROXY}/32"]), [TAILNET])
 
 
 def test_forwarded_headers_are_believed_from_the_trusted_proxy():
-    req = _Req(PROXY, {"x-forwarded-for": OUTSIDE})
+    req = _Req(PROXY, [("x-forwarded-for", OUTSIDE)])
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
 
 
 def test_cloudflare_header_wins_only_in_cloudflare_mode():
-    req = _Req(PROXY, {"cf-connecting-ip": OUTSIDE, "x-forwarded-for": f"{INSIDE}, {PROXY}"})
+    req = _Req(PROXY, [("cf-connecting-ip", OUTSIDE), ("x-forwarded-for", f"{INSIDE}, {PROXY}")])
     assert client_ip(req, [f"{PROXY}/32"], trust_cf=True) == OUTSIDE
 
 
@@ -85,7 +96,7 @@ def test_cf_connecting_ip_is_ignored_when_not_behind_cloudflare():
     """A non-Cloudflare proxy forwards a client-set CF-Connecting-IP verbatim. Off
     cloudflare mode (the default) it must be ignored and the X-Forwarded-For chain
     used instead — otherwise anyone could name a tailnet address and be an admin."""
-    req = _Req(PROXY, {"cf-connecting-ip": INSIDE, "x-forwarded-for": OUTSIDE})
+    req = _Req(PROXY, [("cf-connecting-ip", INSIDE), ("x-forwarded-for", OUTSIDE)])
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE            # default: cf ignored
     assert client_ip(req, [f"{PROXY}/32"], trust_cf=False) == OUTSIDE
 
@@ -94,13 +105,79 @@ def test_a_prepended_forwarded_address_cannot_forge_the_client():
     """XFF is client-controlled at the left. A hostile client sends
     "100.64.0.1" and the real proxy appends the true address — so we walk from the
     RIGHT, past our own proxies, and take the first address we did not add."""
-    req = _Req(PROXY, {"x-forwarded-for": f"{INSIDE}, {OUTSIDE}"})
+    req = _Req(PROXY, [("x-forwarded-for", f"{INSIDE}, {OUTSIDE}")])
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
 
 
 def test_with_no_trusted_proxy_the_socket_peer_is_the_truth():
-    req = _Req(OUTSIDE, {"x-forwarded-for": INSIDE})
+    req = _Req(OUTSIDE, [("x-forwarded-for", INSIDE)])
     assert client_ip(req, []) == OUTSIDE
+
+
+# --- 1b. duplicate XFF LINES (the finding) ------------------------------------
+#
+# HTTP allows a list-valued header to arrive as several lines (RFC 7230 §3.2.2),
+# equivalent to one line of all the values comma-joined IN ARRIVAL ORDER. A
+# proxy that does not consolidate passes a client's lines through and appends
+# its own word after them — so the first line can be pure client claim while the
+# honest chain sits on a later line. client_ip() must read them ALL.
+
+
+def test_a_spoofed_first_xff_line_is_not_believed():
+    """THE finding. Two XFF lines arrive through the trusted proxy: the first is
+    the client's spoofed tailnet claim, the second is the proxy's word for the
+    real (outside) client. Reading line 1 alone granted the admin zone; the walk
+    must run over the concatenation of every line and stop at the proxy's word."""
+    req = _Req(PROXY, [("x-forwarded-for", INSIDE), ("x-forwarded-for", OUTSIDE)])
+    s = Settings(admin_networks=[TAILNET], trusted_proxies=[f"{PROXY}/32"])
+    assert client_ip(req, s.trusted_proxies) == OUTSIDE
+    assert not is_admin_zone(req, s), "a spoofed first XFF line resolved inside the admin zone"
+
+
+def test_a_spoofed_first_line_among_many_is_still_not_believed():
+    """The client may spray several lines; every one of them still lands to the
+    LEFT of whatever the trusted proxy appends, and the walk never reaches them."""
+    req = _Req(
+        PROXY,
+        [
+            ("x-forwarded-for", INSIDE),
+            ("x-forwarded-for", f"{INSIDE}, 192.168.20.10"),
+            ("x-forwarded-for", OUTSIDE),   # the trusted proxy's append
+        ],
+    )
+    s = Settings(admin_networks=[TAILNET], trusted_proxies=[f"{PROXY}/32"])
+    assert client_ip(req, s.trusted_proxies) == OUTSIDE
+    assert not is_admin_zone(req, s)
+
+
+def test_a_legitimate_admin_request_survives_two_proxied_hops():
+    """The fix must not over-correct: tailnet client -> proxy1 -> proxy2 -> panel,
+    each hop appending on its OWN line. The concatenated chain walked from the
+    right skips both trusted hops and still resolves the real tailnet client."""
+    req = _Req(PROXY2, [("x-forwarded-for", INSIDE), ("x-forwarded-for", PROXY)])
+    trusted = [f"{PROXY}/32", f"{PROXY2}/32"]
+    s = Settings(admin_networks=[TAILNET], trusted_proxies=trusted)
+    assert client_ip(req, trusted) == INSIDE
+    assert is_admin_zone(req, s), "a real admin-zone client was lost across two proxied hops"
+
+
+def test_empty_and_whitespace_xff_lines_fall_back_to_the_peer():
+    """XFF present but carrying nothing — empty lines, blank entries — is no
+    chain at all: the trusted peer's own address is the only truth left."""
+    for lines in (
+        [("x-forwarded-for", "")],
+        [("x-forwarded-for", "   ")],
+        [("x-forwarded-for", ""), ("x-forwarded-for", " , , ")],
+    ):
+        req = _Req(PROXY, lines)
+        assert client_ip(req, [f"{PROXY}/32"]) == PROXY
+
+
+def test_non_ip_entries_in_the_chain_cannot_break_the_walk():
+    """Junk that is not an address is skipped; it must neither be resolved nor
+    stop the walk from reaching the real client to its left."""
+    req = _Req(PROXY, [("x-forwarded-for", OUTSIDE), ("x-forwarded-for", "not-an-ip")])
+    assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
 
 
 # --- 2. admin cannot log in from outside -------------------------------------
@@ -128,6 +205,35 @@ def test_spoofed_cf_connecting_ip_does_not_grant_admin(anon, exposed):
     )
     assert r.status_code == 403, "spoofed CF-Connecting-IP was believed; admin login allowed from outside"
     assert not r.cookies
+
+
+def test_a_spoofed_first_xff_line_does_not_grant_admin(anon, exposed):
+    """The duplicate-XFF finding, end to end through the real ASGI header parsing:
+    the request carries TWO X-Forwarded-For lines, the first a spoofed tailnet
+    address, the second the proxy's word for the real (outside) client. Before
+    the fix only the first line was read — and this login returned 200."""
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers=[("X-Forwarded-For", INSIDE), ("X-Forwarded-For", OUTSIDE)],
+    )
+    assert r.status_code == 403, "a spoofed first XFF line was believed; admin login allowed from outside"
+    assert not r.cookies
+
+
+def test_admin_login_works_across_two_proxied_hops(anon, exposed, monkeypatch):
+    """Tunnel in front of a local reverse proxy: two trusted hops, each appending
+    its own XFF line. A tailnet admin must still be recognised — the chain spans
+    lines, and the right-to-left walk skips both trusted hops."""
+    monkeypatch.setattr(exposed, "trusted_proxies", [f"{PROXY}/32", f"{PROXY2}/32"])
+    monkeypatch.setattr(anon._transport, "client", (PROXY2, 50000))
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers=[("X-Forwarded-For", INSIDE), ("X-Forwarded-For", PROXY)],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["role"] == "admin"
 
 
 def test_admin_login_works_from_the_tailnet(anon, exposed):

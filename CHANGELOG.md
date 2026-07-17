@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ~7,000 rows/day per source IP). It now rides the accumulator loop — once at
   startup, then at most once a day, and a prune failure can never take the
   bandwidth loop down.
+- **Duplicate `X-Forwarded-For` lines could forge the admin zone (HIGH):**
+  `client_ip()` read only the FIRST XFF header line (`headers.get`). HTTP allows a
+  list-valued header to arrive as several lines (RFC 7230 §3.2.2), so a client
+  behind the trusted proxy could send a spoofed admin-zone address on line 1 with
+  the honest chain on line 2 — and be believed, bypassing `admin_networks` at
+  login, at session use, and on every admin route. The fix reads EVERY line
+  (`headers.getlist`, in wire/arrival order — the order proxies appended, which
+  for XFF is the chain order: client claims left, the last proxy's word right),
+  concatenates them into the single chain RFC 7230 defines, and runs the same
+  right-to-left walk past trusted hops. A client-supplied entry can never be
+  resolved while a trusted proxy is in front, because every trusted append lands
+  to the right of all client claims. Empty/whitespace-only lines fall back to the
+  socket peer; non-IP entries are skipped as before; the CF-Connecting-IP gate is
+  unchanged. Regression tests pin the spoof (unit + end-to-end through ASGI),
+  a legitimate two-hop admin login, and the degenerate-line cases.
 
 ## [0.5.1-alpha] - 2026-07-17
 
