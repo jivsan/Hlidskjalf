@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — auto-provision a Pangolin SSH tunnel per VM (optional)
+When configured, the panel creates a Pangolin **TCP resource** tunnelling SSH (port 22)
+to each VM it provisions, and deletes it on destroy — so a friend reaches their VM with
+`ssh -p <port> user@<your-pangolin-domain>`: no WAN port opened, no direct exposure.
+
+- `HLIDSKJALF_PANGOLIN_API_URL` / `_API_KEY` (secret — encrypted at rest, `*_FILE` twin) /
+  `_ORG_ID` / `_SITE_ID` / `_SSH_PORT_START`. All five required; any unset = integration
+  off, so a fresh clone is unaffected. Non-secret knobs are admin-editable and exposed as
+  `services.hlidskjalf.settings.pangolin*`.
+- **SSH/TCP only, never HTTP** — the guardrail lives in the client *and* the provision
+  path and is asserted in tests; the raw-HTTP exposure that must stay closed cannot be
+  created here.
+- **Best-effort**: a Pangolin outage never fails a VM create/destroy — the result carries
+  a `pangolin` note instead. Each VM gets a distinct port from a pool at/above
+  `ssh_port_start`. See `docs/pangolin.md`.
+
+### Added — `default_nameserver` for provisioned VMs
+- New **`HLIDSKJALF_DEFAULT_NAMESERVER`** (default empty): a per-deployment DNS resolver
+  written into every provisioned VM's cloud-init config (Proxmox `nameserver`,
+  space-separated IPs), applied on both create and reinstall. For a locked-down DMZ that
+  permits DNS to only one resolver — never hardcoded. Empty leaves cloud-init's nameserver
+  untouched. Admin-editable in Settings and exposed as `services.hlidskjalf.settings.defaultNameserver`.
+
+## [0.4.4-alpha] - 2026-07-16
+
+### Security — defense-in-depth from the internet-facing audit
+Three lower-severity findings from the exposure audit, closed:
+- **`GET /api/switch/ports` is now admin-only.** It was gated only on a valid session, so
+  any tenant could read the whole switch faceplate — every port's VLAN, description and
+  LLDP neighbour, i.e. the L2 topology. (LOW–MED info disclosure.)
+- **Setup endpoints respect `admin_networks`.** `POST /api/setup` and `/api/setup/test`
+  now refuse from outside the admin zone when it is set — a tunnel attached before
+  first-run can't let the internet seize an unconfigured panel. No-op on a LAN-only
+  install (`admin_networks` empty = anywhere). (MED.)
+- **`POST /api/logout` requires CSRF**, like every other mutation. (LOW; already
+  mitigated by `SameSite=Strict`, closed for consistency.)
+
+### Security — `CF-Connecting-IP` is no longer trusted unless you are behind Cloudflare
+`client_ip()` derived the caller's address from `CF-Connecting-IP` whenever the socket
+peer was a trusted proxy — but only Cloudflare's edge overwrites that header. Behind
+**Traefik, nginx, or Newt/Pangolin** (the common self-host case), a client could send
+`CF-Connecting-IP: <a tailnet address>` and be placed **inside `admin_networks`** —
+reaching the admin login from the internet and evading the per-IP login rate limiter by
+rotating the header per request. The `X-Forwarded-For` path was already safe (walked
+right-to-left past trusted hops); only `CF-Connecting-IP` was believed blindly.
+
+- New **`HLIDSKJALF_CLOUDFLARE`** (default **false**). Off, `CF-Connecting-IP` is ignored
+  entirely and only the `X-Forwarded-For` chain is believed. Set it true **only** when
+  the trusted proxy really is Cloudflare (which overwrites inbound `CF-Connecting-IP`).
+- `services.hlidskjalf.cloudflare` in the NixOS module. A regression test asserts a
+  spoofed `CF-Connecting-IP` naming a tailnet address cannot reach admin off-Cloudflare.
+
+### Added — `public` refuses to expose the panel unsafely
+Exposing the panel is now a deliberate switch with an interlock. **`HLIDSKJALF_PUBLIC=true`**
+declares the panel reachable from the internet — and makes it **refuse to start** unless
+both `admin_networks` is set (or admin login is open to the whole world) and
+`trusted_proxies` is set (or the panel cannot tell who is calling, and the per-IP limiter
+and audit log collapse onto the proxy). It changes nothing on its own; it makes the two
+settings that make exposure safe impossible to forget — the exact gap behind an
+internet-facing panel that trusted no boundaries. Off by default, so a LAN-only panel and
+a fresh clone are unaffected. `services.hlidskjalf.public` in the NixOS module; see
+`docs/public-access.md`.
+
 ### Added — choose a VM's login credentials when you provision it
 A cloud image sets **no password of its own** — cloud-init is the only thing that gives
 the guest a way in. The provisioner wrote `ciuser` and any SSH keys, but never a

@@ -10,18 +10,21 @@ Safety rails (non-negotiable, enforced here server-side):
   only firewall=0 stays hardcoded.
 """
 
+import logging
 import re
 import urllib.parse
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
-from .. import journal
+from .. import journal, pangolin
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user, is_admin, rate_limited, require_csrf, require_session
 from ..deps import get_db, get_pve, guard_protected, settings
 from ..db import Db
 from ..pve import PveClient
+
+log = logging.getLogger("hlidskjalf.provision")
 
 router = APIRouter()
 
@@ -141,6 +144,11 @@ async def _apply_cloudinit_and_size(
         config["ipconfig0"] = f"ip={body.ip_cidr}" + (
             f",gw={body.gateway}" if body.gateway else ""
         )
+    # A per-deployment DNS resolver (e.g. the only one a locked-down DMZ permits).
+    # Empty = leave cloud-init's nameserver untouched. Applies to both create and
+    # reinstall, since both flows land here.
+    if settings().default_nameserver:
+        config["nameserver"] = settings().default_nameserver
     keys = body.ssh_keys.strip() or settings().default_ssh_keys.strip()
     if keys:
         config["sshkeys"] = urllib.parse.quote(keys, safe="")
@@ -188,6 +196,65 @@ def _validate_create(body: CreateVm) -> None:
         raise HTTPException(
             400, "This VM would have no way to log in: set a login password or an "
             "SSH key (or a default SSH key in Settings).")
+
+
+# --- Pangolin SSH-tunnel integration (optional, best-effort) ----------------
+# When configured, provisioning auto-creates a Pangolin TCP resource that
+# tunnels SSH (port 22) to the new VM, and destroy removes it. Friends then run
+# `ssh -p <proxy_port> user@<pangolin-domain>`. Both paths are BEST-EFFORT: a
+# Pangolin error or outage must NEVER fail the underlying VM create/destroy — we
+# log a warning and return a note instead.
+
+
+async def _pangolin_provision(db: Db, vmid: int, name: str, ip: str) -> dict | None:
+    """Create + wire an SSH tunnel resource for a freshly provisioned VM.
+
+    Returns a note dict for the API response, or None when the integration is
+    off. Never raises: any failure is swallowed to a warning note so the VM
+    create still succeeds.
+    """
+    s = settings()
+    if not s.pangolin_enabled:
+        return None
+    if not ip:
+        # No static IP recorded (e.g. reinstall with no ipconfig) — nothing to
+        # point a target at.
+        return {"warning": "Pangolin: no static IP for this VM; SSH tunnel not created"}
+    try:
+        port = await db.pangolin_next_free_port(s.pangolin_ssh_port_start)
+        async with pangolin.PangolinClient(s) as client:
+            # GUARDRAIL: only ever an SSH/TCP resource, never a public HTTP one.
+            resource_id = await client.create_tcp_resource(name=name, proxy_port=port)
+            await client.add_target(resource_id, ip=ip, port=22)
+        await db.pangolin_insert(vmid, resource_id, port)
+        log.info(
+            "Pangolin: created SSH tunnel resource %s (port %s) for VM %s (%s)",
+            resource_id, port, vmid, name,
+        )
+        return {"ssh_port": port, "resource_id": resource_id}
+    except Exception as e:  # PangolinError or anything else — best-effort
+        log.warning("Pangolin: could not create SSH tunnel for VM %s: %s", vmid, e)
+        return {"warning": f"Pangolin SSH tunnel not created: {e}"}
+
+
+async def _pangolin_destroy(db: Db, vmid: int) -> dict | None:
+    """Delete the SSH tunnel resource for a destroyed VM. Best-effort: on error
+    the DB row is kept so a later retry can still find it."""
+    s = settings()
+    row = await db.pangolin_get(vmid)
+    if row is None:
+        return None
+    try:
+        async with pangolin.PangolinClient(s) as client:
+            await client.delete_resource(row["resource_id"])
+        await db.pangolin_delete(vmid)
+        log.info("Pangolin: deleted SSH tunnel resource %s for VM %s",
+                 row["resource_id"], vmid)
+        return {"deleted_resource_id": row["resource_id"]}
+    except Exception as e:  # best-effort — never fail the destroy
+        log.warning("Pangolin: could not delete SSH tunnel for VM %s: %s", vmid, e)
+        return {"warning": f"Pangolin SSH tunnel resource {row['resource_id']} "
+                           f"may still exist: {e}"}
 
 
 @router.post("/api/vms", status_code=201)
@@ -240,7 +307,13 @@ async def create_vm(
     await pve.wait_task(clone_upid, timeout=600)
     upids.extend(await _apply_cloudinit_and_size(pve, new_vmid, body))
     await journal.record(db, request, username, journal.VM_PROVISION, new_vmid, body.name)
-    return {"vmid": new_vmid, "upids": upids}
+    # Optional, best-effort SSH tunnel — the VM's static IP is body.ip_cidr.
+    vm_ip = body.ip_cidr.split("/")[0] if body.ip_cidr else ""
+    result = {"vmid": new_vmid, "upids": upids}
+    note = await _pangolin_provision(db, new_vmid, body.name, vm_ip)
+    if note is not None:
+        result["pangolin"] = note
+    return result
 
 
 class Reinstall(BaseModel):
@@ -367,4 +440,9 @@ async def destroy_vm(
     )
     upids.append(upid)
     await journal.record(db, request, username, journal.VM_DESTROY, vmid, f"name={name}")
-    return {"upids": upids}
+    result = {"upids": upids}
+    # Optional, best-effort: tear down the SSH tunnel resource for this VM.
+    note = await _pangolin_destroy(db, vmid)
+    if note is not None:
+        result["pangolin"] = note
+    return result

@@ -20,7 +20,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from .. import auth
+from .. import auth, netzone
 from ..config import SETUP_WRITABLE, get_settings
 from ..db import Db
 from ..deps import get_db
@@ -66,6 +66,11 @@ async def setup_status(db: Db = Depends(get_db)):
 async def setup_test(conn: PveConn, request: Request, db: Db = Depends(get_db)):
     """Dry run — validate the connection without persisting anything."""
     await _require_setup_open(db)
+    # When admin_networks is set (an exposed deploy), setup is admin-only too — a
+    # tunnel attached before first-run must not let the internet seize the panel.
+    # No-op on a fresh LAN-only install (admin_networks empty = anywhere).
+    if not netzone.is_admin_zone(request, get_settings()):
+        raise HTTPException(403, netzone.admin_zone_error(get_settings()))
     auth.check_login_rate(request.client.host if request.client else "-")
     return await probe(conn)
 
@@ -78,6 +83,11 @@ async def setup_commit(
     db: Db = Depends(get_db),
 ):
     await _require_setup_open(db)
+    # When admin_networks is set (an exposed deploy), setup is admin-only too — a
+    # tunnel attached before first-run must not let the internet seize the panel.
+    # No-op on a fresh LAN-only install (admin_networks empty = anywhere).
+    if not netzone.is_admin_zone(request, get_settings()):
+        raise HTTPException(403, netzone.admin_zone_error(get_settings()))
     auth.check_login_rate(request.client.host if request.client else "-")
 
     if body.user and body.user.username == body.admin.username:

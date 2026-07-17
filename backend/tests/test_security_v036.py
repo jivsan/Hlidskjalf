@@ -172,3 +172,19 @@ def test_a_server_issued_upid_still_scopes_across_tenants(client, tenant):
 
     login(client, tenant, "tenantpass1")
     assert client.get(f"/api/tasks/{other_upid}/status").status_code == 403
+
+
+def test_logout_requires_csrf(client):
+    """Logout is a mutation too — it must carry CSRF like every other (audit finding).
+    Mitigated by SameSite=Strict, but enforced for consistency."""
+    login(client, ADMIN_USER, ADMIN_PASSWORD)
+    assert client.post("/api/logout").status_code == 403  # no X-Hlidskjalf-CSRF header
+    assert client.post("/api/logout", headers=csrf_headers(client)).status_code == 200
+
+
+def test_tenant_cannot_read_switch_topology(client, tenant):
+    """GET /api/switch/ports discloses every port's VLAN, description and LLDP
+    neighbour — full L2 topology. A tenant scoped to one VM must not see it (audit
+    finding: the route was gated only on a valid session, not on admin)."""
+    login(client, tenant, "tenantpass1")
+    assert client.get("/api/switch/ports").status_code == 403

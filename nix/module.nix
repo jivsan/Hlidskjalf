@@ -39,6 +39,8 @@ let
     HLIDSKJALF_LOG_LEVEL = cfg.logLevel;
     HLIDSKJALF_TRUSTED_PROXIES = lib.concatStringsSep "," cfg.trustedProxies;
     HLIDSKJALF_ADMIN_NETWORKS = lib.concatStringsSep "," cfg.adminNetworks;
+    HLIDSKJALF_PUBLIC = lib.boolToString cfg.public;
+    HLIDSKJALF_CLOUDFLARE = lib.boolToString cfg.cloudflare;
 
     # The Proxmox connection: null unless declared, so the wizard owns it.
     HLIDSKJALF_PVE_HOST = cfg.settings.pveHost;
@@ -54,9 +56,18 @@ let
     HLIDSKJALF_DEFAULT_SSH_KEYS = cfg.settings.defaultSshKeys;
     HLIDSKJALF_VLAN_GATEWAYS = builtins.toJSON cfg.settings.vlanGateways;
     HLIDSKJALF_CLONE_STORAGE = cfg.settings.cloneStorage;
+    HLIDSKJALF_DEFAULT_NAMESERVER = cfg.settings.defaultNameserver;
     HLIDSKJALF_PVE_BRIDGE = cfg.settings.pveBridge;
     HLIDSKJALF_RESCUE_ISO = cfg.settings.rescueIso;
     HLIDSKJALF_ADMIN_USER = cfg.settings.adminUser;
+
+    # Pangolin SSH-tunnel integration (optional). The api key is a SECRET and
+    # goes via environmentFile (HLIDSKJALF_PANGOLIN_API_KEY), never here. These
+    # non-secret knobs are emitted only when set; empty = the integration is off.
+    HLIDSKJALF_PANGOLIN_API_URL = cfg.settings.pangolinApiUrl;
+    HLIDSKJALF_PANGOLIN_ORG_ID = cfg.settings.pangolinOrgId;
+    HLIDSKJALF_PANGOLIN_SITE_ID = optionalStr cfg.settings.pangolinSiteId;
+    HLIDSKJALF_PANGOLIN_SSH_PORT_START = optionalStr cfg.settings.pangolinSshPortStart;
   };
 in
 {
@@ -151,6 +162,38 @@ in
       '';
     };
 
+    public = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Declare that this panel is reachable from the internet. It changes nothing on
+        its own — `trustedProxies` and `adminNetworks` do the actual work — but with it
+        set the panel **refuses to start** unless BOTH of those are configured.
+
+        This is the interlock that makes an unsafe exposure impossible to deploy by
+        accident: without `adminNetworks` an internet-facing panel accepts admin login
+        from anywhere, and without `trustedProxies` it cannot tell tenants apart from
+        the proxy. Turn this on the moment you put a tunnel or port-forward in front of
+        the panel; leave it off for a LAN-only deployment.
+      '';
+    };
+
+    cloudflare = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Set this ONLY if the trusted proxy in front of the panel is Cloudflare.
+        Cloudflare overwrites the `CF-Connecting-IP` header at its edge, so it can be
+        believed. Any other proxy — Traefik, nginx, Newt/Pangolin, a non-Cloudflare
+        cloudflared tunnel — forwards a client-supplied `CF-Connecting-IP` unchanged,
+        so trusting it would let anyone spoof their source address and, with it, the
+        `adminNetworks` boundary and the per-IP login limiter.
+
+        Off (default): `CF-Connecting-IP` is ignored and only the `X-Forwarded-For`
+        chain (walked right-to-left past `trustedProxies`) is believed.
+      '';
+    };
+
     debug = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -174,8 +217,9 @@ in
       example = "/run/secrets/hlidskjalf.env";
       description = ''
         Optional root-owned 0600 env file for secrets — HLIDSKJALF_PVE_TOKEN_SECRET,
-        HLIDSKJALF_ADMIN_PASSWORD_HASH, HLIDSKJALF_SESSION_SECRET. Each also takes a
-        `*_FILE` twin, for agenix/sops/systemd-creds.
+        HLIDSKJALF_ADMIN_PASSWORD_HASH, HLIDSKJALF_SESSION_SECRET, and (if the
+        Pangolin SSH-tunnel integration is used) HLIDSKJALF_PANGOLIN_API_KEY. Each
+        also takes a `*_FILE` twin, for agenix/sops/systemd-creds.
 
         Leave it null to configure through the **setup wizard** instead: the panel
         stores the token encrypted at rest and generates its own session key.
@@ -283,6 +327,17 @@ in
         example = "vmbr0";
         description = "Bridge new NICs attach to. Empty = manage it in Settings.";
       };
+      defaultNameserver = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "9.9.9.9";
+        description = ''
+          DNS resolver written into every provisioned VM's cloud-init config
+          (space-separated IPs for more than one). Point tenant VMs at the one
+          resolver a locked-down DMZ permits. Empty = leave cloud-init's
+          nameserver untouched; also editable in Settings.
+        '';
+      };
       rescueIso = lib.mkOption {
         type = lib.types.str;
         default = "";
@@ -296,6 +351,47 @@ in
           Username of the bootstrap admin. Null = the wizard asks. Declaring it
           here overrides what the wizard saved, so leave it null unless the account
           is created from `environmentFile` (HLIDSKJALF_ADMIN_PASSWORD_HASH).
+        '';
+      };
+
+      # --- Pangolin SSH-tunnel integration (optional) ------------------------
+      # When ALL of the four below plus the api key (via environmentFile) are set,
+      # the panel auto-creates a Pangolin TCP resource tunnelling SSH to each VM it
+      # provisions, and deletes it on destroy. Empty = the integration is off, and
+      # a fresh install is unaffected. See docs/pangolin.md.
+      pangolinApiUrl = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "https://api.example.com/v1";
+        description = ''
+          Base URL of the Pangolin Integration API, no trailing slash. Empty
+          (default) disables the SSH-tunnel integration. The api key itself is a
+          secret — set HLIDSKJALF_PANGOLIN_API_KEY via `environmentFile`, never here.
+        '';
+      };
+      pangolinOrgId = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        example = "myorg";
+        description = "Pangolin organization id resources are created under.";
+      };
+      pangolinSiteId = lib.mkOption {
+        type = with lib.types; nullOr int;
+        default = null;
+        example = 1;
+        description = ''
+          Numeric Pangolin (Newt) site id that can reach the VMs — targets attach
+          to it. Null = unset (integration off).
+        '';
+      };
+      pangolinSshPortStart = lib.mkOption {
+        type = with lib.types; nullOr int;
+        default = null;
+        example = 2200;
+        description = ''
+          Base of the per-VM SSH port pool. Each provisioned VM gets the next free
+          port at/above this; friends connect with `ssh -p <port> user@<domain>`.
+          Null = unset (integration off).
         '';
       };
     };

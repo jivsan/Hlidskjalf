@@ -126,6 +126,24 @@ The panel walks the `X-Forwarded-For` chain from the right, skipping addresses i
 are yours, and takes the first one that is not. Declare only the local proxy and every
 tenant on earth is recorded as coming from your tunnel host.
 
+### `CF-Connecting-IP` is only believed behind Cloudflare
+
+`X-Forwarded-For` is a chain the panel can walk, so a client-prepended entry loses to the
+real one your proxy appends. `CF-Connecting-IP` is a *single* value with no chain — only
+Cloudflare's edge overwrites it. Any other proxy (Traefik, nginx, Newt/Pangolin) forwards
+whatever the client sent, so believing it would let anyone name their own source address
+and step straight into `admin_networks`.
+
+So the panel ignores `CF-Connecting-IP` entirely unless you opt in:
+
+```nix
+services.hlidskjalf.cloudflare = true;   # ONLY if Cloudflare is the trusted proxy
+```
+
+Off (the default), only the `X-Forwarded-For` walk is trusted. Behind a non-Cloudflare
+proxy leave it off — and, belt and braces, configure that proxy to strip any inbound
+`CF-Connecting-IP` (and client-supplied `X-Forwarded-For`).
+
 ## 4. What an internet-facing login page gets you
 
 - **Per-IP rate limiting** — the right defence against one abusive host.
@@ -147,3 +165,22 @@ tenant on earth is recorded as coming from your tunnel host.
   exposing it puts that in front of the internet. That is the trade you are making.
 - Give tenants **their own accounts**, never share one.
 - Keep `protected_vmids` set, including the guest the panel itself runs on.
+
+## 6. The interlock: `public` makes the safe config mandatory
+
+Everything above is only a defence if it was actually configured. The failure this
+exists to prevent is a panel put on the internet with `admin_networks` empty (admin
+login from anywhere) or `trusted_proxies` empty (blind to the caller) — each one unset
+env var away.
+
+```nix
+services.hlidskjalf.public = true;
+```
+
+`public` changes no behaviour by itself. It is a declaration — *this panel is exposed* —
+and with it set the panel **refuses to start** unless both `adminNetworks` and
+`trustedProxies` are configured, naming whichever is missing. All three are env-only
+(never wizard- or Settings-writable), so the check is final at load: an unsafe exposure
+cannot be deployed by accident. Turn it on the moment a tunnel or port-forward goes in
+front of the panel; leave it off for a LAN-only deployment (the default), which stays
+unconstrained.

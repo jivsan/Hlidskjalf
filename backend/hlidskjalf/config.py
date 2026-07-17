@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # JSON env var, e.g. '{"20": "192.168.20.1", "30": ""}'. Empty = no VLAN tagging
     # offered in the provision form.
     vlan_gateways: dict[str, str] = {}
+    # DNS resolver written into every provisioned VM's cloud-init config (Proxmox
+    # `nameserver`, space-separated IPs). Per-deployment, never hardcoded: a
+    # locked-down DMZ may permit DNS to only one resolver, so tenant VMs must be
+    # pointed at it. Empty (default) = leave cloud-init's nameserver untouched.
+    default_nameserver: str = ""
     clone_storage: str = "local-lvm"  # Proxmox's usual default storage
     # The bridge every panel-written net0 attaches to. "vmbr0" is Proxmox's
     # stock bridge name; real deployments often keep guests on another one
@@ -86,6 +91,23 @@ class Settings(BaseSettings):
     # from anywhere and manage their one VM, while admin exists only inside these
     # networks — enforced at login, at session use, and on every admin route.
     admin_networks: Annotated[list[str], NoDecode] = []
+    # Declares intent to put the panel on the internet. It changes nothing on its
+    # own — admin_networks and trusted_proxies do the actual work — but setting it
+    # makes the panel REFUSE TO START unless both of those are configured. Without
+    # that interlock the two most dangerous misconfigurations are one unset env var
+    # away: admin_networks empty = admin login from anywhere, and trusted_proxies
+    # empty = the panel cannot tell who is calling (every request looks like the
+    # proxy). Default False, so a fresh clone / LAN-only panel is unaffected.
+    # See docs/public-access.md.
+    public: bool = False
+    # Whether the fronting proxy is Cloudflare. Cloudflare overwrites CF-Connecting-IP
+    # at its edge, so that header can be believed. ANY other proxy (Traefik, nginx,
+    # Newt/Pangolin, a non-CF cloudflared tunnel) forwards a client-supplied
+    # CF-Connecting-IP verbatim — trusting it would let anyone spoof their source IP,
+    # and with it the admin_networks boundary and the per-IP login limiter. Default
+    # False: CF-Connecting-IP is ignored and only the X-Forwarded-For chain (walked
+    # right-to-left past trusted_proxies) is believed. Set True ONLY behind Cloudflare.
+    cloudflare: bool = False
 
     # --- Update detection (routes/version.py) --------------------------------
     # The panel compares its running commit with the tip of `update_branch` in
@@ -105,6 +127,31 @@ class Settings(BaseSettings):
     # Whether a successful update re-execs the process. False = "applied, restart it
     # yourself" (right for a supervisor that pins the code, e.g. a read-only image).
     self_update_restart: bool = True
+
+    # --- Pangolin SSH-tunnel integration (optional) --------------------------
+    # When configured, the panel auto-creates a Pangolin TCP resource that
+    # tunnels SSH (port 22) to each VM it provisions, and deletes that resource
+    # when the VM is destroyed. Friends then reach the VM with
+    # `ssh -p <proxy_port> user@<your-pangolin-domain>` — no direct exposure of
+    # the VM. Best-effort: a Pangolin outage never fails a VM create/destroy.
+    # The integration is OFF unless api_url, api_key, org_id, site_id and
+    # ssh_port_start are ALL set (see `pangolin_enabled`), so a fresh clone is
+    # unaffected. See docs/pangolin.md.
+    #
+    # Base URL of the Pangolin Integration API, no trailing slash, e.g.
+    # "https://api.example.com/v1". Empty (default) disables the integration.
+    pangolin_api_url: str = ""
+    # SECRET: a Pangolin API key (org-scoped). Bearer-authed, FILE_BACKED,
+    # encrypted at rest, redacted from every API response — like pve_token_secret.
+    pangolin_api_key: str = ""
+    # The Pangolin organization id the resources are created under.
+    pangolin_org_id: str = ""
+    # The numeric Newt site id targets are attached to (the site that can reach
+    # the VMs). 0 (default) = unset.
+    pangolin_site_id: int = 0
+    # Base of the per-VM SSH port pool, e.g. 2200. Each provisioned VM is given
+    # the next free port at or above this. 0 (default) = unset.
+    pangolin_ssh_port_start: int = 0
 
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
@@ -189,6 +236,47 @@ class Settings(BaseSettings):
             return json.loads(v) if v.strip() else {}
         return v
 
+    @model_validator(mode="after")
+    def _public_requires_admin_boundary(self):
+        """A panel told it is public must not run without the two settings that make
+        public exposure safe. `public`, `admin_networks` and `trusted_proxies` are
+        all env-only (never wizard/DB-writable), so they are final here — fail closed,
+        loudly, at load, rather than serve an open admin login to the internet."""
+        if not self.public:
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("admin_networks", self.admin_networks),
+                ("trusted_proxies", self.trusted_proxies),
+            )
+            if not value
+        ]
+        if missing:
+            joined = " and ".join(missing)
+            raise ValueError(
+                "HLIDSKJALF_PUBLIC is set, which puts the panel on the internet, but "
+                f"{joined} {'is' if len(missing) == 1 else 'are'} empty. Without "
+                "admin_networks, admin login is allowed from anywhere; without "
+                "trusted_proxies, the panel believes no forwarded headers and cannot "
+                "tell who is calling. Set both, or unset HLIDSKJALF_PUBLIC. "
+                "See docs/public-access.md."
+            )
+        return self
+
+    @property
+    def pangolin_enabled(self) -> bool:
+        """The Pangolin SSH-tunnel integration is live only when every knob it
+        needs is set. Any one left empty/0 disables it — so a fresh clone, and
+        any deployment that never configures it, is entirely unaffected."""
+        return bool(
+            self.pangolin_api_url
+            and self.pangolin_api_key
+            and self.pangolin_org_id
+            and self.pangolin_site_id
+            and self.pangolin_ssh_port_start
+        )
+
     @property
     def pve_base_url(self) -> str:
         return f"{self.pve_scheme}://{self.pve_host}:{self.pve_port}/api2/json"
@@ -210,6 +298,7 @@ FILE_BACKED = (
     "switch_password",
     "prometheus_token",
     "prometheus_password",
+    "pangolin_api_key",
     "secret_key",
 )
 
@@ -264,6 +353,14 @@ ADMIN_WRITABLE = frozenset(
         "vlan_gateways",
         "clone_storage",
         "pve_bridge",
+        "default_nameserver",
+        # Pangolin SSH-tunnel integration — the NON-secret knobs are admin-editable.
+        # The api key is NOT here: it is a secret, set only via env/_FILE, and never
+        # returned by any API (see FILE_BACKED + secretbox.SECRET_KEYS).
+        "pangolin_api_url",
+        "pangolin_org_id",
+        "pangolin_site_id",
+        "pangolin_ssh_port_start",
         # The Proxmox connection itself. It used to be settable ONLY in the
         # first-run wizard, which closes forever once a user exists — so a rotated
         # token, a renewed certificate or a moved host meant editing the database

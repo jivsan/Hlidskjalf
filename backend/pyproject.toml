@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hlidskjalf"
-version = "0.4.2-alpha"
+version = "0.4.4-alpha"
 description = "Hlidskjalf — self-hosted, multi-user Proxmox VE control panel"
 requires-python = ">=3.12"
 dependencies = [

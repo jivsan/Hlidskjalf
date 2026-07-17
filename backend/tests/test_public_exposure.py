@@ -20,7 +20,9 @@ Three things have to be true, and each is a separate way to get this wrong:
 import pytest
 from conftest import ADMIN_PASSWORD, ADMIN_USER, csrf_headers
 
-from hlidskjalf.config import get_settings
+from pydantic import ValidationError
+
+from hlidskjalf.config import Settings, get_settings
 from hlidskjalf.netzone import client_ip, in_networks
 
 TAILNET = "100.64.0.0/10"
@@ -74,9 +76,18 @@ def test_forwarded_headers_are_believed_from_the_trusted_proxy():
     assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
 
 
-def test_cloudflare_header_wins_when_present():
+def test_cloudflare_header_wins_only_in_cloudflare_mode():
     req = _Req(PROXY, {"cf-connecting-ip": OUTSIDE, "x-forwarded-for": f"{INSIDE}, {PROXY}"})
-    assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE
+    assert client_ip(req, [f"{PROXY}/32"], trust_cf=True) == OUTSIDE
+
+
+def test_cf_connecting_ip_is_ignored_when_not_behind_cloudflare():
+    """A non-Cloudflare proxy forwards a client-set CF-Connecting-IP verbatim. Off
+    cloudflare mode (the default) it must be ignored and the X-Forwarded-For chain
+    used instead — otherwise anyone could name a tailnet address and be an admin."""
+    req = _Req(PROXY, {"cf-connecting-ip": INSIDE, "x-forwarded-for": OUTSIDE})
+    assert client_ip(req, [f"{PROXY}/32"]) == OUTSIDE            # default: cf ignored
+    assert client_ip(req, [f"{PROXY}/32"], trust_cf=False) == OUTSIDE
 
 
 def test_a_prepended_forwarded_address_cannot_forge_the_client():
@@ -104,6 +115,19 @@ def test_admin_login_is_refused_from_the_public_internet(anon, exposed):
     assert r.status_code == 403
     assert "local network" in r.json()["detail"]
     assert not r.cookies  # and no session was issued
+
+
+def test_spoofed_cf_connecting_ip_does_not_grant_admin(anon, exposed):
+    """The netzone finding, end to end: not behind Cloudflare (the default), a caller
+    must not forge admin-zone membership with CF-Connecting-IP. A public request that
+    names a tailnet address in that header is still an outside request and is refused."""
+    r = anon.post(
+        "/api/login",
+        json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+        headers={"X-Forwarded-For": OUTSIDE, "CF-Connecting-IP": INSIDE},
+    )
+    assert r.status_code == 403, "spoofed CF-Connecting-IP was believed; admin login allowed from outside"
+    assert not r.cookies
 
 
 def test_admin_login_works_from_the_tailnet(anon, exposed):
@@ -233,3 +257,55 @@ def test_a_successful_sign_in_clears_the_backoff(anon, exposed):
     )
     assert r.status_code == 200, r.text
     assert not auth._failed_by_user.get(ADMIN_USER)
+
+
+# --- 5. the interlock: `public` refuses an unsafe config ---------------------
+#
+# netzone.py only defends a panel that was actually TOLD its boundaries. The
+# footgun is exposing the panel while admin_networks is empty (admin from
+# anywhere) or trusted_proxies is empty (blind to the real caller). `public`
+# makes that combination refuse to load at all — and because these three fields
+# are env-only (never wizard/DB-writable), the check is final at construction.
+
+
+def _settings(**kw) -> Settings:
+    """Settings from explicit values, immune to the ambient test environment."""
+    base = dict(
+        public=True,
+        admin_networks=["100.64.0.0/10"],
+        trusted_proxies=["127.0.0.1/32"],
+    )
+    base.update(kw)
+    return Settings(**base)
+
+
+def test_public_without_admin_networks_refuses_to_load():
+    with pytest.raises(ValidationError) as e:
+        _settings(admin_networks=[])
+    msg = str(e.value)
+    assert "admin_networks" in msg and "HLIDSKJALF_PUBLIC" in msg
+
+
+def test_public_without_trusted_proxies_refuses_to_load():
+    with pytest.raises(ValidationError) as e:
+        _settings(trusted_proxies=[])
+    assert "trusted_proxies" in str(e.value)
+
+
+def test_public_without_either_boundary_names_both():
+    with pytest.raises(ValidationError) as e:
+        _settings(admin_networks=[], trusted_proxies=[])
+    msg = str(e.value)
+    assert "admin_networks" in msg and "trusted_proxies" in msg
+
+
+def test_public_with_both_boundaries_loads():
+    s = _settings()
+    assert s.public and s.admin_networks and s.trusted_proxies
+
+
+def test_a_lan_only_panel_is_never_constrained():
+    """public=False (the default) may leave both empty — the LAN-only posture is
+    unchanged, and a fresh clone must keep booting."""
+    s = Settings(public=False, admin_networks=[], trusted_proxies=[])
+    assert not s.public
