@@ -3,6 +3,7 @@ import RFB from "@novnc/novnc";
 import { api } from "../../api";
 import { useToast } from "../../components/Toast";
 import { Card } from "../../components/ui";
+import { cssVar } from "../../lib/theme";
 import type { ConsoleInfo, GuestKind } from "../../types";
 
 // xterm.js is only ever needed for containers — keep it out of the VM path's bundle.
@@ -93,7 +94,7 @@ function VncConsole({ vmid }: { vmid: number }) {
         credentials: { password: info.password },
       });
       rfb.scaleViewport = true;
-      rfb.background = "#1a1b26";
+      rfb.background = cssVar("--c-bg", "#15161f");
       rfb.addEventListener("connect", () => setState("connected"));
       rfb.addEventListener("disconnect", (ev) => {
         rfbRef.current = null;

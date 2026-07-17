@@ -21,6 +21,7 @@ export default {
         cyan: "#2de2e6",
         red: "#f7768e",
         amber: "#e0af68",
+        green: "#22c55e", // "up" states — used for years, never tokenized
       },
       fontFamily: {
         // Archivo carries the human interface; JetBrains Mono the machine's numbers.
@@ -36,5 +37,16 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Single source of truth for color: every theme color is also emitted as a
+    // CSS custom property (--c-<name>) so non-Tailwind consumers (charts,
+    // xterm/noVNC canvases, raw CSS) read the SAME value instead of a stale
+    // hardcoded copy. `border-token` → `--c-border-token`.
+    ({ addBase, theme }) =>
+      addBase({
+        ":root": Object.fromEntries(
+          Object.entries(theme("colors")).map(([k, v]) => [`--c-${k}`, v])
+        ),
+      }),
+  ],
 };

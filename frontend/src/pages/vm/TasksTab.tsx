@@ -38,7 +38,7 @@ export function TasksTab({ vmid }: { vmid: number }) {
             type="checkbox"
             checked={showAll}
             onChange={(e) => setShowAll(e.target.checked)}
-            className="accent-[#ff4fa3]"
+            className="accent-pink"
           />
           show all guests
         </label>
