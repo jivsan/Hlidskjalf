@@ -1,7 +1,7 @@
 # Hlidskjalf
 
 > *Hliðskjálf* — Odin's high seat, from which he watches over all the realms.  
-> **v0.4.4-alpha** · internet-facing (tenants) with admin on the tailnet, on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
+> **v0.5.1-alpha** · internet-facing (tenants) with admin on the tailnet, on NixOS behind Traefik, against a real Proxmox VE 9.2.3 host
 
 A self-hosted, multi-user **Proxmox VE control panel**: fleet overview, live graphs,
 per-VM bandwidth accounting with monthly charts and quotas, provisioning from cloud-init
@@ -11,6 +11,12 @@ certificate **pinned by SHA-256 fingerprint**.
 
 Each regular user is scoped to exactly one VM (the VPS model); admins see the whole
 fleet. FastAPI backend serving a React SPA — **one service, one port**.
+
+The interface is a deliberate cyberpunk instrument panel — ambient grid horizon,
+neon-lit live indicators, chamfered shard actions, exactly one typed line on the
+login screen — built on a strict budget: the palette never changes, glow only ever
+touches *live* things, and `prefers-reduced-motion` freezes every animation.
+Spec: **[docs/design/v0.5.0-cyberpunk.md](docs/design/v0.5.0-cyberpunk.md)**.
 
 ---
 
@@ -245,16 +251,19 @@ refusal — is audited.
 
 ## Real-hardware status
 
-**v0.4.4-alpha runs on real hardware**: deployed on NixOS behind a Traefik reverse
+**v0.5.1-alpha runs on real hardware**: deployed on NixOS behind a Traefik reverse
 proxy, against a real Proxmox VE 9.2.3 host. The first-run
-wizard, fleet, node, graphs and both consoles work there. That run found five defects
-that months of green tests never did — see [`CHANGELOG.md`](CHANGELOG.md) and
-[`handoff.md`](handoff.md).
+wizard, fleet, node, graphs, both consoles, and **provisioning** work there —
+a guest has been created end-to-end through the panel on the real host.
+Earlier runs found defects that months of green tests never did — see
+[`CHANGELOG.md`](CHANGELOG.md) and [`handoff.md`](handoff.md).
 
-**The write paths are still unproven**: nothing has been provisioned, reinstalled,
-rescued or destroyed through the panel on real hardware yet.
+**Still being proven**: reinstall, rescue, and destroy have not formally passed on
+real hardware yet. `scripts/phase3-write-paths.py` drives exactly that sequence
+against a live panel on a scratch VMID ≥ 900 and prints per-step PASS/FAIL —
+see `handoff.md` for the current state.
 
-All 285 backend tests pass — against `dev/mock_pve.py`, **a mock we wrote ourselves**.
+All 325 backend tests pass — against `dev/mock_pve.py`, **a mock we wrote ourselves**.
 Green tests prove self-consistency, not correctness. That mock has been caught lying
 three times (8-field UPIDs where real PVE emits 9; fabricated QEMU disk usage where real
 PVE reports 0; one echo websocket that made a container's console look identical to a
@@ -296,6 +305,7 @@ nix/        package.nix (frontend+backend build) and module.nix (services.hlidsk
 dev/        mock_pve.py — a fake PVE API, so everything runs without a real Proxmox
 docs/       setup.md, docker.md, real-hardware-validation.md, dev-against-real-proxmox.md
 scripts/    dev.sh (launcher) · validate-proxmox.py (check assumptions against a REAL host)
+            · phase3-write-paths.py (prove provision/rescue/reinstall/destroy on a scratch VMID)
 ```
 
 `plan.md` is the design source of truth. `handoff.md` is what's done and what's next.
@@ -309,10 +319,9 @@ being "unconfigured". The mock's fleet is deliberately fictional.
 ## Screenshots
 
 **[docs/screenshots/](docs/screenshots/)** — latest gallery is
-[v0.3.6-alpha](docs/screenshots/v0.3.6-alpha/README.md) (includes the setup wizard);
-[v0.3.5-alpha](docs/screenshots/v0.3.5-alpha/README.md) covers the design system. All
-captured against the development mock; the v0.4 pages (Settings, Updates, Profile, the
-container terminal) are not yet in the gallery.
+[v0.5.0-alpha](docs/screenshots/v0.5.0-alpha/) (the cyberpunk pass: every page,
+mobile, and a prefers-reduced-motion pass); [v0.3.6-alpha](docs/screenshots/v0.3.6-alpha/README.md)
+includes the setup wizard. All captured against the development mock.
 
 ## Bandwidth accounting — known limits
 

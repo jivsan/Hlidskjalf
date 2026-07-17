@@ -1,6 +1,22 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.0-alpha — the cyberpunk pass**; PRs #62–#71, 322 tests)._
+_Last updated: 2026-07-17 (**v0.5.1-alpha**; PRs #74–#76 + release PR, 325 tests)._
+
+## ✅ v0.5.1-alpha — ITERATION ROUND TWO + PHASE 3 DRIVER
+
+- **Design polish, round two** (agent-built, screenshot-verified): toast shards with
+  kind-colored accent edges, the hazard-striped RESCUE banner, glowing gauge arcs
+  (#74); fleet row hover tick, masthead ignite-on-load, setup wizard + users +
+  settings corner brackets (#76).
+- **`scripts/phase3-write-paths.py` (#75):** the Phase 3 driver — the full write-path
+  sequence (provision → console ticket → rescue in/out → reinstall → destroy) against
+  a real panel's API on a scratch VMID ≥ 900, with per-step PASS/FAIL and a `finally`
+  cleanup. Provisioning itself is already proven on real hardware (an operator-driven
+  provision succeeded); rescue/reinstall/destroy are what the driver still has to
+  formally PASS on the real host.
+- A 7-dimension adversarial security audit (auth, per-VM authz, exposure/netzone,
+  secrets, pangolin, injection, XSS) ran over the internet-facing deployment model;
+  any confirmed findings land as fixes on top of this release.
 
 ## ✅ v0.5.0-alpha — FULL SEND, NOT CRINGE
 
