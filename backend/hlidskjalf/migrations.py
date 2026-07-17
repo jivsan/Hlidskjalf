@@ -120,6 +120,45 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        4,
+        "pangolin_resources: unique ports, NULL-able resource_id, orphan debts",
+        """
+        -- Security-audit rebuild of the v3 table:
+        --
+        -- * proxy_port gets a UNIQUE index. The old allocation read the pool
+        --   and inserted only AFTER the Pangolin create returned, so two
+        --   concurrent provisions could be handed the SAME port (TOCTOU). The
+        --   index is the hard backstop; db.pangolin_reserve_port retries the
+        --   scan on the IntegrityError.
+        -- * resource_id becomes NULL-able: a row is now written as a bare port
+        --   reservation BEFORE the Pangolin create, so a failure between create
+        --   and record can no longer strand an untracked resource.
+        -- * orphan_ids (comma-separated) carries resource ids still owed a
+        --   delete. A failed Pangolin delete kept the row for retry, but a
+        --   reprovision's INSERT OR REPLACE overwrote it and the orphan's id
+        --   was lost forever.
+        --
+        -- OR IGNORE on the copy also repairs any duplicate-port rows the old
+        -- race already wrote (first VMID wins; the loser's resource, if any,
+        -- is now untracked — unavoidable, and the pre-migration backup holds
+        -- the evidence).
+        CREATE TABLE IF NOT EXISTS pangolin_resources_v4 (
+            vmid        INTEGER PRIMARY KEY,
+            resource_id INTEGER,
+            proxy_port  INTEGER NOT NULL,
+            orphan_ids  TEXT NOT NULL DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_pangolin_resources_port
+            ON pangolin_resources_v4(proxy_port);
+        INSERT OR IGNORE INTO pangolin_resources_v4
+            (vmid, resource_id, proxy_port, orphan_ids)
+            SELECT vmid, resource_id, proxy_port, ''
+            FROM pangolin_resources ORDER BY vmid;
+        DROP TABLE IF EXISTS pangolin_resources;
+        ALTER TABLE pangolin_resources_v4 RENAME TO pangolin_resources;
+        """,
+    ),
 ]
 
 LATEST = max(v for v, _, _ in MIGRATIONS)

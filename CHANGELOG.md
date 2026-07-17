@@ -76,6 +76,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   VMID ≥ 900 through the panel's own API — login + CSRF, task polling, per-step
   PASS/FAIL with observed values, refusal on any existing VMID, and a `finally`
   cleanup that destroys the scratch guest. `--dry-run` for a read-only smoke. (#75)
+- **Port-pool race**: the SSH proxy port was allocated by reading the pool and
+  inserting only AFTER the Pangolin create returned, so two concurrent
+  provisions could be handed the same port. The port is now reserved atomically
+  up front (per-Db lock; schema v4 adds a UNIQUE index on `proxy_port` as the
+  backstop, with a retry on conflict).
+- **Destroy 404 stranded the tunnel**: a VM deleted out-of-band (Proxmox UI)
+  404'd the panel's destroy BEFORE Pangolin cleanup ran, leaving the resource
+  with no panel path to remove it. The destroy now runs the best-effort cleanup
+  and reports `already_gone` instead.
+- **INSERT OR REPLACE forgot orphans**: a failed Pangolin delete kept the DB row
+  for retry, but a reprovision overwrote it and the orphan's resource id was
+  lost. The row now carries `orphan_ids` across reprovisions, and a destroy
+  retries every owed delete (a Pangolin 404 counts as already-gone, not a debt).
+- **Record-after-create gap**: any failure between the resource create and the
+  DB insert orphaned an untracked resource. The id is recorded immediately
+  after the create, before the (fallible) target attach; a create that fails
+  before any resource exists hands the port back.
+- **`pangolin_api_url` accepted plain http**, which would send the org-scoped
+  bearer key cleartext. Non-https URLs are now refused at settings load (http
+  is allowed only for loopback hosts, i.e. a local mock).
+- **Docs**: `docs/pangolin.md` claimed the non-secret knobs were editable under
+  Settings — no such route or UI exists. They are env/NixOS-module only (and
+  were removed from the `ADMIN_WRITABLE` allowlist, which nothing could reach).
+
 
 ## [0.5.0-alpha] - 2026-07-17
 
