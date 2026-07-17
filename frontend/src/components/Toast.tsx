@@ -30,10 +30,12 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
+// Kind selects the accent (the left strip + the glow live in .toast's CSS,
+// keyed off --toast-accent); the text color stays here.
 const KIND_CLASSES: Record<ToastKind, string> = {
-  success: "border-cyan/60 text-cyan",
-  error: "border-red/60 text-red",
-  info: "border-border-token text-fg",
+  success: "toast-success text-cyan",
+  error: "toast-error text-red",
+  info: "toast-info text-fg",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -67,7 +69,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className={`card px-4 py-3 shadow-lg bg-surface text-sm break-words ${KIND_CLASSES[t.kind]}`}
+            className={`toast ${KIND_CLASSES[t.kind]}`}
             onClick={() => setToasts((ts) => ts.filter((x) => x.id !== t.id))}
           >
             {t.message}

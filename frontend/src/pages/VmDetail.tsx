@@ -137,7 +137,7 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
       </div>
 
       {vm.rescue && (
-        <div className="card border-amber/70 bg-amber/10 px-4 py-3 text-amber text-sm" role="alert">
+        <div className="card hazard-edge border-amber/70 bg-amber/10 px-4 py-3 text-amber text-sm" role="alert">
           ⚠ RESCUE MODE — this guest is booted from the rescue ISO
           {vm.rescue_since ? ` (since ${vm.rescue_since})` : ""}. Exit rescue from the Rescue tab.
         </div>

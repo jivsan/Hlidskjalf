@@ -200,6 +200,38 @@
     clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
   }
 
+  /* Toasts are shards too: the same 7px chamfer, a left accent strip in the
+     kind's color, and a low-intensity glow of the same accent — a toast is a
+     live signal, so the glow budget allows it. The border is gone (clip-path
+     would eat it); the accent strip carries the kind instead. Entrance is a
+     one-shot slide-from-right; killed under reduced-motion below. */
+  .toast {
+    @apply relative bg-surface px-4 py-3 text-sm break-words cursor-pointer;
+    --toast-accent: var(--c-muted);
+    clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+    animation: toast-in 200ms ease-out both;
+    filter:
+      drop-shadow(0 3px 10px rgba(0, 0, 0, 0.45))
+      drop-shadow(0 0 8px color-mix(in srgb, var(--toast-accent) 35%, transparent));
+  }
+  .toast::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--toast-accent);
+    pointer-events: none;
+  }
+  .toast-success { --toast-accent: var(--c-cyan); }
+  .toast-error { --toast-accent: var(--c-red); }
+  .toast-info { --toast-accent: var(--c-muted); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
   /* Corner brackets: targeting-reticle ticks. Always-on for the signature
      panels (.card-brackets), hover-reveal elsewhere; never on tables/wells. */
   .card-brackets,
@@ -239,6 +271,29 @@
   .card-brackets-hover:hover::before,
   .card-brackets-hover:hover::after {
     opacity: 1;
+  }
+
+  /* hazard-edge: a caution stripe across the top of an alert surface — amber,
+     static, never animated. Reserved for states where the guest itself is in
+     a dangerous condition (rescue mode); a functional signal, not decoration.
+     overflow:hidden keeps the strip inside the card's rounded corners. */
+  .hazard-edge {
+    position: relative;
+    overflow: hidden;
+  }
+  .hazard-edge::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--c-amber) 18%, transparent) 0 6px,
+      transparent 6px 12px
+    );
   }
 
   /* The glow budget: wordmark, live dots, the VM status chip. Nowhere else. */
@@ -916,7 +971,8 @@
   }
   .power-on,
   .neon-ignite,
-  .boot-cursor {
+  .boot-cursor,
+  .toast {
     animation: none;
   }
   .dot-bloom {
