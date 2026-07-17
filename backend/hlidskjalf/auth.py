@@ -212,9 +212,17 @@ async def current_epoch(username: str, db: Db) -> str:
     user = await db.get_user_by_username(username)
     if user:
         return session_epoch(user["password_hash"])
-    # Fresh-bootstrap env admin (no DB row yet).
+    # Fresh-bootstrap env admin (no DB row yet) — and ONLY then. The same gate
+    # the login path applies to _legacy_verify: once ANY user row exists, the
+    # env hash is no longer an identity this panel recognises. Without the gate,
+    # deleting the env-seeded admin left every session issued to them valid for
+    # the rest of its 12h life — the fallback kept vouching for a deleted user.
     s = get_settings()
-    if s.admin_password_hash and secrets.compare_digest(username, s.admin_user):
+    if (
+        s.admin_password_hash
+        and secrets.compare_digest(username, s.admin_user)
+        and not await db.list_users()
+    ):
         return session_epoch(s.admin_password_hash)
     raise HTTPException(401, "User no longer exists")
 
@@ -342,7 +350,14 @@ async def get_current_user(username: str, db: Db) -> dict:
     if user:
         return {k: v for k, v in user.items() if k != "password_hash"}
     s = get_settings()
-    if secrets.compare_digest(username, s.admin_user):
+    # Same gate as current_epoch: the env-admin identity exists only while no
+    # user row does. Unconditionally minting an admin here meant a session for a
+    # DELETED env-seeded admin still resolved to role=admin.
+    if (
+        s.admin_password_hash
+        and secrets.compare_digest(username, s.admin_user)
+        and not await db.list_users()
+    ):
         return {"username": username, "role": "admin", "vmid": None}
     raise HTTPException(401, "User no longer exists")
 

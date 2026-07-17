@@ -38,6 +38,27 @@ regression test that was proven RED against the old code first:
   formally PASS on the real host — blocked on `HLIDSKJALF_RESCUE_ISO` being unset
   in the deployment (set `settings.rescueIso` in the NixOS module and re-run).
 
+## 🔧 Security fixes in flight (branch `fix/security-high-auth`)
+
+Four confirmed audit findings, each with a regression test that fails without the
+fix (verified by reverting the source and watching them go red):
+
+1. **Deleted env-seeded admin's sessions survived deletion** — `current_epoch` /
+   `get_current_user` fell back to the env admin hash unconditionally when the
+   username had no DB row. Both are now gated on an empty users table (the same
+   condition `_legacy_verify` already required at login).
+2. **Session signing secret in the startup log** — the config-shadow warning
+   printed env + stored values verbatim, including `session_secret`. Secret-listed
+   values are redacted; the warning still names the keys.
+3. **403-after-password-verify was a credential oracle** — an out-of-zone VALID
+   admin login got a distinct 403 while wrong passwords got 401. The client now
+   gets the generic 401 either way; the refusal is logged + audited server-side.
+4. **`/api/session` skipped the admin-zone boundary** — real: it returned 200
+   (role=admin + CSRF) to an out-of-zone admin cookie via `require_session_full`.
+   Now zone-checked; `/api/logout` deliberately stays zone-free (revocation only
+   ever reduces access).
+
+
 ## ✅ v0.5.0-alpha — FULL SEND, NOT CRINGE
 
 The whole frontend was reskinned per `docs/design/v0.5.0-cyberpunk.md` (the spec was

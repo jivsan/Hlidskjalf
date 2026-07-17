@@ -11,7 +11,7 @@ from .deps import get_db
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import auth, journal, netzone
+from . import auth, journal, netzone, secretbox
 from .accumulator import Accumulator
 from .config import apply_stored, get_settings, unseal
 
@@ -39,6 +39,31 @@ from .routes import (
 log = logging.getLogger("hlidskjalf")
 
 
+def _log_shadowed_config(shadowed: list[tuple[str, str, str]]) -> None:
+    """Warn, once per key, where the environment overrode a wizard-saved value.
+
+    The panel is about to use a value the operator did not choose here. This
+    is the rule working as designed (env wins, so an ops-managed deploy is
+    never overridden by the database) — but it is also how a NixOS module
+    default of pve_node="pve" silently overrode a wizard that had been told
+    "hella", and every node-scoped page then failed with a DNS error nobody
+    could trace back. Say it out loud, once, at startup.
+
+    Secret VALUES never reach the log: the warning must name the key that is
+    shadowed, not hand the log file the session signing key (which would sign
+    cookies for anyone who reads it) or the Proxmox token.
+    """
+    for key, env_value, stored_value in shadowed:
+        if key in secretbox.SECRET_KEYS:
+            env_value = stored_value = "<redacted>"
+        log.warning(
+            "config: the environment sets %s=%r, overriding %r saved in the panel. "
+            "The panel will use the environment value — unset HLIDSKJALF_%s to manage "
+            "this from the UI.",
+            key, env_value, stored_value, key.upper(),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -63,19 +88,7 @@ async def lifespan(app: FastAPI):
     # wins (see config.apply_stored), so this cannot override an ops-managed deploy.
     # Stored secrets are encrypted at rest (secretbox.py) — decrypt on the way in.
     shadowed = apply_stored(settings, unseal(await app.state.db.get_config(), settings))
-    for key, env_value, stored_value in shadowed:
-        # The panel is about to use a value the operator did not choose here. This
-        # is the rule working as designed (env wins, so an ops-managed deploy is
-        # never overridden by the database) — but it is also how a NixOS module
-        # default of pve_node="pve" silently overrode a wizard that had been told
-        # "hella", and every node-scoped page then failed with a DNS error nobody
-        # could trace back. Say it out loud, once, at startup.
-        log.warning(
-            "config: the environment sets %s=%r, overriding %r saved in the panel. "
-            "The panel will use the environment value — unset HLIDSKJALF_%s to manage "
-            "this from the UI.",
-            key, env_value, stored_value, key.upper(),
-        )
+    _log_shadowed_config(shadowed)
 
     # Bootstrap initial admin user from env if this is a fresh DB (dev + first remote deploy)
     await app.state.db.ensure_bootstrap_admin(settings.admin_user, settings.admin_password_hash)
@@ -312,12 +325,23 @@ async def login(body: LoginBody, request: Request, response: Response, db: Db = 
     # admin pages": may not hold a session at all. The panel is on the internet for
     # tenants; an admin credential typed into the public login page must not become a
     # working admin session, whatever the client then chooses to request.
+    #
+    # The CLIENT gets the same generic 401 a wrong password gets. A distinct 403
+    # here answered "was the password right?" for anyone on the internet — verify
+    # guesses against the zone error until it changes to a session — even though
+    # the session itself was still refused. The refusal is NOT silent: it is
+    # logged and audited server-side, where an operator (not an attacker) reads it.
     if auth.is_admin(user) and not netzone.is_admin_zone(request, settings):
+        log.warning(
+            "refused admin login for %r from outside the admin networks (client=%s)",
+            body.username,
+            client_ip,
+        )
         await journal.record(
             db, request, body.username, journal.LOGIN_FAILED,
             detail="refused: admin login from outside the admin networks", ok=False,
         )
-        raise HTTPException(403, netzone.admin_zone_error(settings))
+        raise HTTPException(401, "Bad username or password")
 
     # Bind the session to the password it was issued under, so a later password
     # change invalidates it (see auth.session_epoch).
@@ -361,10 +385,18 @@ async def logout(
 
 @app.get("/api/session")
 async def session(
+    request: Request,
     session: tuple[str, str, str] = Depends(auth.require_session_full),
     db: Db = Depends(get_db),
 ):
     username, epoch, _sid = session
+    # The liveness check is itself an authenticated route, so the admin-zone
+    # boundary applies here too: an admin cookie arriving from outside must be
+    # dead HERE as well — otherwise the SPA believes the session is good (and
+    # holds a CSRF token + role=admin) while every real route refuses it.
+    # /api/logout deliberately stays zone-free: revoking a session can only
+    # reduce access, so it must keep working from anywhere.
+    await auth.deny_admin_outside_zone(request, username, db)
     user = await auth.get_current_user(username, db)
     return {
         "user": user["username"],
