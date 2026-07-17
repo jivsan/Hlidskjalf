@@ -290,8 +290,7 @@
     @apply font-display;
     font-variation-settings: "wght" 800, "wdth" 125;
     letter-spacing: 0.02em;
-  }
-}
+  }}
 
 /* Recessive scrollbars */
 * {
@@ -308,6 +307,41 @@
 .reveal {
   animation: seat-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--step, 0) * 70ms);
+}
+
+/* power-on (login only): the card snaps on like a CRT — a thin bright line
+   opens, one flash, then it settles. Once per page load. */
+.power-on {
+  animation: power-on 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 50%;
+}
+@keyframes power-on {
+  0%   { transform: scaleY(0.02); filter: brightness(2.6); }
+  55%  { transform: scaleY(1.015); filter: brightness(1.35); }
+  100% { transform: none; filter: none; }
+}
+
+/* neon-ignite (login only): the sign flickers twice as it lights, then burns
+   steady. Once per page load, after power-on. */
+.neon-ignite {
+  animation: neon-ignite 680ms linear both;
+}
+@keyframes neon-ignite {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  22%  { opacity: 0.35; }
+  36%  { opacity: 1; }
+  48%  { opacity: 0.55; }
+  64%, 100% { opacity: 1; }
+}
+
+/* The boot line's cursor: blinks while typing, retires when the line settles
+   (the retire is driven from Login.tsx state). */
+.boot-cursor {
+  animation: cursor-blink 850ms steps(1) infinite;
+}
+@keyframes cursor-blink {
+  50% { opacity: 0; }
 }
 
 /* Flux-panel inspired: cleaner modern cards, subtle depth, professional cyberpunk (less neon/glow) */
@@ -878,6 +912,11 @@
   }
   .scene-aurora,
   .scene-grid {
+    animation: none;
+  }
+  .power-on,
+  .neon-ignite,
+  .boot-cursor {
     animation: none;
   }
   .dot-bloom {

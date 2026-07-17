@@ -107,12 +107,13 @@ export function VmDetailPage({ currentRole, myVmid: _myVmid }: { currentRole?: s
         }
       />
 
-      {/* systemd-unit-style status chip */}
-      <div className="card px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm metric">
-        <span className={running ? "text-cyan" : vm.status === "stopped" ? "text-muted" : "text-red"}>
+      {/* systemd-unit-style status chip — the running part glows, the unit
+          name stays flat. Corner brackets always on: a signature panel. */}
+      <div className="card card-brackets px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm metric">
+        <span className={running ? "text-cyan glow-cyan" : vm.status === "stopped" ? "text-muted" : "text-red"}>
           ●
         </span>
-        <span className={running ? "text-cyan" : "text-red"}>
+        <span className={running ? "text-cyan glow-cyan" : "text-red"}>
           {running ? "active (running)" : `inactive (${vm.status})`}
         </span>
         {ip && (
