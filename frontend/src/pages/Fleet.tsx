@@ -187,7 +187,7 @@ export function Fleet() {
                 return (
                   <tr
                     key={vm.vmid}
-                    className="border-b border-border-token/60 last:border-0 cursor-pointer transition-colors hover:bg-surface-2"
+                    className="border-b border-border-token/60 last:border-0 cursor-pointer transition-colors hover:bg-surface-2/40 hover:[box-shadow:inset_2px_0_0_color-mix(in_srgb,var(--c-cyan)_40%,transparent)]"
                     onClick={() => navigate(`/vm/${vm.vmid}`)}
                   >
                     <td className="px-3 py-2">

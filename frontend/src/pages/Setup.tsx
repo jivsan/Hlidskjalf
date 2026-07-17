@@ -321,7 +321,7 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
         {step === 0 && (
           <form
             onSubmit={next}
-            className="reveal card login-card p-5 sm:p-6 space-y-5"
+            className="reveal card login-card card-brackets p-5 sm:p-6 space-y-5"
             style={{ ["--step" as string]: 2 }}
           >
             <div className="eyebrow">Proxmox connection</div>
@@ -523,7 +523,7 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
         {step === 1 && (
           <form
             onSubmit={next}
-            className="reveal card login-card p-5 sm:p-6 space-y-5"
+            className="reveal card login-card card-brackets p-5 sm:p-6 space-y-5"
             style={{ ["--step" as string]: 2 }}
           >
             <div className="eyebrow">Admin account</div>
@@ -594,7 +594,7 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
         {step === 2 && (
           <form
             onSubmit={next}
-            className="reveal card login-card p-5 sm:p-6 space-y-5"
+            className="reveal card login-card card-brackets p-5 sm:p-6 space-y-5"
             style={{ ["--step" as string]: 2 }}
           >
             <div className="eyebrow">First user — optional</div>
@@ -723,7 +723,7 @@ export function Setup({ onComplete }: { onComplete: (s: SessionInfo) => void }) 
         {step === 3 && (
           <form
             onSubmit={finish}
-            className="reveal card login-card p-5 sm:p-6 space-y-5"
+            className="reveal card login-card card-brackets p-5 sm:p-6 space-y-5"
             style={{ ["--step" as string]: 2 }}
           >
             <div className="eyebrow">Review</div>

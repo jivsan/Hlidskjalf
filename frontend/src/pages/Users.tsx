@@ -179,7 +179,7 @@ export function UsersPage() {
 
       {loadError && <ErrorState message={loadError} />}
 
-      <Card title="Create user">
+      <Card title="Create user" className="card-brackets-hover">
         <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <input
             className="input"
