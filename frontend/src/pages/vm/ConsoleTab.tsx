@@ -50,7 +50,7 @@ function LxcConsole({ vmid }: { vmid: number }) {
       <Suspense
         fallback={
           <div
-            className="well w-full flex items-center justify-center text-muted text-sm"
+            className="well card-brackets w-full flex items-center justify-center text-muted text-sm"
             style={{ height: "60vh", minHeight: 320 }}
           >
             loading terminal…
@@ -158,16 +158,23 @@ function VncConsole({ vmid }: { vmid: number }) {
         </span>
       </div>
       {lastError && <div className="text-red text-xs mb-2">{lastError}</div>}
-      <div
-        ref={screenRef}
-        className="well w-full overflow-hidden"
-        style={{ height: "60vh", minHeight: 320 }}
-      >
-        {state === "disconnected" && !lastError && (
-          <div className="h-full flex items-center justify-center text-muted text-sm">
-            console disconnected
-          </div>
-        )}
+      {/* The console frame is a signature surface: corner brackets on the well,
+          and the screen inside warms on once per connection (screen-on). The
+          clip lives on the inner div — card-brackets' ticks sit 1px outside
+          the padding box and an overflow-hidden well would crop them. */}
+      <div className="well card-brackets w-full" style={{ height: "60vh", minHeight: 320 }}>
+        <div
+          ref={screenRef}
+          className={`h-full w-full overflow-hidden rounded-[inherit] ${
+            state === "connected" ? "screen-on" : ""
+          }`}
+        >
+          {state === "disconnected" && !lastError && (
+            <div className="h-full flex items-center justify-center text-muted text-sm">
+              console disconnected
+            </div>
+          )}
+        </div>
       </div>
     </Card>
   );
