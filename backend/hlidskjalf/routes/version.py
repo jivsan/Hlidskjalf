@@ -214,7 +214,9 @@ def update_command(kind: str, repo: str) -> str:
 async def _compute(force: bool) -> dict:
     s = settings()
     repo, branch = s.update_repo, s.update_branch
-    local = local_state()
+    # local_state() shells out to git three times (up to 5s each) — keep that
+    # off the event loop, same as routes/update.py does for its subprocesses.
+    local = await asyncio.to_thread(local_state)
     view = {
         **local,
         "repo": repo,
@@ -290,7 +292,7 @@ async def get_version(force: bool = False, _admin: dict = Depends(require_admin_
         return await _compute(force)
     except Exception as e:  # a broken update check must never break the panel
         log.warning("update check failed: %s", e)
-        local = local_state()
+        local = await asyncio.to_thread(local_state)
         return {
             **local,
             "latest": None,
