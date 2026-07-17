@@ -35,7 +35,7 @@ export function OverviewTab({
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Card title="Disk Usage">
+        <Card title="Disk Usage" className="card-brackets-hover">
           {vm.maxdisk > 0 ? (
             <div className="space-y-2 metric">
               <div className="flex justify-between text-sm">
@@ -58,6 +58,7 @@ export function OverviewTab({
 
         <Card
           title="Bandwidth (since boot)"
+          className="card-brackets-hover"
           actions={
             <Link to={`/vm/${vm.vmid}?tab=graphs&sub=bandwidth`} className="text-xs text-cyan hover:underline">
               graphs →
@@ -86,7 +87,7 @@ export function OverviewTab({
           </div>
         </Card>
 
-        <Card title="CPU — last hour">
+        <Card title="CPU — last hour" className="card-brackets-hover">
           <Sparkline
             data={points}
             series={[
@@ -101,7 +102,7 @@ export function OverviewTab({
           />
         </Card>
 
-        <Card title="Network — last hour">
+        <Card title="Network — last hour" className="card-brackets-hover">
           <Sparkline
             data={points}
             series={[

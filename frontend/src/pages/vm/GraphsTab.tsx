@@ -99,7 +99,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         {metrics.error && <span className="text-xs text-red">{metrics.error}</span>}
       </div>
 
-      <Card title="Current utilization">
+      <Card title="Current utilization" className="card-brackets-hover">
         <div className="flex flex-wrap justify-around gap-4">
           <Gauge fraction={cpuFraction} label="cpu" detail={`${vm.maxcpu} cores`} />
           <Gauge
@@ -115,7 +115,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         </div>
       </Card>
 
-      <Card title="CPU %">
+      <Card title="CPU %" className="card-brackets-hover">
         <MetricAreaChart
           data={cpuData}
           timeframe={timeframe}
@@ -125,7 +125,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         />
       </Card>
 
-      <Card title="RAM">
+      <Card title="RAM" className="card-brackets-hover">
         <MetricAreaChart
           data={points}
           timeframe={timeframe}
@@ -137,7 +137,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         />
       </Card>
 
-      <Card title="Disk usage">
+      <Card title="Disk usage" className="card-brackets-hover">
         <MetricAreaChart
           data={points}
           timeframe={timeframe}
@@ -149,7 +149,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         />
       </Card>
 
-      <Card title="Disk I/O">
+      <Card title="Disk I/O" className="card-brackets-hover">
         <MetricAreaChart
           data={points}
           timeframe={timeframe}
@@ -161,7 +161,7 @@ function SystemStats({ vm }: { vm: VmDetail }) {
         />
       </Card>
 
-      <Card title="Network">
+      <Card title="Network" className="card-brackets-hover">
         <MetricAreaChart
           data={points}
           timeframe={timeframe}
@@ -256,7 +256,7 @@ function BandwidthStats({ vmid }: { vmid: number }) {
         {range.error && <span className="text-xs text-red mb-2">{range.error}</span>}
       </div>
 
-      <Card title={quota != null ? "Quota" : "Utilized"}>
+      <Card title={quota != null ? "Quota" : "Utilized"} className="card-brackets-hover">
         {range.loading ? (
           <LoadingState />
         ) : totals ? (
@@ -306,7 +306,7 @@ function BandwidthStats({ vmid }: { vmid: number }) {
         )}
       </Card>
 
-      <Card title="Daily traffic">
+      <Card title="Daily traffic" className="card-brackets-hover">
         {range.loading ? (
           <LoadingState />
         ) : dayData.length === 0 ? (
@@ -324,6 +324,7 @@ function BandwidthStats({ vmid }: { vmid: number }) {
 
       <Card
         title="Monthly"
+        className="card-brackets-hover"
         actions={
           <div className="flex items-center gap-2 text-sm metric">
             <button className="btn-plain px-2 py-0.5" onClick={() => setYear((y) => y - 1)} aria-label="previous year">
