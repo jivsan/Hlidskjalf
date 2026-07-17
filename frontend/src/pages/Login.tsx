@@ -28,7 +28,7 @@ function useTypewriter(text: string, speed = 34) {
       window.removeEventListener("pointerdown", skip);
     };
   }, [done, text.length, speed]);
-  return { shown: text.slice(0, n), done };
+  return { shown: text.slice(0, n), done, reduced };
 }
 
 export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
@@ -39,8 +39,9 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   const navigate = useNavigate();
   const boot = useTypewriter(BOOT_LINE);
   // The cursor blinks while typing and retires a couple of beats after the
-  // line settles — it does not haunt the page forever.
-  const [cursorRetired, setCursorRetired] = useState(false);
+  // line settles — it does not haunt the page forever. Under reduced-motion
+  // the line renders complete, so there is nothing for a cursor to point at.
+  const [cursorRetired, setCursorRetired] = useState(boot.reduced);
   useEffect(() => {
     if (!boot.done) return;
     const id = window.setTimeout(() => setCursorRetired(true), 2200);
