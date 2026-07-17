@@ -56,14 +56,14 @@ export function NodePage() {
 
       {st && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Card title="CPU">
+          <Card title="CPU" className="card-brackets-hover">
             <div className="metric text-lg leading-none text-fg mb-3">
               {formatPercent(st.cpu)}{" "}
               {cores != null && <span className="text-muted text-sm">of {cores} cores</span>}
             </div>
             <ProgressBar fraction={st.cpu} />
           </Card>
-          <Card title="RAM">
+          <Card title="RAM" className="card-brackets-hover">
             <div className="metric text-lg leading-none text-fg mb-3">
               {formatBytes(memUsed)}{" "}
               <span className="text-muted text-sm">/ {formatBytes(memTotal)}</span>
@@ -73,7 +73,7 @@ export function NodePage() {
         </div>
       )}
 
-      <Card title="Storage">
+      <Card title="Storage" className="card-brackets-hover">
         {!info || info.storage.length === 0 ? (
           <EmptyState message="no storage info" />
         ) : (
@@ -108,7 +108,7 @@ export function NodePage() {
         <LoadingState />
       ) : (
         <>
-          <Card title="CPU %">
+          <Card title="CPU %" className="card-brackets-hover">
             <MetricAreaChart
               data={points}
               timeframe={timeframe}
@@ -117,7 +117,7 @@ export function NodePage() {
               series={[{ key: "cpu", name: "cpu", color: CHART.cyan, format: (v) => formatPercent(v) }]}
             />
           </Card>
-          <Card title="IO wait">
+          <Card title="IO wait" className="card-brackets-hover">
             <MetricAreaChart
               data={points}
               timeframe={timeframe}
@@ -127,7 +127,7 @@ export function NodePage() {
               ]}
             />
           </Card>
-          <Card title="RAM">
+          <Card title="RAM" className="card-brackets-hover">
             <MetricAreaChart
               data={points}
               timeframe={timeframe}
@@ -138,7 +138,7 @@ export function NodePage() {
               ]}
             />
           </Card>
-          <Card title="Network">
+          <Card title="Network" className="card-brackets-hover">
             <MetricAreaChart
               data={points}
               timeframe={timeframe}
@@ -149,7 +149,7 @@ export function NodePage() {
               ]}
             />
           </Card>
-          <Card title="Root filesystem">
+          <Card title="Root filesystem" className="card-brackets-hover">
             <MetricAreaChart
               data={points}
               timeframe={timeframe}
