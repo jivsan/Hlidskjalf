@@ -35,6 +35,7 @@ export function TerminalConsole({
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [ready, setReady] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -71,6 +72,7 @@ export function TerminalConsole({
         wsRef.current = ws;
 
         ws.onopen = () => {
+          setConnected(true);
           onState("connected");
           ws.send(`1:${term.cols}:${term.rows}:`);
           keepalive = window.setInterval(() => {
@@ -82,8 +84,12 @@ export function TerminalConsole({
             ev.data instanceof Blob ? new Uint8Array(await ev.data.arrayBuffer()) : ev.data;
           term.write(typeof data === "string" ? data : data);
         };
-        ws.onerror = () => onState("disconnected", "connection failed");
+        ws.onerror = () => {
+          setConnected(false);
+          onState("disconnected", "connection failed");
+        };
         ws.onclose = (ev) => {
+          setConnected(false);
           onState(
             "disconnected",
             ev.code === 4403
@@ -131,16 +137,19 @@ export function TerminalConsole({
   }, [vmid, onState]);
 
   return (
-    <div
-      ref={hostRef}
-      className="well w-full overflow-hidden p-2"
-      style={{ height: "60vh", minHeight: 320 }}
-    >
-      {!ready && (
-        <div className="h-full flex items-center justify-center text-muted text-sm">
-          opening terminal…
-        </div>
-      )}
+    <div className="well card-brackets w-full" style={{ height: "60vh", minHeight: 320 }}>
+      <div
+        ref={hostRef}
+        className={`h-full w-full overflow-hidden rounded-[inherit] p-2 ${
+          connected ? "screen-on" : ""
+        }`}
+      >
+        {!ready && (
+          <div className="h-full flex items-center justify-center text-muted text-sm">
+            opening terminal…
+          </div>
+        )}
+      </div>
     </div>
   );
 }

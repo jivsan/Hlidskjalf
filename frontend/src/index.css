@@ -399,6 +399,7 @@
   50% { opacity: 0; }
 }
 
+<<<<<<< HEAD
 /* page-settle: each navigation's content settles into place ONCE — a short
    opacity + 2px drift, a settle rather than a slide show. Layout keys the
    wrapper on location.pathname so it replays per navigation but never on a
@@ -443,6 +444,29 @@
   0%   { filter: none; }
   35%  { filter: drop-shadow(0 0 9px color-mix(in srgb, var(--ignite-accent, var(--c-pink)) 75%, transparent)); }
   100% { filter: none; }
+}
+
+/* screen-on: the console warms on like a CRT waking — dim and cool, then a
+   ~460ms settle to normal as the connection lands. One-shot with a `both`
+   fill: the class stays applied while connected and just holds the settled
+   state; a fresh connection replays it. Disconnected/connecting stay still. */
+.screen-on {
+  animation: screen-on 460ms ease-out both;
+}
+@keyframes screen-on {
+  from { opacity: 0.55; filter: brightness(0.82) saturate(0.85); }
+  to   { opacity: 1; filter: none; }
+}
+
+/* row-enter: a task row's one-shot arrival — a short fade + 3px settle. Gated
+   by UPID in TasksTab so only a task's first appearance animates; poll
+   re-renders and already-seen rows stay still. */
+.row-enter {
+  animation: row-enter 200ms ease-out both;
+}
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* Flux-panel inspired: cleaner modern cards, subtle depth, professional cyberpunk (less neon/glow) */
@@ -1020,7 +1044,9 @@
   .boot-cursor,
   .toast,
   .page-settle,
-  .ignite-once {
+  .ignite-once,
+  .screen-on,
+  .row-enter {
     animation: none;
   }
   .bar-fill {

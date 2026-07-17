@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { Card, EmptyState, ErrorState, LoadingState } from "../../components/ui";
 import { usePoll } from "../../hooks/usePoll";
@@ -7,7 +7,14 @@ import type { RecentTask } from "../../types";
 
 function exitChip(task: RecentTask) {
   if (task.endtime == null) {
-    return <span className="text-amber">running</span>;
+    // A running task is a live thing: its status LED blooms (dot-bloom);
+    // finished/stopped rows stay flat.
+    return (
+      <span className="inline-flex items-center gap-1.5 text-amber">
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan dot-bloom" />
+        running
+      </span>
+    );
   }
   // Backend normalizes recent tasks; fall back for raw shapes from /tasks/{upid}/status etc.
   const result = task.exitstatus ?? task.status;
@@ -20,11 +27,20 @@ function exitChip(task: RecentTask) {
 export function TasksTab({ vmid }: { vmid: number }) {
   const [showAll, setShowAll] = useState(false);
   const tasks = usePoll(() => api.get<RecentTask[]>("/api/tasks/recent"), 10000);
+  // UPIDs whose entrance animation has already spent its one shot. A row that
+  // merely re-renders (poll refresh, show-all toggle) must not replay it.
+  const seenRef = useRef<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
     const list = tasks.data ?? [];
     return showAll ? list : list.filter((t) => t.id === String(vmid));
   }, [tasks.data, showAll, vmid]);
+
+  // Mark rows seen only after they've actually rendered, so a genuinely new
+  // task arriving on a later poll still gets its one entrance animation.
+  useEffect(() => {
+    for (const t of filtered) seenRef.current.add(t.upid);
+  }, [filtered]);
 
   if (tasks.loading) return <LoadingState />;
   if (tasks.error && !tasks.data) return <ErrorState message={tasks.error} />;
@@ -65,7 +81,13 @@ export function TasksTab({ vmid }: { vmid: number }) {
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <tr key={t.upid} className="border-b border-border-token/50 last:border-0">
+                <tr
+                  key={t.upid}
+                  className={
+                    "border-b border-border-token/50 last:border-0" +
+                    (seenRef.current.has(t.upid) ? "" : " row-enter")
+                  }
+                >
                   <td className="px-2 py-1.5 whitespace-nowrap">{t.type}</td>
                   {showAll && <td className="px-2 py-1.5">{t.id}</td>}
                   <td className="px-2 py-1.5 whitespace-nowrap">{t.user}</td>
