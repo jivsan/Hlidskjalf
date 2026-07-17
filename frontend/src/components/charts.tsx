@@ -11,19 +11,48 @@ import {
 } from "recharts";
 import type { Timeframe } from "../types";
 import { EmptyState } from "./ui";
+import { cssVar } from "../lib/theme";
 
-// Tokyo Night chart tokens (validated: cyan↔pink CVD ΔE 23.5, contrast ≥3:1 on surface).
-export const CHART = {
+// Chart colors read the design tokens (the `--c-*` CSS custom properties
+// emitted from tailwind.config.js) lazily, per access — a theme change is a
+// repaint, not a rebuild. Fallbacks mirror the tailwind hexes so a no-DOM or
+// pre-CSS context still renders the same palette. Keep the exported API
+// (`CHART.cyan` etc.) identical for consumers (OverviewTab, NodePage,
+// GraphsTab, this file).
+const CHART_FALLBACKS = {
   cyan: "#2de2e6",
   pink: "#ff4fa3",
   amber: "#e0af68",
   red: "#f7768e",
-  grid: "#2f3549",
-  muted: "#565f89",
-  fg: "#c0caf5",
-  surface: "#24283b",
-  bg: "#1a1b26",
+  grid: "#2b2f45", // --c-border-token
+  muted: "#727aa3",
+  fg: "#c8d3f5",
+  surface: "#1e2030",
+  bg: "#15161f",
 } as const;
+
+const CHART_VARS: Record<keyof typeof CHART_FALLBACKS, string> = {
+  cyan: "--c-cyan",
+  pink: "--c-pink",
+  amber: "--c-amber",
+  red: "--c-red",
+  grid: "--c-border-token",
+  muted: "--c-muted",
+  fg: "--c-fg",
+  surface: "--c-surface",
+  bg: "--c-bg",
+};
+
+export const CHART: { readonly [K in keyof typeof CHART_FALLBACKS]: string } =
+  new Proxy(CHART_FALLBACKS, {
+    get(target, prop: string | symbol) {
+      const key = prop as keyof typeof CHART_FALLBACKS;
+      if (typeof prop === "string" && key in CHART_VARS) {
+        return cssVar(CHART_VARS[key], target[key]);
+      }
+      return Reflect.get(target, prop);
+    },
+  });
 
 export const AXIS_TICK = { fill: CHART.muted, fontSize: 11, fontFamily: "inherit" } as const;
 

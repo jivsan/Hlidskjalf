@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { api } from "../../api";
+import { cssVar } from "../../lib/theme";
 import type { ConsoleInfo } from "../../types";
 
 // Containers have no framebuffer. Proxmox drives them through `termproxy` — a
@@ -43,8 +44,13 @@ export function TerminalConsole({
       cursorBlink: true,
       fontFamily: '"JetBrains Mono", ui-monospace, monospace',
       fontSize: 13,
-      // Matches the design system's recessed surfaces; the terminal IS machine data.
-      theme: { background: "#12131c", foreground: "#c8cce0", cursor: "#7de3f4" },
+      // Matches the design system's recessed surfaces; the terminal IS machine
+      // data. Colors come from the same `--c-*` tokens as everything else.
+      theme: {
+        background: cssVar("--c-abyss", "#0e0e16"),
+        foreground: cssVar("--c-fg", "#c8d3f5"),
+        cursor: cssVar("--c-cyan", "#2de2e6"),
+      },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

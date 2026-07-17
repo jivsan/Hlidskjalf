@@ -14,7 +14,7 @@
 }:
 
 let
-  version = "0.4.4-alpha";
+  version = "0.5.0-alpha";
 
   frontend = buildNpmPackage {
     pname = "hlidskjalf-frontend";

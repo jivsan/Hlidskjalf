@@ -4,10 +4,15 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { useToast } from "../components/Toast";
 import { ErrorState, LoadingState, PageHeader } from "../components/ui";
 import { usePoll } from "../hooks/usePoll";
+import { formatRate } from "../lib/format";
 import type { SwitchPort, SwitchPortsResponse } from "../types";
 
 // Port alias for brevity (matches backend PortInfo serialized).
 type Port = SwitchPort;
+
+// eAPI reports inBitsRate/outBitsRate (bits/sec); the shared formatter speaks
+// bytes/sec like every other rate in the panel (VM net graphs, node traffic).
+const formatBitsPerSec = (bps: number) => formatRate(bps / 8);
 
 export function SwitchPage() {
   const toast = useToast();
@@ -313,9 +318,9 @@ export function SwitchPage() {
                       <div className="flex items-center gap-1.5 font-mono">
                         <span className="w-3 text-right text-muted tabular-nums">{i + 1}</span>
                         <span>{p.name.replace("Ethernet", "Et")}</span>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUp ? "bg-[#22c55e]" : "bg-red"}`} />
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isUp ? "bg-green" : "bg-red"}`} />
                       </div>
-                      <span className="tabular-nums text-muted text-[10px]">{formatRate(total)}</span>
+                      <span className="tabular-nums text-muted text-[10px]">{formatBitsPerSec(total)}</span>
                     </div>
                   );
                 })}
@@ -349,7 +354,7 @@ export function SwitchPage() {
                 <div className="flex items-center justify-between">
                   <div className="font-mono text-[15px] tracking-wider text-fg">{selectedPort.name}</div>
                   <div
-                    className={`w-2.5 h-2.5 rounded-full ${selectedPort.status === "connected" ? "bg-[#22c55e]" : "bg-red"} ${selectedPort.active ? "led-active" : ""}`}
+                    className={`w-2.5 h-2.5 rounded-full ${selectedPort.status === "connected" ? "bg-green" : "bg-red"} ${selectedPort.active ? "led-active" : ""}`}
                     title={selectedPort.status}
                   />
                 </div>
@@ -366,12 +371,12 @@ export function SwitchPage() {
                   <div className="flex items-center gap-1.5">
                     <span className={`led led-cyan ${selectedPort.active ? "led-active" : "led-muted"}`} />
                     <span className="text-muted">IN</span>
-                    <span className="tabular-nums text-fg">{formatRate(selectedPort.inputRate)}</span>
+                    <span className="tabular-nums text-fg">{formatBitsPerSec(selectedPort.inputRate)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className={`led led-pink ${selectedPort.active ? "led-active" : "led-muted"}`} />
                     <span className="text-muted">OUT</span>
-                    <span className="tabular-nums text-fg">{formatRate(selectedPort.outputRate)}</span>
+                    <span className="tabular-nums text-fg">{formatBitsPerSec(selectedPort.outputRate)}</span>
                   </div>
                 </div>
 
@@ -457,10 +462,4 @@ export function SwitchPage() {
       </div>
     </div>
   );
-}
-
-function formatRate(bps: number): string {
-  if (!bps) return "0";
-  if (bps < 1_000_000) return (bps / 1000).toFixed(0) + "k";
-  return (bps / 1_000_000).toFixed(1) + "M";
 }

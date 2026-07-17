@@ -16,15 +16,15 @@
        Barely there — it should register as depth, not decoration. */
     background-color: theme(colors.bg);
     background-image:
-      radial-gradient(120% 60% at 50% -10%, rgba(45, 226, 230, 0.05), transparent 60%),
-      radial-gradient(90% 50% at 100% 0%, rgba(255, 79, 163, 0.035), transparent 55%);
+      radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--c-cyan) 5%, transparent), transparent 60%),
+      radial-gradient(90% 50% at 100% 0%, color-mix(in srgb, var(--c-pink) 3.5%, transparent), transparent 55%);
     background-attachment: fixed;
   }
   h1, h2, h3, h4 {
     @apply font-display;
   }
   ::selection {
-    background-color: rgba(255, 79, 163, 0.32);
+    background-color: color-mix(in srgb, var(--c-pink) 32%, transparent);
     color: #fff;
   }
 }
@@ -176,10 +176,10 @@
   box-shadow: 0 0 0 1px rgba(255,255,255,0.1) inset;
   vertical-align: middle;
 }
-.led-cyan { background: #2de2e6; }
-.led-pink { background: #ff4fa3; }
-.led-green { background: #22c55e; }
-.led-red { background: #f7768e; }
+.led-cyan { background: var(--c-cyan); }
+.led-pink { background: var(--c-pink); }
+.led-green { background: var(--c-green); }
+.led-red { background: var(--c-red); }
 .led-muted { background: #3a4058; opacity: 0.55; }
 
 .led-active {
@@ -304,7 +304,7 @@
   border: 0.5px solid rgba(0,0,0,0.4);
   box-shadow: 0 0 0 0.5px rgba(255,255,255,0.2) inset;
 }
-.status-led.sys { background: #22c55e; }
+.status-led.sys { background: var(--c-green); }
 .status-led.fan { background: #3b82f6; }
 .status-led.ps { background: #eab308; }
 .status-label {
@@ -410,7 +410,7 @@
   z-index: 1;
   transition: background 60ms ease;
 }
-.rj45-port.up .port-led { background: #22c55e; }
+.rj45-port.up .port-led { background: var(--c-green); }
 .rj45-port.active .port-led {
   animation: port-led-blink 650ms steps(2, end) infinite;
 }
@@ -418,7 +418,7 @@
   background: #4ade80;
 }
 .rj45-port.selected .port-led {
-  box-shadow: 0 0 0 1px #ff4fa3, 0 0 0 0.4px rgba(255,255,255,0.6) inset;
+  box-shadow: 0 0 0 1px var(--c-pink), 0 0 0 0.4px rgba(255,255,255,0.6) inset;
 }
 
 .rj45-port .jack {
@@ -561,7 +561,7 @@
   box-shadow: 0 0 0 0.3px rgba(255,255,255,0.5) inset;
   z-index: 1;
 }
-.qsfp-port.up .port-led { background: #22c55e; }
+.qsfp-port.up .port-led { background: var(--c-green); }
 .qsfp-port.active .port-led {
   animation: port-led-blink 580ms steps(2, end) infinite;
 }
@@ -569,8 +569,8 @@
   background: #4ade80;
 }
 .qsfp-port.selected .cage {
-  border-color: #ff4fa3;
-  box-shadow: 0 0 0 0.8px #ff4fa3;
+  border-color: var(--c-pink);
+  box-shadow: 0 0 0 0.8px var(--c-pink);
 }
 
 .qsfp-port .port-num {
@@ -628,8 +628,8 @@
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  border: 2px solid rgba(45, 226, 230, 0.25);
-  border-top-color: #2de2e6;
+  border: 2px solid color-mix(in srgb, var(--c-cyan) 25%, transparent);
+  border-top-color: var(--c-cyan);
   animation: spin 700ms linear infinite;
   flex-shrink: 0;
 }
@@ -640,8 +640,8 @@
 /* Login screen: quiet radial glow behind the card, hairline accent on top */
 .login-backdrop {
   background:
-    radial-gradient(ellipse 60% 45% at 50% 38%, rgba(255, 79, 163, 0.06), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 50% 62%, rgba(45, 226, 230, 0.05), transparent 70%);
+    radial-gradient(ellipse 60% 45% at 50% 38%, color-mix(in srgb, var(--c-pink) 6%, transparent), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 62%, color-mix(in srgb, var(--c-cyan) 5%, transparent), transparent 70%);
 }
 .login-card {
   position: relative;
@@ -655,7 +655,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, #ff4fa3 0%, #2de2e6 100%);
+  background: linear-gradient(90deg, var(--c-pink) 0%, var(--c-cyan) 100%);
   opacity: 0.8;
 }
 
