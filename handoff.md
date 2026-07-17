@@ -1,5 +1,15 @@
 # handoff.md — Hlidskjalf build status
 
+_Last updated: 2026-07-15 (**v0.4.2-alpha — deployed on NixOS behind Traefik**; PRs #46–#49, 285 tests)._
+
+> **2026-07-15 — the public tenant door moved off Cloudflare.** The Cloudflare tunnel
+> (`cloudflared` on heimdall) was replaced by a **self-hosted Pangolin + Newt** tunnel:
+> `newt` dials out from heimdall to a Pangolin server on a VPS, which fronts
+> `hlidskjalf.im-goat.com`. Nothing in the panel changed — newt still forwards from
+> `127.0.0.1` and Pangolin's Traefik still sets `X-Forwarded-For`, so `trustedProxies`
+> and `adminNetworks` are untouched and admin-from-the-tunnel is refused exactly as
+> before. Bonus: unlike Cloudflare's proxy, **Newt carries raw TCP/UDP**, so tenant SSH
+> (`<vps>.im-goat.com`, below) no longer needs Tailscale-on-every-VM.
 _Last updated: 2026-07-16 (**v0.4.4-alpha released; unreleased on top: `default_nameserver` (#60) + Pangolin SSH-tunnel auto-provisioning**)._
 
 ## ✅ v0.4.4-alpha — EXPOSED TO THE INTERNET, TENANT-ONLY, HARDENED
@@ -155,8 +165,8 @@ and **`scsi0` is hardcoded** for template disk reads and resize (a template on
 
 ### ⚠️ Before the first tenant VM exists: give tenants their own VLAN
 
-The panel is now exposed to the internet for tenants (Cloudflare tunnel), with admin
-pinned to `admin_networks`. If those networks include a VLAN that tenant VMs also sit on,
+The panel is now exposed to the internet for tenants (Pangolin + Newt tunnel — see the
+2026-07-15 note up top; was Cloudflare), with admin pinned to `admin_networks`. If those networks include a VLAN that tenant VMs also sit on,
 a tenant with a shell on their own VM is *inside an admin network* — they would still
 need a password, but they can reach the admin login page and everything else on that
 segment. Provision tenant guests onto a VLAN that is **not** an admin network and has no

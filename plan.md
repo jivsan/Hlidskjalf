@@ -436,3 +436,43 @@ against panel-host, hermes-agent, HAOS, or PBS (151) during development.
 - [ ] Secrets mechanism on panel-host today (plain root-owned env file vs sops/agenix).
 - [ ] VLAN 30 gateway (storage VLAN may be gateway-less — provisioning form should
       allow empty gateway).
+
+## 11. Planned — per-VM tenant reachability (SSH / VNC / TCP / UDP)
+
+_Added 2026-07-15. The public tenant door now runs on **Pangolin + Newt** (a self-hosted
+tunnel replacing Cloudflare). Newt carries **raw TCP and UDP**, not just HTTP — which is
+exactly what SSH and a direct VNC/RDP path need and what Cloudflare's proxy could not do._
+
+**Problem.** Today a tenant only gets the **panel login** exposed, and each resource is
+enabled **by hand** in Pangolin. A friend with a VM has the browser console but no direct
+way in. Adding SSH means manually creating a Pangolin resource per VM every time — it does
+not scale and it is easy to get wrong.
+
+**Feature: the panel provisions the tunnel resource when it provisions the VM.** Give each
+tenant VM a reachable name (`<vps-name>.im-goat.com`) and, per protocol the tenant needs:
+
+- **SSH** — a **TCP** resource → the VM's `:22`. Friend runs plain `ssh <vps>.im-goat.com`.
+- **VNC/RDP** — a **TCP** resource → the VM's console/RDP port (direct client, not the
+  browser console).
+- **UDP** — for anything that needs it (e.g. WireGuard, game servers) — a **UDP** resource.
+
+**How.** Drive it through Pangolin's declarative model so nothing is hand-clicked:
+
+1. A per-VM `public_hostname` + a small set of requested ports (ssh on/off, extra
+   TCP/UDP), stored with the VM.
+2. On provision/enable, the panel emits the Newt **blueprint** entry (or calls the
+   Pangolin API) for that resource; on destroy, it removes it. Blueprint targets point at
+   the tenant VM's IP:port, method `tcp`/`udp` for raw, `http` for web.
+3. Show the tenant the exact connection command on their VM page (`ssh …`, VNC address).
+
+**Gates (do not skip — this exposes tenant machines):**
+- Depends on the **tenant-VLAN** decision (handoff §"before the first tenant VM"): a friend
+  who can SSH into their VM has a shell inside whatever network that VM sits on. Tenant VMs
+  must not sit in an admin network.
+- The Pangolin/Cloudflare API token is a secret — store it encrypted like the PVE token,
+  scope it minimally, and never let a tenant reach the routes that use it.
+- Per-VM authorisation still applies: a tenant may open/close only **their own** VM's
+  resource, never anyone else's.
+
+Supersedes the "reachable tenant VMs" note in handoff.md, which was written when the tunnel
+was Cloudflare (HTTP-only) and therefore assumed Tailscale-on-every-VM for SSH.
