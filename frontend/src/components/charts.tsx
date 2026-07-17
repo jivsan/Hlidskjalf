@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
 import {
   Area,
   AreaChart,
@@ -188,6 +189,24 @@ export function MetricAreaChart<T extends { t: number }>({
   height?: number;
   stacked?: boolean;
 }) {
+  // chart-draw: the stroke draws itself in on mount (≤600ms), then animation
+  // is disabled for the lifetime of the component — the Node page polls every
+  // few seconds and must not pay for a re-animation on every sample. Draw-in
+  // is a JS animation, so reduced-motion is honored here, not in CSS.
+  const firstRender = useRef(
+    !(
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ),
+  );
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      firstRender.current = false;
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, []);
+
   const hasData = data.some((d) => series.some((s) => (d as Record<string, unknown>)[s.key] != null));
   if (!hasData) {
     return <EmptyState message="no data for this range" />;
@@ -240,12 +259,20 @@ export function MetricAreaChart<T extends { t: number }>({
               dataKey={s.key}
               name={s.name}
               stroke={s.color}
-              strokeWidth={1.5}
+              strokeWidth={i === 0 ? 1.75 : 1.5}
               fill={`url(#${gid}-${i})`}
               stackId={stacked ? "stack" : undefined}
               dot={false}
               connectNulls={false}
-              isAnimationActive={false}
+              isAnimationActive={firstRender.current}
+              animationDuration={600}
+              // The main line carries a faint neon bloom; secondary series
+              // stay flat. One filter per chart, repainted only per poll.
+              style={
+                i === 0
+                  ? { filter: `drop-shadow(0 0 3px color-mix(in srgb, ${s.color} 55%, transparent))` }
+                  : undefined
+              }
             />
           ))}
         </AreaChart>
