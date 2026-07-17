@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.5.2-alpha] - 2026-07-17
+
 ### Security
 - **A deleted env-seeded admin's sessions die with the account**: the session
   epoch check and the user lookup both fell back to `HLIDSKJALF_ADMIN_PASSWORD_HASH`
@@ -54,28 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   socket peer; non-IP entries are skipped as before; the CF-Connecting-IP gate is
   unchanged. Regression tests pin the spoof (unit + end-to-end through ASGI),
   a legitimate two-hop admin login, and the degenerate-line cases.
-
-## [0.5.1-alpha] - 2026-07-17
-
-### Added — cyberpunk iteration, round two
-- **Toasts are shards now**: chamfered plates with a kind-colored accent edge
-  (cyan success / red error / muted info), a soft accent glow, and a one-shot
-  slide-in entrance (killed under reduced-motion). (#74)
-- **Rescue banner wears a hazard edge**: static amber caution striping across the
-  top of the RESCUE MODE banner — danger you can read at a glance, no animation. (#74)
-- **Gauge arcs glow**: the utilization gauges' progress arcs carry the same faint
-  bloom as the primary chart strokes. (#74)
-- **Fleet rows answer hover**: a hairline cyan tick + surface lift on the row under
-  the pointer — the table itself stays clean. The masthead wordmark ignites once on
-  load; the setup wizard card wears always-on corner brackets (same rank as login);
-  the users and settings primary cards reveal brackets on hover. (#76)
-
-### Added — Phase 3 driver
-- `scripts/phase3-write-paths.py` exercises every write path against a real panel
-  (provision → console ticket → rescue in/out → reinstall → destroy) on a scratch
-  VMID ≥ 900 through the panel's own API — login + CSRF, task polling, per-step
-  PASS/FAIL with observed values, refusal on any existing VMID, and a `finally`
-  cleanup that destroys the scratch guest. `--dry-run` for a read-only smoke. (#75)
+- **Pangolin lifecycle hardening** (first audit of the #61 integration):
 - **Port-pool race**: the SSH proxy port was allocated by reading the pool and
   inserting only AFTER the Pangolin create returned, so two concurrent
   provisions could be handed the same port. The port is now reserved atomically
@@ -100,6 +82,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Settings — no such route or UI exists. They are env/NixOS-module only (and
   were removed from the `ADMIN_WRITABLE` allowlist, which nothing could reach).
 
+## [0.5.1-alpha] - 2026-07-17
+
+### Added — cyberpunk iteration, round two
+- **Toasts are shards now**: chamfered plates with a kind-colored accent edge
+  (cyan success / red error / muted info), a soft accent glow, and a one-shot
+  slide-in entrance (killed under reduced-motion). (#74)
+- **Rescue banner wears a hazard edge**: static amber caution striping across the
+  top of the RESCUE MODE banner — danger you can read at a glance, no animation. (#74)
+- **Gauge arcs glow**: the utilization gauges' progress arcs carry the same faint
+  bloom as the primary chart strokes. (#74)
+- **Fleet rows answer hover**: a hairline cyan tick + surface lift on the row under
+  the pointer — the table itself stays clean. The masthead wordmark ignites once on
+  load; the setup wizard card wears always-on corner brackets (same rank as login);
+  the users and settings primary cards reveal brackets on hover. (#76)
+
+### Added — Phase 3 driver
+- `scripts/phase3-write-paths.py` exercises every write path against a real panel
+  (provision → console ticket → rescue in/out → reinstall → destroy) on a scratch
+  VMID ≥ 900 through the panel's own API — login + CSRF, task polling, per-step
+  PASS/FAIL with observed values, refusal on any existing VMID, and a `finally`
+  cleanup that destroys the scratch guest. `--dry-run` for a read-only smoke. (#75)
 
 ## [0.5.0-alpha] - 2026-07-17
 

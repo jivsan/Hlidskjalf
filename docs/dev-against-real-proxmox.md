@@ -185,8 +185,8 @@ full tracebacks, the redacted config, and the durable audit log at
 
 **The rule when reality disagrees with the code:** fix it, add the test that would
 have caught it, *and fix `dev/mock_pve.py` so the mock stops lying*. Otherwise the
-suite goes green again and we learn nothing. This is written into `CLAUDE.md`, so a
-Claude Code instance on this VM already knows it.
+suite goes green again and we learn nothing. This is written into the project's
+working brief, so anyone picking up the repo already knows it.
 
 ### What I expect to break first
 

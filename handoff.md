@@ -1,6 +1,6 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.1-alpha + security hardening**; PRs #74–#81 + release PR, 334 tests)._
+_Last updated: 2026-07-17 (**v0.5.2-alpha — the security release**; PRs #74–#82, 352 tests)._
 
 ## 🔒 Security hardening on top of v0.5.1 (from the adversarial audit)
 
@@ -39,7 +39,7 @@ regression test that was proven RED against the old code first:
   formally PASS on the real host — blocked on `HLIDSKJALF_RESCUE_ISO` being unset
   in the deployment (set `settings.rescueIso` in the NixOS module and re-run).
 
-## 🔧 Security fixes in flight (branch `fix/security-high-auth`)
+## 🔧 Auth findings fixed (#80)
 
 Four confirmed audit findings, each with a regression test that fails without the
 fix (verified by reverting the source and watching them go red):
