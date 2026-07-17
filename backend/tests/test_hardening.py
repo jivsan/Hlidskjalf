@@ -129,6 +129,24 @@ def test_destroy_is_rate_limited_hard(client):
     assert 429 in codes
 
 
+def test_console_ticket_mint_is_rate_limited(client):
+    """The console mint was the one PVE-hitting verb the v0.3.6 pass missed.
+
+    Every GET /api/vms/{vmid}/console is a vncproxy/termproxy POST against
+    Proxmox, so a tenant looping it is looping the hypervisor. 30/hour per
+    user: an interactive console mints a ticket per page load and per
+    reconnect — a handful an hour — so only something scripted ever hits this.
+
+    (No audit-log assertion here on purpose: rate-limit refusals are not
+    journaled for ANY verb — check_rate raises inside the dependency, before
+    the handler's journal.record can run — so console matches the rest.)
+    """
+    login(client)
+    codes = [client.get(f"/api/vms/{VMID}/console").status_code for _ in range(31)]
+    assert codes[:30] == [200] * 30, "ordinary console use must not be throttled"
+    assert codes[30] == 429, "the 31st ticket within the hour must be refused"
+
+
 def test_the_limit_is_per_user_not_global(client, user_factory):
     """One tenant burning their quota must not lock everybody else out."""
     assert user_factory("noisy", password="noisypass1", vmid=VMID).status_code == 201

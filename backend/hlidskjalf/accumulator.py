@@ -15,6 +15,7 @@ nor loses the window between last persist and the restart.
 
 import asyncio
 import logging
+import time
 
 from .db import Db, today_utc
 from .pve import PveClient, PveError
@@ -23,13 +24,23 @@ log = logging.getLogger("hlidskjalf.accumulator")
 
 INTERVAL = 60.0
 
+# Housekeeping cadence for the audit log. `Db.audit_prune` existed for months
+# with no caller, so the table grew without bound — a failed-login spray adds
+# ~7,000 rows/day per source IP and buries incident review. The accumulator's
+# loop is the only periodic task the panel has, so the prune rides it: once at
+# startup, then at most once a day. audit_prune keeps the NEWEST rows.
+AUDIT_PRUNE_INTERVAL = 24 * 60 * 60.0
+
 
 class Accumulator:
-    def __init__(self, pve: PveClient, db: Db):
+    def __init__(self, pve: PveClient, db: Db, audit_keep: int = 20_000):
         self.pve = pve
         self.db = db
+        self.audit_keep = audit_keep
         self.prev: dict[int, tuple[int, int]] = {}
         self._task: asyncio.Task | None = None
+        # None = the prune has not run yet, so the first loop cycle runs it.
+        self._last_audit_prune: float | None = None
 
     async def start(self) -> None:
         self.prev = await self.db.load_counters()
@@ -52,7 +63,27 @@ class Accumulator:
                 log.warning("sample skipped: %s", e)
             except Exception:
                 log.exception("accumulator cycle failed")
+            await self._maybe_prune_audit()
             await asyncio.sleep(INTERVAL)
+
+    async def _maybe_prune_audit(self) -> None:
+        """Cap the audit log, at most once a day. Never raises.
+
+        Housekeeping must not kill bandwidth accounting, so any prune failure
+        is logged and swallowed here. The attempt is throttled either way — a
+        persistently failing prune retries tomorrow, not every 60 s cycle.
+        """
+        now = time.monotonic()
+        if (
+            self._last_audit_prune is not None
+            and now - self._last_audit_prune < AUDIT_PRUNE_INTERVAL
+        ):
+            return
+        self._last_audit_prune = now
+        try:
+            await self.db.audit_prune(keep=self.audit_keep)
+        except Exception:
+            log.exception("audit prune failed; the table keeps growing until the next attempt")
 
     async def sample_once(self) -> None:
         resources = await self.pve.cluster_resources()
