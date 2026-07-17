@@ -184,3 +184,33 @@ and with it set the panel **refuses to start** unless both `adminNetworks` and
 cannot be deployed by accident. Turn it on the moment a tunnel or port-forward goes in
 front of the panel; leave it off for a LAN-only deployment (the default), which stays
 unconstrained.
+
+## 7. Phishing and credential attacks — what the panel does about them
+
+The login page is the one page the whole internet sees, so it gets the paranoid
+reading:
+
+- **Clickjacking is closed by construction.** Every response carries
+  `frame-ancestors 'none'` (and `X-Frame-Options: DENY` for older browsers), so a
+  lookalike site cannot frame the real login and skim credentials. A strict
+  single-origin CSP (`default-src 'self'`, no remote scripts) plus React's escaping
+  covers injection; these headers are pinned by tests so they cannot silently
+  regress. The panel never loads third-party assets, so a compromised CDN has no
+  reach here either.
+- **The panel never sends email or messages.** There is nothing to spoof: any
+  "Hlidskjalf" mail, DM, or password reset request is fake by definition. Password
+  changes happen only in the panel, behind the current password.
+- **Guessing is expensive and confirmation-free.** Failed logins are
+  indistinguishable (a valid admin password from outside `admin_networks` gets the
+  same generic 401 as a wrong one), per-IP attempts are limited, and per-account
+  failures back off with a cap that cannot be used as a memory bomb. An attacker
+  gets ~36 unverifiable guesses an hour against a real password.
+- **Sessions are bound and revocable.** Cookies are `SameSite=Strict` + HttpOnly,
+  bound to the password epoch (a password change kills every older session), and
+  the session secret is encrypted at rest and redacted from logs.
+- **Admin exists only on your networks.** Even a perfectly phished admin password
+  is worthless from the internet — the login only works from inside
+  `admin_networks`, and a session that wanders out stops working.
+
+The residual human layer is out of the panel's reach: tenants should reach the
+panel only through the address you give them, and admin work stays on the tailnet.
