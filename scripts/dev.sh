@@ -45,6 +45,11 @@ if [[ $VITE -eq 0 && ! -f frontend/dist/index.html ]]; then
   [[ -d frontend/node_modules ]] || (cd frontend && npm ci)
   (cd frontend && npm run build)
 fi
+# ...and the backend has to be TOLD where it is — static_dir defaults to ""
+# (API only). Without this every non-Vite run 404s the SPA it just built.
+if [[ $VITE -eq 0 ]]; then
+  export HLIDSKJALF_STATIC_DIR="${HLIDSKJALF_STATIC_DIR:-$ROOT/frontend/dist}"
+fi
 
 if [[ $MOCK -eq 1 ]]; then
   # The mock needs no secrets and no Proxmox. Everything is disposable.
