@@ -9,6 +9,13 @@
     <title>Hlidskjalf</title>
   </head>
   <body>
+    <!-- The ambient scene: static HTML on purpose — no React, no re-renders,
+         always behind #root. Layers styled in index.css (.scene-*). -->
+    <div class="scene" aria-hidden="true">
+      <div class="scene-aurora"></div>
+      <div class="scene-grid"></div>
+      <div class="scene-vignette"></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

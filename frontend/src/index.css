@@ -12,13 +12,24 @@
   }
   body {
     @apply min-h-screen antialiased text-sm;
-    /* Ambient watch: a faint aurora at the horizon over an otherwise black void.
-       Barely there — it should register as depth, not decoration. */
+    /* The void. Everything atmospheric lives in the .scene layers below. */
     background-color: theme(colors.bg);
-    background-image:
-      radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--c-cyan) 5%, transparent), transparent 60%),
-      radial-gradient(90% 50% at 100% 0%, color-mix(in srgb, var(--c-pink) 3.5%, transparent), transparent 55%);
-    background-attachment: fixed;
+  }
+  /* Scanlines: the CRT glass over everything. STATIC — never animated;
+     animating these is the first thing that reads as parody. At ~3.5% they
+     are invisible at arm's length and just texture up close. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.85) 0 1px,
+      transparent 1px 3px
+    );
+    opacity: 0.05;
   }
   h1, h2, h3, h4 {
     @apply font-display;
@@ -29,7 +40,71 @@
   }
 }
 
+/* --- The ambient scene (v0.5.0) ---------------------------------------------
+   Four fixed layers behind #root, pointer-events none, animating transform /
+   opacity only. Spec: docs/design/v0.5.0-cyberpunk.md. The scanlines are the
+   fourth layer and live on body::after above. Everything animated here freezes
+   under prefers-reduced-motion (see the block at the bottom of this file). */
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* 1. Aurora — the room's air. Deepened from v0.3.5 (cyan 5→7%, pink 3.5→5%)
+   and now drifting on a 55s cycle: weather, not motion. Overscanned so the
+   drift never reveals an edge. */
+.scene-aurora {
+  position: absolute;
+  inset: -12%;
+  background-image:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--c-cyan) 7%, transparent), transparent 60%),
+    radial-gradient(90% 50% at 100% 0%, color-mix(in srgb, var(--c-pink) 5%, transparent), transparent 55%);
+  animation: aurora-drift 55s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to   { transform: translate3d(2%, 1.5%, 0) scale(1.04); }
+}
+
+/* 2. Grid horizon — a faint perspective floor idling forward. One 60s loop
+   that translates exactly one grid cell in the rotated plane, so it repeats
+   seamlessly. The mask dissolves it into the horizon instead of a hard line. */
+.scene-grid {
+  position: absolute;
+  left: -30%;
+  right: -30%;
+  bottom: 0;
+  height: 62%;
+  background-image:
+    repeating-linear-gradient(90deg, var(--c-cyan) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, var(--c-cyan) 0 1px, transparent 1px 44px);
+  opacity: 0.09;
+  transform-origin: 50% 100%;
+  animation: grid-drift 60s linear infinite;
+  -webkit-mask-image: linear-gradient(to top, black 35%, transparent 92%);
+  mask-image: linear-gradient(to top, black 35%, transparent 92%);
+}
+@keyframes grid-drift {
+  from { transform: perspective(700px) rotateX(55deg) translateY(0); }
+  to   { transform: perspective(700px) rotateX(55deg) translateY(44px); }
+}
+
+/* 3. Vignette — gentle corner darkening; pulls the eye to the work. Static. */
+.scene-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(115% 90% at 50% 42%, transparent 58%, rgba(0, 0, 0, 0.38));
+}
+
 @layer components {
+
   /* Card: a lit surface above the void — hairline top-highlight, soft lift. */
   .card {
     @apply bg-surface border border-border-token rounded-card;
@@ -666,7 +741,8 @@
   border-radius: 2px;
 }
 
-/* Motion sensitivity: stop the LED blinking + spinner rotation + reveal */
+/* Motion sensitivity: stop the LED blinking + spinner rotation + reveal, and
+   freeze every animated scene layer (the static layers may stay). */
 @media (prefers-reduced-motion: reduce) {
   .led-active,
   .rj45-port.active .port-led,
@@ -677,6 +753,10 @@
     animation-duration: 2s;
   }
   .reveal {
+    animation: none;
+  }
+  .scene-aurora,
+  .scene-grid {
     animation: none;
   }
 }
