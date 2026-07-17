@@ -136,29 +136,149 @@
     background: linear-gradient(90deg, theme(colors.border-token), transparent);
   }
 
+  /* Shard buttons: chamfered plate, NO border — clip-path would eat it (it
+     eats outlines too, which is why focus is the drop-shadow below). The
+     accent-tinted fill carries the variant; hover/focus drop-shadow follows
+     the clipped silhouette — neon hover AND focus indicator in one. */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-card border text-sm
-      font-medium tracking-tight disabled:opacity-40 disabled:cursor-not-allowed select-none
-      transition-colors duration-100;
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm
+      font-medium tracking-tight disabled:opacity-40 disabled:cursor-not-allowed select-none;
+    clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+    position: relative;
+    overflow: hidden;
+    transition: background-color 100ms ease, color 100ms ease, filter 100ms ease;
   }
+  /* shard-sheen: one energy sweep per hover/focus, then it settles. No
+     transition on the base state, so it snaps back invisibly. */
+  .btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.13) 50%, transparent 58%);
+    transform: translateX(-130%);
+    pointer-events: none;
+  }
+  .btn:hover::after,
+  .btn:focus-visible::after {
+    transform: translateX(130%);
+    transition: transform 320ms ease;
+  }
+  .btn:disabled { filter: none; }
+  .btn:disabled::after { display: none; }
   .btn-cyan {
-    @apply btn border-cyan/45 text-cyan hover:bg-cyan/10 hover:border-cyan/70;
+    @apply btn text-cyan bg-cyan/10 hover:bg-cyan/20;
   }
   .btn-pink {
-    @apply btn border-pink/55 text-pink hover:bg-pink/10 hover:border-pink/80;
+    @apply btn text-pink bg-pink/10 hover:bg-pink/20;
   }
   .btn-plain {
-    @apply btn border-border-token text-fg hover:bg-surface-2 hover:border-muted/50;
+    @apply btn text-fg bg-surface-2/50 hover:bg-surface-2;
   }
   .btn-red {
-    @apply btn border-red/55 text-red hover:bg-red/10 hover:border-red/80;
+    @apply btn text-red bg-red/10 hover:bg-red/20;
   }
   .btn-amber {
-    @apply btn border-amber/55 text-amber hover:bg-amber/10 hover:border-amber/80;
+    @apply btn text-amber bg-amber/10 hover:bg-amber/20;
+  }
+  .btn-cyan:hover, .btn-cyan:focus-visible {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-cyan) 55%, transparent));
+  }
+  .btn-pink:hover, .btn-pink:focus-visible {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-pink) 55%, transparent));
+  }
+  .btn-red:hover, .btn-red:focus-visible {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-red) 55%, transparent));
+  }
+  .btn-amber:hover, .btn-amber:focus-visible {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-amber) 55%, transparent));
+  }
+  .btn-plain:hover, .btn-plain:focus-visible {
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-fg) 25%, transparent));
+  }
+  /* Badges wear the same cut, smaller. */
+  .shard-sm {
+    clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  }
+
+  /* Corner brackets: targeting-reticle ticks. Always-on for the signature
+     panels (.card-brackets), hover-reveal elsewhere; never on tables/wells. */
+  .card-brackets,
+  .card-brackets-hover {
+    position: relative;
+  }
+  .card-brackets::before,
+  .card-brackets::after,
+  .card-brackets-hover::before,
+  .card-brackets-hover::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+    border: 1px solid color-mix(in srgb, var(--c-cyan) 40%, transparent);
+  }
+  .card-brackets::before,
+  .card-brackets-hover::before {
+    top: -1px;
+    left: -1px;
+    border-right: none;
+    border-bottom: none;
+  }
+  .card-brackets::after,
+  .card-brackets-hover::after {
+    bottom: -1px;
+    right: -1px;
+    border-left: none;
+    border-top: none;
+  }
+  .card-brackets-hover::before,
+  .card-brackets-hover::after {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .card-brackets-hover:hover::before,
+  .card-brackets-hover:hover::after {
+    opacity: 1;
+  }
+
+  /* The glow budget: wordmark, live dots, the VM status chip. Nowhere else. */
+  .glow-cyan {
+    text-shadow:
+      0 0 10px color-mix(in srgb, var(--c-cyan) 65%, transparent),
+      0 0 28px color-mix(in srgb, var(--c-cyan) 30%, transparent);
+  }
+  .glow-pink {
+    text-shadow:
+      0 0 10px color-mix(in srgb, var(--c-pink) 65%, transparent),
+      0 0 28px color-mix(in srgb, var(--c-pink) 30%, transparent);
+  }
+  /* dot-bloom: an LED breathes (~3s swell — the one fast loop allowed, because
+     a live dot that doesn't pulse reads as dead). */
+  .dot-bloom {
+    animation: dot-bloom 3.2s ease-in-out infinite;
+  }
+  @keyframes dot-bloom {
+    0%, 100% { box-shadow: 0 0 3px 1px color-mix(in srgb, var(--c-cyan) 55%, transparent); }
+    50%      { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--c-cyan) 85%, transparent); }
+  }
+
+  /* card-lift: interactive cards rise 1px and their hairline warms on hover. */
+  .card-lift {
+    transition: transform 100ms ease, border-color 100ms ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--c-cyan) 30%, var(--c-border-token));
   }
   .input {
     @apply bg-abyss border border-border-token rounded-card px-3 py-1.5 text-sm text-fg w-full
-      placeholder:text-muted focus:outline-none focus:border-cyan/70 transition-colors duration-100;
+      placeholder:text-muted focus:outline-none focus:border-cyan/70;
+    transition: border-color 100ms ease, filter 100ms ease;
+  }
+  /* Inputs keep their radius (they are data fields, not actions) — focus gets
+     a soft cyan halo alongside the border change. */
+  .input:focus {
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--c-cyan) 35%, transparent));
   }
   .label {
     @apply block text-xs text-muted mb-1;
@@ -742,7 +862,8 @@
 }
 
 /* Motion sensitivity: stop the LED blinking + spinner rotation + reveal, and
-   freeze every animated scene layer (the static layers may stay). */
+   freeze every animated scene layer and event animation (the static layers
+   may stay). */
 @media (prefers-reduced-motion: reduce) {
   .led-active,
   .rj45-port.active .port-led,
@@ -758,5 +879,19 @@
   .scene-aurora,
   .scene-grid {
     animation: none;
+  }
+  .dot-bloom {
+    animation: none;
+    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--c-cyan) 55%, transparent);
+  }
+  .btn::after {
+    display: none;
+  }
+  .btn,
+  .card-lift,
+  .card-brackets-hover::before,
+  .card-brackets-hover::after,
+  .input {
+    transition-duration: 0.01ms;
   }
 }
