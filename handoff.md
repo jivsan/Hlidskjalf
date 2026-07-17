@@ -1,6 +1,6 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.1-alpha**; PRs #74–#79 + release PR, 332 tests)._
+_Last updated: 2026-07-17 (**v0.5.1-alpha + security hardening**; PRs #74–#81 + release PR, 334 tests)._
 
 ## 🔒 Security hardening on top of v0.5.1 (from the adversarial audit)
 
@@ -19,9 +19,10 @@ regression test that was proven RED against the old code first:
   and degenerate-line cases; the `_Req` mock now uses Starlette's real `Headers`
   (a plain dict cannot hold duplicate lines, so the attack was untestable before).
 - **Console ticket mint rate-limited + audit log actually pruned (#78).**
-- Remaining confirmed findings (env-seeded admin session revocation, session
-  secret in startup log, login oracle, unbounded failure map, /api/session zone
-  check, pangolin lifecycle) land in their own PRs — see below.
+- **Auth batch (#80, below): env-seeded admin session revocation, startup-log
+  secret redaction, login oracle → generic 401, /api/session zone check.**
+- **Pangolin lifecycle (#81, below): port race, three orphan paths, scheme guard.**
+- The unbounded per-account login-failure map rides with #80 (sweep + cap).
 
 ## ✅ v0.5.1-alpha — ITERATION ROUND TWO + PHASE 3 DRIVER
 
@@ -57,6 +58,32 @@ fix (verified by reverting the source and watching them go red):
    (role=admin + CSRF) to an out-of-zone admin cookie via `require_session_full`.
    Now zone-checked; `/api/logout` deliberately stays zone-free (revocation only
    ever reduces access).
+
+
+## 🔧 Pangolin lifecycle security pass (#81)
+
+First audit of the Pangolin SSH-tunnel integration (#61) found a cluster of
+MEDIUM/LOW lifecycle bugs; all fixed with regression tests (schema v4: UNIQUE
+`proxy_port`, NULL-able `resource_id`, `orphan_ids` for deletes still owed):
+
+- Port allocation was read-pool-then-insert-later — a TOCTOU that could hand two
+  concurrent provisions the same port. Reservation is atomic, UNIQUE index as
+  backstop.
+- Destroying a VM already deleted out-of-band 404'd before cleanup ran,
+  stranding the tunnel forever. The destroy now cleans up and reports
+  `already_gone`.
+- A failed Pangolin delete survived in the DB only until a reprovision's
+  `INSERT OR REPLACE` erased the orphan's id. Orphans now travel in
+  `orphan_ids`; every destroy retries all owed deletes (Pangolin 404 = already
+  gone, not a debt).
+- The resource id is recorded immediately after the create, so a failed target
+  attach no longer strands an untracked resource.
+- `pangolin_api_url` must be https (bearer key would go cleartext otherwise);
+  http is loopback-only. `docs/pangolin.md`'s Settings claim was false — the
+  knobs are env/NixOS-module only, and were dropped from `ADMIN_WRITABLE`.
+
+**Best-effort is preserved**: a Pangolin outage still never fails a VM
+create/destroy — failures come back as `pangolin.warning` notes.
 
 
 ## ✅ v0.5.0-alpha — FULL SEND, NOT CRINGE

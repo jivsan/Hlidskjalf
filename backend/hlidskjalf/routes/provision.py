@@ -220,13 +220,24 @@ async def _pangolin_provision(db: Db, vmid: int, name: str, ip: str) -> dict | N
         # No static IP recorded (e.g. reinstall with no ipconfig) — nothing to
         # point a target at.
         return {"warning": "Pangolin: no static IP for this VM; SSH tunnel not created"}
+    # Reserve the port FIRST and atomically. The old order — scan the pool,
+    # create the resource, insert the row — let two concurrent provisions scan
+    # the same pool before either inserted, and both took the same port.
     try:
-        port = await db.pangolin_next_free_port(s.pangolin_ssh_port_start)
+        port = await db.pangolin_reserve_port(vmid, s.pangolin_ssh_port_start)
+    except Exception as e:  # even a DB hiccup must not fail the VM create
+        log.warning("Pangolin: could not reserve a port for VM %s: %s", vmid, e)
+        return {"warning": f"Pangolin SSH tunnel not created: {e}"}
+    resource_id: int | None = None
+    try:
         async with pangolin.PangolinClient(s) as client:
             # GUARDRAIL: only ever an SSH/TCP resource, never a public HTTP one.
             resource_id = await client.create_tcp_resource(name=name, proxy_port=port)
+            # Record the id IMMEDIATELY — a failure after this point (attaching
+            # the target, a dropped connection, anything) must not strand a
+            # resource the panel has no id for.
+            await db.pangolin_set_resource(vmid, resource_id)
             await client.add_target(resource_id, ip=ip, port=22)
-        await db.pangolin_insert(vmid, resource_id, port)
         log.info(
             "Pangolin: created SSH tunnel resource %s (port %s) for VM %s (%s)",
             resource_id, port, vmid, name,
@@ -234,27 +245,78 @@ async def _pangolin_provision(db: Db, vmid: int, name: str, ip: str) -> dict | N
         return {"ssh_port": port, "resource_id": resource_id}
     except Exception as e:  # PangolinError or anything else — best-effort
         log.warning("Pangolin: could not create SSH tunnel for VM %s: %s", vmid, e)
+        if resource_id is None:
+            # The create itself failed: nothing exists in Pangolin for this
+            # row, so hand the port back (a row carrying orphan debts from an
+            # earlier failed delete is kept, debts intact).
+            await db.pangolin_release_port(vmid)
+        # resource_id set → the row keeps it; a later destroy deletes it.
         return {"warning": f"Pangolin SSH tunnel not created: {e}"}
 
 
 async def _pangolin_destroy(db: Db, vmid: int) -> dict | None:
-    """Delete the SSH tunnel resource for a destroyed VM. Best-effort: on error
-    the DB row is kept so a later retry can still find it."""
+    """Delete every Pangolin resource this VM's row tracks: the live resource
+    (if any) plus any orphan ids a previous delete failed on. Best-effort:
+    failures stay on the row as orphan debts so a later retry — the next
+    destroy of a reprovisioned VM, say — can still find them. Never raises."""
     s = settings()
     row = await db.pangolin_get(vmid)
     if row is None:
         return None
+    owed = (
+        [row["resource_id"]] if row["resource_id"] is not None else []
+    ) + row["orphan_ids"]
+    if not owed:
+        # A bare port reservation whose create never completed — nothing
+        # exists in Pangolin; just drop the row.
+        await db.pangolin_delete(vmid)
+        return None
+    deleted: list[int] = []
+    failures: list[str] = []
     try:
         async with pangolin.PangolinClient(s) as client:
-            await client.delete_resource(row["resource_id"])
+            for rid in owed:
+                try:
+                    await client.delete_resource(rid)
+                    deleted.append(rid)
+                except pangolin.PangolinError as e:
+                    if e.status == 404:
+                        # Already gone from Pangolin — that IS the goal state
+                        # (e.g. cleaned up out-of-band). Not a debt to retry.
+                        deleted.append(rid)
+                        continue
+                    log.warning(
+                        "Pangolin: could not delete SSH tunnel resource %s "
+                        "(VM %s): %s",
+                        rid, vmid, e,
+                    )
+                    failures.append(f"resource {rid} may still exist: {e}")
+                except Exception as e:  # best-effort — never fail the destroy
+                    log.warning(
+                        "Pangolin: could not delete SSH tunnel resource %s "
+                        "(VM %s): %s",
+                        rid, vmid, e,
+                    )
+                    failures.append(f"resource {rid} may still exist: {e}")
+    except Exception as e:  # client setup itself failed — everything stays owed
+        log.warning("Pangolin: tunnel cleanup for VM %s failed outright: %s", vmid, e)
+        failures.append(str(e))
+    remaining = [rid for rid in owed if rid not in deleted]
+    if remaining:
+        await db.pangolin_set_debts(vmid, remaining)
+    else:
         await db.pangolin_delete(vmid)
-        log.info("Pangolin: deleted SSH tunnel resource %s for VM %s",
-                 row["resource_id"], vmid)
-        return {"deleted_resource_id": row["resource_id"]}
-    except Exception as e:  # best-effort — never fail the destroy
-        log.warning("Pangolin: could not delete SSH tunnel for VM %s: %s", vmid, e)
-        return {"warning": f"Pangolin SSH tunnel resource {row['resource_id']} "
-                           f"may still exist: {e}"}
+    note: dict = {}
+    if deleted:
+        log.info(
+            "Pangolin: deleted SSH tunnel resource(s) %s for VM %s", deleted, vmid
+        )
+        note["deleted_resource_ids"] = deleted
+        if row["resource_id"] in deleted:
+            note["deleted_resource_id"] = row["resource_id"]
+    if failures:
+        note["warning"] = "; ".join(failures)
+    return note or None
 
 
 @router.post("/api/vms", status_code=201)
@@ -423,7 +485,18 @@ async def destroy_vm(
         raise
     resource = await pve.find_resource(vmid)
     if not resource:
-        raise HTTPException(404, f"No guest with VMID {vmid}")
+        # The VM is already gone from Proxmox — deleted out-of-band, e.g. from
+        # the Proxmox UI. 404ing here used to strand its Pangolin tunnel
+        # resource with no panel path to remove it. The end state the caller
+        # asked for is "no VM, no tunnel", and that is exactly what we leave:
+        # run the best-effort Pangolin cleanup and succeed.
+        await journal.record(db, request, username, journal.VM_DESTROY, vmid,
+                             "already gone from PVE (deleted out-of-band)")
+        result: dict = {"upids": [], "already_gone": True}
+        note = await _pangolin_destroy(db, vmid)
+        if note is not None:
+            result["pangolin"] = note
+        return result
     name = resource.get("name") or ""
     if confirm_name != name:
         raise HTTPException(400, f"confirm_name does not match VM name '{name}'")

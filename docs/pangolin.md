@@ -30,15 +30,17 @@ All five must be set for the integration to turn on (`Settings.pangolin_enabled`
 
 | Setting | Env var | Notes |
 |---|---|---|
-| API base URL | `HLIDSKJALF_PANGOLIN_API_URL` | e.g. `https://api.example.com/v1`, no trailing slash |
+| API base URL | `HLIDSKJALF_PANGOLIN_API_URL` | e.g. `https://api.example.com/v1`, no trailing slash. **Must be `https://`** — the API key rides there as a bearer token, so the panel refuses to start with a plain-`http` URL (http is accepted only for loopback hosts, i.e. a local mock) |
 | API key (**secret**) | `HLIDSKJALF_PANGOLIN_API_KEY` | Bearer key; `*_FILE` twin supported; encrypted at rest, never returned by any API |
 | Org id | `HLIDSKJALF_PANGOLIN_ORG_ID` | organization the resources live under |
 | Site id | `HLIDSKJALF_PANGOLIN_SITE_ID` | numeric Newt site that can reach the VMs |
 | SSH port pool base | `HLIDSKJALF_PANGOLIN_SSH_PORT_START` | e.g. `2200`; each VM gets the next free port at/above this |
 
-On NixOS, set the non-secret four under `services.hlidskjalf.settings.pangolin*` and the
-key via `environmentFile`. In the running panel, the four non-secret knobs are also
-editable under **Settings** (the key is not — it is env/`_FILE` only).
+All five are **environment-only** (or the NixOS module: the non-secret four under
+`services.hlidskjalf.settings.pangolin*`, the key via `environmentFile`). They are
+deliberately NOT editable in the running panel's Settings page — the API URL is
+TLS-validated at startup, and a value written through the database would bypass
+that check.
 
 ## Behaviour
 
@@ -51,7 +53,11 @@ editable under **Settings** (the key is not — it is env/`_FILE` only).
   is recreated.
 - **Best-effort**: if Pangolin is unreachable or errors, the VM create/destroy still
   succeeds. The failure is logged and returned as a `pangolin.warning` note, never an
-  error. (A failed *delete* keeps the DB row so a later cleanup can still find it.)
+  error. A failed *delete* keeps the resource id on the VM's DB row as an orphan debt —
+  across reprovisions too — and the next destroy of that VMID retries every owed delete.
+- **Out-of-band deletes**: if the VM was destroyed outside the panel (e.g. the Proxmox
+  UI), the panel's destroy still runs the Pangolin cleanup and then reports the VM as
+  already gone, instead of 404ing and stranding the tunnel.
 
 ## Security
 

@@ -1,6 +1,7 @@
 """All configuration from environment variables, prefix HLIDSKJALF_."""
 
 import json
+import urllib.parse
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -140,6 +141,9 @@ class Settings(BaseSettings):
     #
     # Base URL of the Pangolin Integration API, no trailing slash, e.g.
     # "https://api.example.com/v1". Empty (default) disables the integration.
+    # Must be https — the org-scoped API key is sent as a bearer token, and
+    # plain http would expose it to the network (validated below; http is
+    # accepted only for loopback hosts, i.e. a local mock).
     pangolin_api_url: str = ""
     # SECRET: a Pangolin API key (org-scoped). Bearer-authed, FILE_BACKED,
     # encrypted at rest, redacted from every API response — like pve_token_secret.
@@ -235,6 +239,32 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return json.loads(v) if v.strip() else {}
         return v
+
+    @field_validator("pangolin_api_url")
+    @classmethod
+    def _pangolin_url_requires_tls(cls, v: str) -> str:
+        """The org-scoped API key rides to this URL as a bearer token — plain
+        http to a routable host would send it cleartext. Require https; allow
+        http only for loopback hosts (a local mock/dev server, whose traffic
+        never leaves the host). Fail closed, at load, like the `public`
+        interlock below."""
+        if not v:
+            return v  # integration off
+        parsed = urllib.parse.urlparse(v)
+        if parsed.scheme == "https":
+            return v
+        if parsed.scheme == "http" and (parsed.hostname or "").lower() in (
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        ):
+            return v
+        raise ValueError(
+            "pangolin_api_url must be an https:// URL — the Pangolin API key is "
+            "sent as a bearer token and plain http would expose it. http is "
+            "accepted only for loopback hosts (localhost / 127.0.0.1 / ::1), "
+            "e.g. a local mock."
+        )
 
     @model_validator(mode="after")
     def _public_requires_admin_boundary(self):
@@ -348,19 +378,15 @@ SETUP_WRITABLE = frozenset(
 # Settings an authenticated admin may edit at runtime (routes/settings.py).
 # Deliberately a SEPARATE allowlist: SETUP_WRITABLE is reachable without
 # credentials (first run only) and must never grow to cover these.
+#
+# The Pangolin knobs are NOT here and never were reachable: no route or UI
+# edits them. They are env/_FILE (or NixOS module) only — see docs/pangolin.md.
 ADMIN_WRITABLE = frozenset(
     {
         "vlan_gateways",
         "clone_storage",
         "pve_bridge",
         "default_nameserver",
-        # Pangolin SSH-tunnel integration — the NON-secret knobs are admin-editable.
-        # The api key is NOT here: it is a secret, set only via env/_FILE, and never
-        # returned by any API (see FILE_BACKED + secretbox.SECRET_KEYS).
-        "pangolin_api_url",
-        "pangolin_org_id",
-        "pangolin_site_id",
-        "pangolin_ssh_port_start",
         # The Proxmox connection itself. It used to be settable ONLY in the
         # first-run wizard, which closes forever once a user exists — so a rotated
         # token, a renewed certificate or a moved host meant editing the database

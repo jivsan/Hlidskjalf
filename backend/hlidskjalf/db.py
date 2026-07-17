@@ -1,6 +1,7 @@
 """SQLite state: bandwidth accounting, counter baselines, rescue boot-order stash,
 users, and (after the first-run setup wizard) runtime configuration."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,9 @@ class Db:
     def __init__(self, path: Path):
         self.path = path
         self._conn: aiosqlite.Connection | None = None
+        # Serializes pangolin port reservation (scan + insert must be one
+        # critical section — see pangolin_reserve_port).
+        self._pangolin_lock = asyncio.Lock()
 
     async def open(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,36 +148,123 @@ class Db:
         return {r["name"]: r["note"] for r in await cur.fetchall()}
 
     # --- pangolin SSH-tunnel resources (optional integration) ------------------
+    # One row per VM (schema v4). resource_id is the LIVE Pangolin resource id —
+    # NULL while the create has not been recorded yet (a bare port reservation)
+    # or is already torn down. orphan_ids is a comma-separated list of resource
+    # ids still owed a delete: a destroy whose Pangolin delete failed keeps them
+    # here, and a reprovision carries a previous live id into the list, so an
+    # orphan is never silently forgotten (INSERT OR REPLACE used to do exactly
+    # that). proxy_port is UNIQUE: two VMs must never share a tunnel port.
 
-    async def pangolin_insert(self, vmid: int, resource_id: int, proxy_port: int) -> None:
+    async def pangolin_reserve_port(self, vmid: int, start: int) -> int:
+        """Atomically reserve a proxy port for `vmid` and return it.
+
+        The scan of the used set and the insert of the reservation row are one
+        critical section — the per-Db lock serializes the panel's own requests,
+        and the UNIQUE index on proxy_port is the backstop that turns any
+        residual race into an IntegrityError, retried with the next free port.
+        The old code read the pool and inserted only AFTER the Pangolin create
+        returned; two concurrent provisions could be handed the same port.
+
+        Reprovisioning a vmid that still has a row keeps its port and carries a
+        live resource_id into orphan_ids (see the note above).
+        """
+        async with self._pangolin_lock:
+            for _ in range(10):
+                try:
+                    cur = await self.conn.execute(
+                        "SELECT resource_id, proxy_port, orphan_ids "
+                        "FROM pangolin_resources WHERE vmid = ?",
+                        (vmid,),
+                    )
+                    row = await cur.fetchone()
+                    if row is not None:
+                        orphans = row["orphan_ids"] or ""
+                        if row["resource_id"] is not None:
+                            orphans = (
+                                f"{orphans},{row['resource_id']}"
+                                if orphans
+                                else str(row["resource_id"])
+                            )
+                        await self.conn.execute(
+                            "UPDATE pangolin_resources "
+                            "SET resource_id = NULL, orphan_ids = ? WHERE vmid = ?",
+                            (orphans, vmid),
+                        )
+                        await self.conn.commit()
+                        return int(row["proxy_port"])
+                    cur = await self.conn.execute(
+                        "SELECT proxy_port FROM pangolin_resources"
+                    )
+                    used = {r["proxy_port"] for r in await cur.fetchall()}
+                    port = start
+                    while port in used:
+                        port += 1
+                    await self.conn.execute(
+                        "INSERT INTO pangolin_resources "
+                        "(vmid, resource_id, proxy_port, orphan_ids) "
+                        "VALUES (?, NULL, ?, '')",
+                        (vmid, port),
+                    )
+                    await self.conn.commit()
+                    return port
+                except aiosqlite.IntegrityError:
+                    # The UNIQUE(proxy_port) backstop fired: another writer took
+                    # that port between our scan and our insert. Scan again.
+                    continue
+        raise RuntimeError("could not reserve a Pangolin proxy port")
+
+    async def pangolin_set_resource(self, vmid: int, resource_id: int) -> None:
+        """Record the created resource id on the reservation row. Called
+        IMMEDIATELY after the Pangolin create returns — before any further
+        fallible step — so a later failure can never strand an untracked
+        resource."""
         await self.conn.execute(
-            """INSERT OR REPLACE INTO pangolin_resources (vmid, resource_id, proxy_port)
-               VALUES (?, ?, ?)""",
-            (vmid, resource_id, proxy_port),
+            "UPDATE pangolin_resources SET resource_id = ? WHERE vmid = ?",
+            (resource_id, vmid),
+        )
+        await self.conn.commit()
+
+    async def pangolin_release_port(self, vmid: int) -> None:
+        """The Pangolin create failed before anything existed over there: hand
+        the port back. A row that still carries orphan debts is KEPT (with a
+        NULL resource_id) — those ids must survive for a later delete retry."""
+        await self.conn.execute(
+            "DELETE FROM pangolin_resources "
+            "WHERE vmid = ? AND resource_id IS NULL AND orphan_ids = ''",
+            (vmid,),
         )
         await self.conn.commit()
 
     async def pangolin_get(self, vmid: int) -> dict | None:
         cur = await self.conn.execute(
-            "SELECT vmid, resource_id, proxy_port FROM pangolin_resources WHERE vmid = ?",
+            "SELECT vmid, resource_id, proxy_port, orphan_ids "
+            "FROM pangolin_resources WHERE vmid = ?",
             (vmid,),
         )
         row = await cur.fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        d = dict(row)
+        d["orphan_ids"] = [
+            int(x) for x in (d["orphan_ids"] or "").split(",") if x.strip()
+        ]
+        return d
+
+    async def pangolin_set_debts(self, vmid: int, orphan_ids: list[int]) -> None:
+        """After a destroy: the VM's live resource is gone one way or another
+        (resource_id becomes NULL) and whatever deletes FAILED stay on the row
+        as orphan debts for a later retry."""
+        await self.conn.execute(
+            "UPDATE pangolin_resources SET resource_id = NULL, orphan_ids = ? "
+            "WHERE vmid = ?",
+            (",".join(str(i) for i in orphan_ids), vmid),
+        )
+        await self.conn.commit()
 
     async def pangolin_delete(self, vmid: int) -> None:
         await self.conn.execute("DELETE FROM pangolin_resources WHERE vmid = ?", (vmid,))
         await self.conn.commit()
-
-    async def pangolin_next_free_port(self, start: int) -> int:
-        """The lowest port >= `start` not already handed to a VM. The pool is
-        small and per-VM, so a linear scan over the used set is plenty."""
-        cur = await self.conn.execute("SELECT proxy_port FROM pangolin_resources")
-        used = {r["proxy_port"] for r in await cur.fetchall()}
-        port = start
-        while port in used:
-            port += 1
-        return port
 
     # --- runtime config (written by the setup wizard) --------------------------
 
