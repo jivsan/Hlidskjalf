@@ -1,6 +1,22 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.3-alpha — cyberpunk round three**; PRs #83–#86, 355 tests)._
+_Last updated: 2026-07-17 (**v0.5.4-alpha — cyberpunk round four**; PRs #87–#89, 355 tests)._
+
+## ✅ v0.5.4-alpha — CYBERPUNK ROUND FOUR (THE CHART CORE)
+
+The chart core beauty pass, per `docs/design/v0.5.0-cyberpunk.md` (#88): every
+area chart and sparkline gets a **live-edge pulse dot** (the last point with a
+value breathes the `dot-bloom` LED in its own series color, null tails handled),
+**three-stop gradient depth** (light falling off a signal, not a flat wash), the
+**tooltip shard** (chamfered cut, no border, 3px accent strip in the first
+series' color), a **glowing cyan cursor crossline**, and **gauge entrance
+sweeps** (arc + center count climb together in one 600ms rAF, then the 150ms
+poll transition re-arms). Reduced-motion freezes the blooms and renders gauges
+instantly. On top, #87 puts **hover-reveal reticles on every instrument card** —
+VM Graphs (system + bandwidth), the Node page, VM Overview sparklines — markup
+only, identical at rest; always-on brackets stay reserved for the signature
+surfaces. Also fixed: a stray `<<<<<<< HEAD` merge artifact committed in
+`index.css` is gone.
 
 ## ✅ v0.5.3-alpha — CYBERPUNK ROUND THREE
 
