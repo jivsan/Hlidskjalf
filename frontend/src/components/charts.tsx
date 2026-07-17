@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -104,7 +104,13 @@ export function ChartTooltip({
   const labelText =
     labelFormat && typeof label === "number" ? labelFormat(label) : String(label ?? "");
   return (
-    <div className="card px-3 py-2 text-xs shadow-lg bg-surface">
+    // tooltip-shard: the chamfered cut + left accent strip live in index.css;
+    // the strip takes the FIRST series' color, threaded in like .toast's
+    // --toast-accent.
+    <div
+      className="tooltip-shard shard-sm px-3 py-2 text-xs"
+      style={{ "--tooltip-accent": series[0]?.color } as CSSProperties}
+    >
       <div className="text-muted mb-1 metric">{labelText}</div>
       {series.map((s) => {
         const v = byKey.get(s.key);
@@ -172,6 +178,95 @@ export function TimeframePills({
 
 let gradientSeq = 0;
 
+// live-edge pulse dot: the last point WITH a value on the primary series
+// wears the fleet's LED language — a small filled circle breathing the
+// dot-bloom box-shadow, "this feed is alive". box-shadow is HTML-only, so the
+// dot is an HTML span inside a <foreignObject>; the wrapper is oversized so
+// the bloom is never clipped by the foreignObject bounds, and pointer-events
+// stay off so the tooltip still owns hover. Null tails are handled by
+// scanning back for the last point that actually has a value, not by trusting
+// the array's last row.
+function liveEdgeDot<T extends { t: number }>(
+  data: T[],
+  key: string,
+  color: string,
+  size: number,
+  bloomClass: string,
+): (props: { cx?: number; cy?: number; index?: number }) => ReactElement<SVGElement> {
+  let liveIndex = -1;
+  for (let i = data.length - 1; i >= 0; i--) {
+    if ((data[i] as Record<string, unknown>)[key] != null) {
+      liveIndex = i;
+      break;
+    }
+  }
+  const box = size * 4; // the bloom must fit inside the foreignObject
+  // recharts' AreaDot type claims ReactElement, but returning null is the
+  // documented "render nothing" path for every point that isn't the live edge.
+  return ((props: { cx?: number; cy?: number; index?: number }) => {
+    if (liveIndex < 0 || props.index !== liveIndex || props.cx == null || props.cy == null) {
+      return null;
+    }
+    return (
+      <foreignObject
+        x={props.cx - box / 2}
+        y={props.cy - box / 2}
+        width={box}
+        height={box}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            className={bloomClass}
+            style={
+              {
+                display: "block",
+                width: size,
+                height: size,
+                borderRadius: 9999,
+                background: color,
+                "--dot-bloom-color": color,
+              } as CSSProperties
+            }
+          />
+        </div>
+      </foreignObject>
+    );
+  }) as (props: { cx?: number; cy?: number; index?: number }) => ReactElement<SVGElement>;
+}
+
+// The hover crossline is a live instrument: cyan at half power with a 1px
+// soft glow, not the muted hairline it used to be. Built per render so the
+// token reads stay lazy like every other CHART.* access.
+function chartCursor() {
+  return {
+    stroke: CHART.cyan,
+    strokeOpacity: 0.5,
+    strokeWidth: 1,
+    style: { filter: `drop-shadow(0 0 1px ${CHART.cyan})` },
+  } as const;
+}
+
+// Area fills read as light falling off a signal: brightest at the stroke,
+// gone by the baseline — not a flat wash.
+function AreaGradient({ id, color }: { id: string; color: string }) {
+  return (
+    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor={color} stopOpacity={0.32} />
+      <stop offset="55%" stopColor={color} stopOpacity={0.1} />
+      <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+    </linearGradient>
+  );
+}
+
 export function MetricAreaChart<T extends { t: number }>({
   data,
   series,
@@ -216,13 +311,12 @@ export function MetricAreaChart<T extends { t: number }>({
     <div className="metric">
       <ChartLegend series={series} />
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+        {/* top/right margins give the live-edge dot's bloom room to breathe
+            past the last point, which sits on the plot's right edge. */}
+        <AreaChart data={data} margin={{ top: 16, right: 16, bottom: 0, left: 0 }}>
           <defs>
             {series.map((s, i) => (
-              <linearGradient key={s.key} id={`${gid}-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.color} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={s.color} stopOpacity={0.03} />
-              </linearGradient>
+              <AreaGradient key={s.key} id={`${gid}-${i}`} color={s.color} />
             ))}
           </defs>
           <CartesianGrid stroke={CHART.grid} strokeWidth={1} vertical={false} />
@@ -249,7 +343,7 @@ export function MetricAreaChart<T extends { t: number }>({
             content={
               <ChartTooltip series={series} labelFormat={timeLabelFormatter} />
             }
-            cursor={{ stroke: CHART.muted, strokeWidth: 1 }}
+            cursor={chartCursor()}
             isAnimationActive={false}
           />
           {series.map((s, i) => (
@@ -262,7 +356,7 @@ export function MetricAreaChart<T extends { t: number }>({
               strokeWidth={i === 0 ? 1.75 : 1.5}
               fill={`url(#${gid}-${i})`}
               stackId={stacked ? "stack" : undefined}
-              dot={false}
+              dot={i === 0 ? liveEdgeDot(data, s.key, s.color, 8, "dot-bloom") : false}
               connectNulls={false}
               isAnimationActive={firstRender.current}
               animationDuration={600}
@@ -298,8 +392,35 @@ export function Gauge({
   // sweep 270° arc
   const arc = 0.75;
   const dashFull = c * arc;
-  const dash = dashFull * f;
   const color = f >= 1 ? CHART.red : f >= 0.8 ? CHART.amber : CHART.pink;
+
+  // gauge-sweep: the first real reading sweeps the arc in from empty while
+  // the center count climbs with it — one 600ms rAF ease-out, then the 150ms
+  // CSS transition takes over for poll updates. Reduced-motion renders the
+  // final reading instantly.
+  const reduced =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const hasValue = fraction != null;
+  const [sweep, setSweep] = useState(() => (hasValue && !reduced ? 0 : 1));
+  useLayoutEffect(() => {
+    if (!hasValue || reduced) return;
+    setSweep(0);
+    let raf = 0;
+    let start: number | null = null;
+    const tick = (now: number) => {
+      if (start == null) start = now;
+      const t = Math.min(1, (now - start) / 600);
+      setSweep(1 - Math.pow(1 - t, 3)); // ease-out cubic
+      if (t < 1) raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(raf);
+  }, [hasValue, reduced]);
+
+  const sweeping = sweep < 1;
+  const dash = dashFull * f * sweep;
   return (
     <div className="flex flex-col items-center gap-1">
       <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label={`${label} gauge`}>
@@ -324,9 +445,13 @@ export function Gauge({
             strokeDasharray={`${dash} ${c}`}
             strokeLinecap="round"
             // The arc is a live reading — it carries the same faint neon bloom
-            // as MetricAreaChart's main line, in its own threshold color.
+            // as MetricAreaChart's main line, in its own threshold color. The
+            // dash transition is suspended while the entrance drives the dash
+            // per frame; it re-arms the moment the sweep lands.
             style={{
-              transition: "stroke-dasharray 150ms ease, stroke 150ms ease",
+              transition: sweeping
+                ? "stroke 150ms ease"
+                : "stroke-dasharray 150ms ease, stroke 150ms ease",
               filter: `drop-shadow(0 0 3px color-mix(in srgb, ${color} 55%, transparent))`,
             }}
           />
@@ -339,7 +464,7 @@ export function Gauge({
           fontSize="15"
           fontFamily="inherit"
         >
-          {fraction == null ? "—" : `${Math.round(f * 100)}%`}
+          {fraction == null ? "—" : `${Math.round(f * sweep * 100)}%`}
         </text>
       </svg>
       <div className="text-xs text-muted uppercase tracking-wider">{label}</div>
@@ -367,20 +492,19 @@ export function Sparkline<T extends { t: number }>({
   return (
     <div className="metric">
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+        {/* margins give the smaller live-edge dot's bloom room past the last
+            point, which sits on the plot's right edge. */}
+        <AreaChart data={data} margin={{ top: 8, right: 10, bottom: 8, left: 0 }}>
           <defs>
             {series.map((s, i) => (
-              <linearGradient key={s.key} id={`${gid}-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.color} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={s.color} stopOpacity={0.03} />
-              </linearGradient>
+              <AreaGradient key={s.key} id={`${gid}-${i}`} color={s.color} />
             ))}
           </defs>
           <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} hide />
           <YAxis hide domain={[0, "auto"]} />
           <Tooltip
             content={<ChartTooltip series={series} labelFormat={timeLabelFormatter} />}
-            cursor={{ stroke: CHART.muted, strokeWidth: 1 }}
+            cursor={chartCursor()}
             isAnimationActive={false}
           />
           {series.map((s, i) => (
@@ -392,7 +516,7 @@ export function Sparkline<T extends { t: number }>({
               stroke={s.color}
               strokeWidth={1.5}
               fill={`url(#${gid}-${i})`}
-              dot={false}
+              dot={i === 0 ? liveEdgeDot(data, s.key, s.color, 5, "dot-bloom-sm") : false}
               connectNulls={false}
               isAnimationActive={false}
             />

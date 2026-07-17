@@ -232,6 +232,27 @@
     to   { opacity: 1; transform: none; }
   }
 
+  /* tooltip-shard: chart tooltips wear the shard cut too (pair with .shard-sm
+     for the chamfer) — surface fill, no border (clip-path would eat it), a
+     3px left accent strip in the FIRST series' color (threaded inline as
+     --tooltip-accent, the .toast pattern), and a soft drop shadow that
+     follows the clipped silhouette. */
+  .tooltip-shard {
+    @apply relative bg-surface;
+    --tooltip-accent: var(--c-muted);
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  }
+  .tooltip-shard::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--tooltip-accent);
+    pointer-events: none;
+  }
+
   /* Corner brackets: targeting-reticle ticks. Always-on for the signature
      panels (.card-brackets), hover-reveal elsewhere; never on tables/wells. */
   .card-brackets,
@@ -308,13 +329,24 @@
       0 0 28px color-mix(in srgb, var(--c-pink) 30%, transparent);
   }
   /* dot-bloom: an LED breathes (~3s swell — the one fast loop allowed, because
-     a live dot that doesn't pulse reads as dead). */
+     a live dot that doesn't pulse reads as dead). The bloom color defaults to
+     cyan but follows --dot-bloom-color, so a chart's live-edge dot can bloom
+     in its own series color. */
   .dot-bloom {
     animation: dot-bloom 3.2s ease-in-out infinite;
   }
   @keyframes dot-bloom {
-    0%, 100% { box-shadow: 0 0 3px 1px color-mix(in srgb, var(--c-cyan) 55%, transparent); }
-    50%      { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--c-cyan) 85%, transparent); }
+    0%, 100% { box-shadow: 0 0 3px 1px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 55%, transparent); }
+    50%      { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 85%, transparent); }
+  }
+  /* dot-bloom-sm: the same breath at sparkline scale — smaller dot, tighter
+     bloom, so it fits a 48px sparkline without clipping. */
+  .dot-bloom-sm {
+    animation: dot-bloom-sm 3.2s ease-in-out infinite;
+  }
+  @keyframes dot-bloom-sm {
+    0%, 100% { box-shadow: 0 0 2px 1px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 55%, transparent); }
+    50%      { box-shadow: 0 0 5px 1px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 85%, transparent); }
   }
 
   /* card-lift: interactive cards rise 1px and their hairline warms on hover. */
@@ -399,7 +431,6 @@
   50% { opacity: 0; }
 }
 
-<<<<<<< HEAD
 /* page-settle: each navigation's content settles into place ONCE — a short
    opacity + 2px drift, a settle rather than a slide show. Layout keys the
    wrapper on location.pathname so it replays per navigation but never on a
@@ -1058,7 +1089,11 @@
   }
   .dot-bloom {
     animation: none;
-    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--c-cyan) 55%, transparent);
+    box-shadow: 0 0 4px 1px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 55%, transparent);
+  }
+  .dot-bloom-sm {
+    animation: none;
+    box-shadow: 0 0 3px 1px color-mix(in srgb, var(--dot-bloom-color, var(--c-cyan)) 55%, transparent);
   }
   .btn::after {
     display: none;
