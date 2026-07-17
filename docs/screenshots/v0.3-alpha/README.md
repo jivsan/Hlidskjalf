@@ -93,7 +93,7 @@ Full interactive SVG is rendered in the UI (see the /switch page after running t
 - Refined cyberpunk theme to be more "human" and Flux-panel inspired:
   - Cleaner cards with subtle shadows (not heavy glows).
   - Better readability and spacing.
-  - Professional yet neon Tokyo Night (cyan #2de2e6, pink #ff4fa3) without looking AI-generated.
+  - Professional yet neon Tokyo Night (cyan #2de2e6, pink #ff4fa3) without looking cheap.
   - Rack bezel effects for the switch faceplate.
 
 ### Other UI Polish (from prior work carried into v0.3)
