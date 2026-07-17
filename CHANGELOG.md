@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-alpha] - 2026-07-17
+
+### Added — the cyberpunk pass ("full send, not cringe")
+A full ambient + shape + glow reskin per `docs/design/v0.5.0-cyberpunk.md` (which
+supersedes `v0.3.5-design-system.md`'s prohibitions while keeping its palette,
+typography split, and density). Nothing behavioral changed; what changed is light
+and geometry.
+
+- **Single source of truth for color**: `tailwind.config.js` emits every token as a
+  `--c-*` CSS custom property, and the canvas consumers (Recharts, xterm, noVNC) read
+  them through a new `cssVar()` helper instead of stale hardcoded copies. `green` is
+  finally tokenized; the Switch page's local decimal-`k`/`M` rate formatter was
+  deduplicated onto the shared bytes-based one (eAPI rates are bits/sec, converted
+  at the call site).
+- **Ambient scene**: drifting aurora, a perspective grid horizon idling forward on a
+  60s loop, static scanlines (~5%, *never* animated), and a vignette — four fixed
+  layers behind the app, transform/opacity only, plain HTML in `index.html`.
+- **Shards**: buttons and badges are chamfered `clip-path` plates — borderless
+  because clip-path eats borders — with hover/focus `drop-shadow`s that follow the
+  clipped silhouette (neon hover and keyboard-focus indicator in one) and a
+  once-per-hover sheen.
+- **Glow budget**: the wordmark, live status dots (a breathing `dot-bloom` replaces
+  `animate-ping`), the VM status chip's cyan segments, shard silhouettes on
+  hover/focus. Nothing else glows, ever.
+- **Signature surfaces**: the login card powers on like a CRT, the wordmark flickers
+  alight, and the app has exactly one typed line (`> the high seat — watching every
+  guest` — types once, any key/click completes, cursor retires, reduced-motion
+  renders complete). The active nav marker glides between items with a cyan bloom.
+  Corner brackets frame the login card and the VM status chip.
+- **Charts**: primary strokes draw in on mount (600ms, then never re-animates on
+  poll) and carry a faint bloom; secondary series stay flat.
+- **Animation discipline**: ambient loops run ≥ 45s, event animations fire once and
+  settle, and `prefers-reduced-motion` kills all of it — proven in the
+  reduced-motion screenshot pass. Mobile (390px) and contrast verified in the
+  `docs/screenshots/v0.5.0-alpha/` sweep (every page, plus a tenant view and the
+  setup wizard).
+
+### Fixed
+- **`/api/version` no longer blocks the event loop**: `local_state()` shells out to
+  git three times (5s timeout each) and ran synchronously inside async handlers —
+  a wedged git would have stalled every request. Both call sites now use
+  `asyncio.to_thread`, matching `routes/update.py` (#63).
+- **`dev.sh` serves the SPA it builds**: nothing exported `HLIDSKJALF_STATIC_DIR`,
+  so any non-Vite run 404'd every page despite the launcher's own banner (#66).
+- **`nix/package.nix` version** bumped to 0.5.0-alpha (the version-bump commit
+  missed it; CI's `test_nix_package.py` caught it — the test doing its job).
+
 ### Added — auto-provision a Pangolin SSH tunnel per VM (optional)
 When configured, the panel creates a Pangolin **TCP resource** tunnelling SSH (port 22)
 to each VM it provisions, and deletes it on destroy — so a friend reaches their VM with

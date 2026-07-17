@@ -1,16 +1,49 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-15 (**v0.4.2-alpha — deployed on NixOS behind Traefik**; PRs #46–#49, 285 tests)._
+_Last updated: 2026-07-17 (**v0.5.0-alpha — the cyberpunk pass**; PRs #62–#71, 322 tests)._
 
-> **2026-07-15 — the public tenant door moved off Cloudflare.** The Cloudflare tunnel
-> (`cloudflared` on heimdall) was replaced by a **self-hosted Pangolin + Newt** tunnel:
-> `newt` dials out from heimdall to a Pangolin server on a VPS, which fronts
-> `hlidskjalf.im-goat.com`. Nothing in the panel changed — newt still forwards from
-> `127.0.0.1` and Pangolin's Traefik still sets `X-Forwarded-For`, so `trustedProxies`
-> and `adminNetworks` are untouched and admin-from-the-tunnel is refused exactly as
-> before. Bonus: unlike Cloudflare's proxy, **Newt carries raw TCP/UDP**, so tenant SSH
-> (`<vps>.im-goat.com`, below) no longer needs Tailscale-on-every-VM.
-_Last updated: 2026-07-16 (**v0.4.4-alpha released; unreleased on top: `default_nameserver` (#60) + Pangolin SSH-tunnel auto-provisioning**)._
+## ✅ v0.5.0-alpha — FULL SEND, NOT CRINGE
+
+The whole frontend was reskinned per `docs/design/v0.5.0-cyberpunk.md` (the spec was
+written **before** the CSS and supersedes `v0.3.5-design-system.md`'s "no new
+animations / make it quieter" while keeping its palette, type split and density).
+Shipped as a series of small PRs, one per work item:
+
+- **Foundation (#62):** `tailwind.config.js` is the single source of truth for color
+  and emits every token as a `--c-*` CSS var; Recharts/xterm/noVNC read them via a new
+  `cssVar()` helper (the stale hardcoded `CHART` palette is gone). `green` tokenized;
+  Switch page deduplicated onto the shared bytes-based rate formatter.
+- **The ride-alongs:** `/api/version`'s git subprocesses moved off the event loop
+  (#63); `dev.sh` now actually serves the SPA it builds (#66 — it never exported
+  `HLIDSKJALF_STATIC_DIR`); `nix/package.nix` version caught up (CI's
+  `test_nix_package.py` caught the miss — the test doing its job).
+- **Ambient scene (#65):** drifting aurora, perspective grid horizon (60s seamless
+  loop), static scanlines (~5%, never animated), vignette. Fixed layers, transform/
+  opacity only, plain HTML in `index.html`.
+- **Shape + glow (#67):** chamfered shard buttons/badges (clip-path ⇒ borderless,
+  drop-shadow follows the silhouette = neon hover + focus indicator), corner
+  brackets, the glow budget (wordmark / live dots / VM chip / shard silhouettes),
+  `dot-bloom` replacing `animate-ping` on live dots.
+- **Signature surfaces (#71):** the login hero — CRT `power-on`, `neon-ignite`
+  wordmark, and **exactly one typed line** (`> the high seat — watching every guest`;
+  types once, any key completes, cursor retires, reduced-motion renders complete,
+  names no host). The nav marker glides between items with a cyan bloom.
+- **Charts (#69):** primary strokes draw in once on mount (never per-poll), faint
+  bloom on the main line only.
+- **Verification (#70):** `docs/screenshots/v0.5.0-alpha/` — every page, a tenant
+  view, the setup wizard, a 390px mobile pass, and a `prefers-reduced-motion` pass
+  proving every animation dies and the scene goes static. We read the PNGs and
+  iterated (the grid was too faint at first — presence pass landed in the ambient PR).
+- **plan.md** was brought back to truth along the way (status header, roadmap, stale
+  bootstrap/Tokyo Night/site specifics removed; #64).
+
+Also merged this batch: **Pangolin SSH-tunnel auto-provisioning** (#61) and the
+tenant-tunnel docs move to Pangolin + Newt (#55).
+
+**Next up: Phase 3 — real-hardware validation of the write paths** (provision /
+reinstall / rescue / destroy on scratch VMIDs ≥ 900, `HLIDSKJALF_PROTECTED_VMIDS`
+set first). The mock suite being green means self-consistent, not correct — the
+assumptions most likely to be wrong are listed in CLAUDE.md.
 
 ## ✅ v0.4.4-alpha — EXPOSED TO THE INTERNET, TENANT-ONLY, HARDENED
 
