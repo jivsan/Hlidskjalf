@@ -221,9 +221,13 @@ export interface SwitchPort {
   outputRate: number;
   active: boolean;
   lldpNeighbor?: { system_name?: string; port?: string } | null;
+  kind?: "rj45" | "cage"; // backend classifies from interfaceType; default render is rj45
+  media?: string; // interfaceType as reported, e.g. "10GBASE-T", "40GBASE-SR4"
 }
 
 export interface SwitchPortsResponse {
   ports: SwitchPort[];
+  // the switch's own identity, from `show version` — keys only present when reported
+  switch?: { model?: string; serial?: string; eosVersion?: string };
   error?: string; // present on graceful degradation (offline/unreachable/misconfig)
 }

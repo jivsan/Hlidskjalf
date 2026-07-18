@@ -575,8 +575,10 @@
   50% { opacity: 0.2; }
 }
 
-/* Realistic physical 1U Arista DCS-7050TX-48 React faceplate
-   Dark metal chassis, bevels, recessed RJ45 jacks w/ LED above, QSFP cages, vents, rack ears.
+/* Realistic physical 1U switch faceplate, rendered from the switch's own
+   eAPI report — any port count, copper jacks + optic cages, model from
+   `show version`. Dark metal chassis, bevels, recessed RJ45 jacks with an
+   honest LINK/ACT LED pair above each, cages, vents, rack ears.
    Flux-human: clean, tactile, not cartoonish or over-polished. */
 .faceplate-wrapper {
   width: 100%;
@@ -689,9 +691,11 @@
   border: 0.5px solid rgba(0,0,0,0.4);
   box-shadow: 0 0 0 0.5px rgba(255,255,255,0.2) inset;
 }
+/* Status LEDs read "OK" in green — the one truth we have is that the switch
+   answers eAPI; there are no fan/PSU sensors behind these. */
 .status-led.sys { background: var(--c-green); }
-.status-led.fan { background: #3b82f6; }
-.status-led.ps { background: #eab308; }
+.status-led.fan { background: var(--c-green); }
+.status-led.ps { background: var(--c-green); }
 .status-label {
   position: absolute;
   left: 20px;
@@ -718,6 +722,7 @@
   margin-top: -1px;
 }
 .model-label .spec {
+  display: block;
   font-size: 4.5px;
   color: #4a516a;
   margin-top: -0.5px;
@@ -742,10 +747,10 @@
   z-index: 2;
 }
 
-/* Copper RJ45 grid: exactly 2 rows of 24 */
+/* Copper RJ45 grid: two rows, column count set inline from the switch's own
+   port report (a 24-port and a 48-port box both just render). */
 .ports-grid-copper {
   display: grid;
-  grid-template-columns: repeat(24, 1fr);
   gap: 1.6px;
   margin-bottom: 12px;
 }
@@ -781,29 +786,58 @@
 .rj45-port.selected {
   z-index: 10;
 }
-.rj45-port .port-led {
+/* Honest LED pair above every port: LINK solid-when-up, ACT flickering with
+   traffic. No link = NO light — a down port is told by its dark jack, never
+   by a red LED (real hardware has no always-on red). */
+.led-pair {
   position: absolute;
-  top: -3.5px;
+  top: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 3.1px;
-  height: 3.1px;
-  border-radius: 50%;
-  background: #f7768e;
-  border: 0.4px solid rgba(0,0,0,0.5);
-  box-shadow: 0 0 0 0.4px rgba(255,255,255,0.6) inset;
+  display: flex;
+  gap: 2.4px;
   z-index: 1;
+  pointer-events: none;
+}
+.led-dot {
+  width: 2.6px;
+  height: 2.6px;
+  border-radius: 50%;
+  /* unlit lens: dark glass with a faint top catch-light */
+  background: #141926;
+  border: 0.4px solid rgba(0,0,0,0.55);
+  box-shadow:
+    inset 0 0.5px 0.8px rgba(255,255,255,0.14),
+    inset 0 -0.5px 0.8px rgba(0,0,0,0.6);
   transition: background 60ms ease;
 }
-.rj45-port.up .port-led { background: var(--c-green); }
-.rj45-port.active .port-led {
-  animation: port-led-blink 650ms steps(2, end) infinite;
+.led-dot.led-link.lit {
+  background: var(--c-green);
+  box-shadow:
+    0 0 2.5px color-mix(in srgb, var(--c-green) 65%, transparent),
+    inset 0 0.5px 0.8px rgba(255,255,255,0.35);
 }
-.rj45-port.active.up .port-led {
-  background: #4ade80;
+.led-dot.led-act.blink-slow,
+.led-dot.led-act.blink-med,
+.led-dot.led-act.blink-fast {
+  background: var(--c-green);
+  box-shadow:
+    0 0 2.5px color-mix(in srgb, var(--c-green) 55%, transparent),
+    inset 0 0.5px 0.8px rgba(255,255,255,0.3);
 }
-.rj45-port.selected .port-led {
-  box-shadow: 0 0 0 1px var(--c-pink), 0 0 0 0.4px rgba(255,255,255,0.6) inset;
+/* ACT flicker follows throughput; periods stay ≥360ms (under the WCAG
+   3-flashes/sec ceiling); reduced-motion freezes them solid-on below. */
+.led-act.blink-slow { animation: port-led-blink 1.1s steps(2, end) infinite; }
+.led-act.blink-med  { animation: port-led-blink 560ms steps(2, end) infinite; }
+.led-act.blink-fast { animation: port-led-blink 360ms steps(2, end) infinite; }
+
+.rj45-port.selected .jack {
+  border-color: var(--c-pink);
+  box-shadow:
+    0 0 0 0.8px var(--c-pink),
+    inset 0 1px 1.5px rgba(255,255,255,0.06),
+    inset 0 -1px 2px rgba(0,0,0,0.7),
+    0 0.5px 1px rgba(0,0,0,0.5);
 }
 
 .rj45-port .jack {
@@ -933,26 +967,16 @@
   height: 100%;
 }
 
-.qsfp-port .port-led {
-  position: absolute;
-  top: -2.8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2.8px;
-  height: 2.8px;
-  border-radius: 50%;
-  background: #f7768e;
-  border: 0.4px solid rgba(0,0,0,0.45);
-  box-shadow: 0 0 0 0.3px rgba(255,255,255,0.5) inset;
-  z-index: 1;
+/* the cage's LED pair sits a touch tighter than the RJ45 one */
+.qsfp-port .led-pair {
+  top: -3.2px;
+  gap: 2px;
 }
-.qsfp-port.up .port-led { background: var(--c-green); }
-.qsfp-port.active .port-led {
-  animation: port-led-blink 580ms steps(2, end) infinite;
+.qsfp-port .led-dot {
+  width: 2.4px;
+  height: 2.4px;
 }
-.qsfp-port.active.up .port-led {
-  background: #4ade80;
-}
+
 .qsfp-port.selected .cage {
   border-color: var(--c-pink);
   box-shadow: 0 0 0 0.8px var(--c-pink);
@@ -1056,9 +1080,11 @@
    may stay). */
 @media (prefers-reduced-motion: reduce) {
   .led-active,
-  .rj45-port.active .port-led,
-  .qsfp-port.active .port-led {
+  .led-act.blink-slow,
+  .led-act.blink-med,
+  .led-act.blink-fast {
     animation: none;
+    opacity: 1; /* ACT freezes solid-on when traffic flows, never strobing */
   }
   .spinner {
     animation-duration: 2s;

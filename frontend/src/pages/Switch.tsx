@@ -14,6 +14,53 @@ type Port = SwitchPort;
 // bytes/sec like every other rate in the panel (VM net graphs, node traffic).
 const formatBitsPerSec = (bps: number) => formatRate(bps / 8);
 
+// The ACT light's flicker follows throughput, like the hardware's own. Periods
+// stay ≥360ms — under the WCAG 3-flashes/sec ceiling — and the reduced-motion
+// block freezes them solid-on. null = ACT stays dark (down or idle).
+function blinkTier(p: Port): "blink-slow" | "blink-med" | "blink-fast" | null {
+  if (p.status !== "connected") return null;
+  const total = (p.inputRate || 0) + (p.outputRate || 0);
+  if (total <= 1000) return null; // the backend's own active threshold
+  if (total >= 500_000_000) return "blink-fast";
+  if (total >= 10_000_000) return "blink-med";
+  return "blink-slow";
+}
+
+// "10GBASE-T" -> "10G-T", "1000BASE-T" -> "1G-T", "40GBASE-SR4" -> "40G-SR4".
+const shortMedia = (media: string): string =>
+  media
+    .trim()
+    .replace(/^1000BASE-/i, "1G-")
+    .replace(/GBASE-/i, "G-")
+    .replace(/BASE-/i, "G-");
+
+// The spec line under the model name is composed, never hardcoded: count each
+// port class and name the dominant reported media ("48×10G-T + 4×40G-SR4").
+function specFor(ports: Port[], fallback: string): string {
+  if (ports.length === 0) return "";
+  const counts = new Map<string, number>();
+  for (const p of ports) {
+    const s = shortMedia(p.media || "");
+    if (s) counts.set(s, (counts.get(s) || 0) + 1);
+  }
+  const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || fallback;
+  return `${ports.length}×${dominant}`;
+}
+
+// The honest LED pair every real switch carries per port: LINK is solid when
+// the link is up and dark when it isn't (no link = NO light — a down port is
+// told by the dark jack, not by a red LED); ACT flickers with traffic.
+function LedPair({ port }: { port: Port }) {
+  const up = port.status === "connected";
+  const tier = blinkTier(port);
+  return (
+    <div className="led-pair" aria-hidden="true">
+      <span className={`led-dot led-link ${up ? "lit" : ""}`} />
+      <span className={`led-dot led-act ${tier ?? ""}`} />
+    </div>
+  );
+}
+
 export function SwitchPage() {
   const toast = useToast();
   const [selected, setSelected] = useState<string | null>(null);
@@ -73,6 +120,10 @@ export function SwitchPage() {
     : response && "ports" in response
       ? response.ports
       : [];
+  const switchInfo =
+    !Array.isArray(response) && response && "switch" in response
+      ? response.switch
+      : undefined;
   const serverError: string | null =
     !Array.isArray(response) && response && "error" in response
       ? (response.error as string) || null
@@ -101,26 +152,33 @@ export function SwitchPage() {
     setSelected(name);
   };
 
-  const renderReactFaceplate = () => {
-    const copperTop = Array.from({ length: 24 }, (_, i) => `Ethernet${i + 1}`);
-    const copperBottom = Array.from({ length: 24 }, (_, i) => `Ethernet${i + 25}`);
-    const qsfps = [49, 50, 51, 52].map((n) => `Ethernet${n}`);
+  // The faceplate renders from what the switch reports, never from a hardcoded
+  // model: copper jacks vs optic cages come from the backend's per-port kind,
+  // rows split the copper list in half, and every label is derived.
+  const copper = data.filter((p) => p.kind !== "cage");
+  const cages = data.filter((p) => p.kind === "cage");
+  const copperTop = copper.slice(0, Math.ceil(copper.length / 2));
+  const copperBottom = copper.slice(Math.ceil(copper.length / 2));
+  const model = switchInfo?.model || "network switch";
+  const specLine = [specFor(copper, "copper"), specFor(cages, "optic")]
+    .filter(Boolean)
+    .join(" + ");
+  const eosLine = switchInfo?.eosVersion ? `EOS ${switchInfo.eosVersion}` : "";
 
-    const renderRJ45 = (name: string) => {
-      const p = portMap.get(name);
-      const isUp = p?.status === "connected";
-      const isActive = !!p?.active;
-      const isSelected = selected === name;
-      const num = name.replace("Ethernet", "");
-      const lldp = p?.lldpNeighbor;
-      const title = `${name} • ${isUp ? "UP" : "DOWN"} ${p?.speed || ""} ${p?.description ? "• " + p.description : ""}${lldp ? " • LLDP:" + (lldp.system_name || "") : ""}`.trim();
+  const renderReactFaceplate = () => {
+    const renderRJ45 = (p: Port) => {
+      const isUp = p.status === "connected";
+      const isSelected = selected === p.name;
+      const num = p.name.replace("Ethernet", "");
+      const lldp = p.lldpNeighbor;
+      const title = `${p.name} • ${isUp ? "UP" : "DOWN"} ${p.speed || ""} ${p.media ? "• " + p.media : ""} ${p.description ? "• " + p.description : ""}${lldp ? " • LLDP:" + (lldp.system_name || "") : ""}`.trim();
 
       return (
         <div
-          key={name}
-          className={`rj45-port ${isUp ? "up" : "down"} ${isActive ? "active" : ""} ${isSelected ? "selected" : ""} ${hovered === name ? "hovered" : ""}`}
-          onClick={() => selectPort(name)}
-          onMouseEnter={() => setHovered(name)}
+          key={p.name}
+          className={`rj45-port ${isUp ? "up" : "down"} ${isSelected ? "selected" : ""} ${hovered === p.name ? "hovered" : ""}`}
+          onClick={() => selectPort(p.name)}
+          onMouseEnter={() => setHovered(p.name)}
           onMouseLeave={() => setHovered(null)}
           title={title}
           role="button"
@@ -128,11 +186,11 @@ export function SwitchPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              selectPort(name);
+              selectPort(p.name);
             }
           }}
         >
-          <div className="port-led" />
+          <LedPair port={p} />
           <div className="jack">
             <div className="recess">
               <div className="contacts">
@@ -147,21 +205,19 @@ export function SwitchPage() {
       );
     };
 
-    const renderQSFP = (name: string) => {
-      const p = portMap.get(name);
-      const isUp = p?.status === "connected";
-      const isActive = !!p?.active;
-      const isSelected = selected === name;
-      const num = name.replace("Ethernet", "");
-      const lldp = p?.lldpNeighbor;
-      const title = `${name} (QSFP+ 40G) • ${isUp ? "UP" : "DOWN"}${lldp ? " • " + (lldp.system_name || "") : ""}`;
+    const renderCage = (p: Port) => {
+      const isUp = p.status === "connected";
+      const isSelected = selected === p.name;
+      const num = p.name.replace("Ethernet", "");
+      const lldp = p.lldpNeighbor;
+      const title = `${p.name} (${p.media || "optic"}) • ${isUp ? "UP" : "DOWN"}${lldp ? " • " + (lldp.system_name || "") : ""}`;
 
       return (
         <div
-          key={name}
-          className={`qsfp-port ${isUp ? "up" : ""} ${isActive ? "active" : ""} ${isSelected ? "selected" : ""} ${hovered === name ? "hovered" : ""}`}
-          onClick={() => selectPort(name)}
-          onMouseEnter={() => setHovered(name)}
+          key={p.name}
+          className={`qsfp-port ${isUp ? "up" : ""} ${isSelected ? "selected" : ""} ${hovered === p.name ? "hovered" : ""}`}
+          onClick={() => selectPort(p.name)}
+          onMouseEnter={() => setHovered(p.name)}
           onMouseLeave={() => setHovered(null)}
           title={title}
           role="button"
@@ -169,11 +225,11 @@ export function SwitchPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              selectPort(name);
+              selectPort(p.name);
             }
           }}
         >
-          <div className="port-led" />
+          <LedPair port={p} />
           <div className="cage">
             <div className="slot" />
             <div className="lanes">
@@ -183,7 +239,7 @@ export function SwitchPage() {
             </div>
           </div>
           <div className="port-num">{num}</div>
-          <div className="qsfp-speed">40G</div>
+          {p.speed && <div className="qsfp-speed">{p.speed}</div>}
         </div>
       );
     };
@@ -191,7 +247,7 @@ export function SwitchPage() {
     return (
       <div
         className="faceplate-wrapper"
-        aria-label="Arista DCS-7050TX-48 realistic 1U physical faceplate (React + CSS)"
+        aria-label={`${model} 1U faceplate rendered from live eAPI data — ${copper.length} copper, ${cages.length} optic ports`}
         role="img"
       >
         <div className="arista-chassis">
@@ -211,7 +267,8 @@ export function SwitchPage() {
             <div className="mgmt-label" style={{ top: "70px" }}>MGMT</div>
           </div>
 
-          {/* Status LEDs (SYS/FAN/PS1/PS2) */}
+          {/* Status LEDs (SYS/FAN/PS1/PS2) — green is the one truth we have:
+              the switch answers eAPI. Static; we have no sensors for more. */}
           <div className="status-leds">
             <div className="status-led sys" title="System LED" />
             <div className="status-label" style={{ top: "102px" }}>SYS</div>
@@ -223,26 +280,54 @@ export function SwitchPage() {
             <div className="status-label" style={{ top: "132px" }}>PS2</div>
           </div>
 
-          {/* Model + row labels */}
+          {/* Model + spec, from `show version` + the reported port mix */}
           <div className="model-label">
-            <span className="model">ARISTA</span>
-            <span className="spec">DCS-7050TX-48</span>
-            <span className="spec" style={{ fontSize: "4.2px", marginTop: "-1px" }}>
-              48×10GBASE-T + 4×40GbE QSFP+
-            </span>
+            <span className="model">{model}</span>
+            {specLine && <span className="spec">{specLine}</span>}
+            {eosLine && (
+              <span className="spec" style={{ fontSize: "4.2px", marginTop: "-1px" }}>
+                {eosLine}
+              </span>
+            )}
           </div>
 
-          <div className="row-label top">1-24</div>
-          <div className="row-label bottom">25-48</div>
+          {copperTop.length > 0 && (
+            <div className="row-label top">
+              {copperTop[0].name.replace("Ethernet", "")}–
+              {copperTop[copperTop.length - 1].name.replace("Ethernet", "")}
+            </div>
+          )}
+          {copperBottom.length > 0 && (
+            <div className="row-label bottom">
+              {copperBottom[0].name.replace("Ethernet", "")}–
+              {copperBottom[copperBottom.length - 1].name.replace("Ethernet", "")}
+            </div>
+          )}
 
           {/* Interactive ports area */}
           <div className="ports-area">
-            <div className="ports-grid-copper">{copperTop.map(renderRJ45)}</div>
-            <div className="ports-grid-copper">{copperBottom.map(renderRJ45)}</div>
-            <div className="ports-grid-qsfp">{qsfps.map(renderQSFP)}</div>
+            {copperTop.length > 0 && (
+              <div
+                className="ports-grid-copper"
+                style={{ gridTemplateColumns: `repeat(${copperTop.length}, 1fr)` }}
+              >
+                {copperTop.map(renderRJ45)}
+              </div>
+            )}
+            {copperBottom.length > 0 && (
+              <div
+                className="ports-grid-copper"
+                style={{ gridTemplateColumns: `repeat(${copperBottom.length}, 1fr)` }}
+              >
+                {copperBottom.map(renderRJ45)}
+              </div>
+            )}
+            {cages.length > 0 && <div className="ports-grid-qsfp">{cages.map(renderCage)}</div>}
           </div>
 
-          <div className="chassis-footer">RACK 47 • DCS-7050TX-48</div>
+          <div className="chassis-footer">
+            {switchInfo?.serial ? `S/N ${switchInfo.serial} · ${model}` : model}
+          </div>
         </div>
       </div>
     );
@@ -255,7 +340,7 @@ export function SwitchPage() {
         title="Switch"
         sub={
           <span className="metric">
-            DCS-7050TX-48 · eAPI · <span className="text-cyan">{connected}</span> up · {data.length} reported
+            {model} · eAPI · <span className="text-cyan">{connected}</span> up · {data.length} reported
           </span>
         }
       />
@@ -293,8 +378,8 @@ export function SwitchPage() {
             </div>
           </div>
           <div className="mt-1.5 px-1 flex items-center justify-between text-[10px] text-muted tracking-widest">
-            <span>click ports • green=up / red=down • blink=activity (&gt;1 kbps)</span>
-            <span>48×10G-T + 4×40G QSFP+ (exact layout)</span>
+            <span>click ports • LINK solid = up • ACT flicker = traffic (&gt;1 kbps)</span>
+            <span>{specLine ? `${specLine} · ` : ""}rendered from eAPI</span>
           </div>
         </div>
 
@@ -473,7 +558,8 @@ export function SwitchPage() {
       </div>
 
       <div className="text-[10px] text-muted tracking-widest px-1">
-        faceplate emulates physical Arista DCS-7050TX-48 (React+CSS) • 48×10GBASE-T RJ45 (2 rows) + 4×40G QSFP+ • left mgmt/console/USB + LEDs • clickable + LLDP + notes
+        faceplate renders from live eAPI data ({model}) • {copper.length} copper
+        {cages.length > 0 ? ` + ${cages.length} optic` : ""} • left mgmt/console/USB + LEDs • clickable + LLDP + notes
       </div>
     </div>
   );

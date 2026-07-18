@@ -53,9 +53,23 @@ async def list_ports(
                 "outputRate": p.output_rate,
                 "active": p.active,
                 "lldpNeighbor": p.lldp_neighbor,
+                "kind": p.kind,
+                "media": p.media,
             }
         )
     resp: dict[str, Any] = {"ports": result}
+    # The switch's own identity (`show version`) — keys only present when the
+    # switch actually reported them, so the UI labels are always honest.
+    info = client.get_switch_info()
+    sw: dict[str, str] = {}
+    if info.model:
+        sw["model"] = info.model
+    if info.serial:
+        sw["serial"] = info.serial
+    if info.eos_version:
+        sw["eosVersion"] = info.eos_version
+    if sw:
+        resp["switch"] = sw
     if error:
         resp["error"] = error
     return resp
