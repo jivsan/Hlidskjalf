@@ -38,6 +38,9 @@ USER_DELETE = "user.delete"
 USER_PASSWORD = "user.password"
 USER_ASSIGN = "user.assign"
 
+PANGOLIN_INVITE = "pangolin.invite"      # tenant edge-identity invited — NEVER log the link
+PANGOLIN_OFFBOARD = "pangolin.offboard"  # tenant edge-identity removed (or failed to be)
+
 SWITCH_NOTE = "switch.note"
 
 SETTINGS_UPDATE = "settings.update"

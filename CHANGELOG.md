@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Pangolin tenant identity sync (SSO at the edge, passkey-ready)
+- **Keep Platform SSO on.** When the panel is published through a Pangolin
+  resource, the recommended edge is now the SSO wall itself — per-user
+  revocation, edge audit, and passkey support (the phishing-proof factor).
+  The panel provisions each tenant's edge identity for you: creating a user
+  **with an email** invites that email into the Pangolin org's tenant role
+  (`sendEmail: false` — the invite link is shown to the admin exactly once
+  and relayed out-of-band; the friend sets their own Pangolin password, which
+  the panel never sees).
+- **One-click offboarding**: deleting the panel user removes the edge
+  identity — the org user is deleted (matched by the invited email; an
+  account under a different email is never touched) or the unaccepted invite
+  is cancelled.
+- **Retry/refresh** via `POST /api/users/{name}/pangolin-sync` and per-row
+  sync chips in Users (`invited` / `active` / `error` + retry). Best-effort
+  throughout: a Pangolin outage never fails a panel user create/delete — the
+  audit log says what needs manual cleanup.
+- Off by default: `HLIDSKJALF_PANGOLIN_SYNC_USERS=true` +
+  `HLIDSKJALF_PANGOLIN_TENANT_ROLE` (default `Member`), riding the existing
+  Pangolin integration connection with four new least-privilege API-key
+  actions (`inviteUser`, `listRoles`, `getOrgUser`, `removeUser`). Setup in
+  `docs/pangolin.md`; `docs/public-access.md` now presents SSO-on + sync as
+  the recommended tenant edge (SSO-off remains the simple alternative).
+- Schema migration v5: `users` gains `email`, `pangolin_state`,
+  `pangolin_invite_id` (the invite *link* is never stored — bearer secret).
+
 ### Changed — switch faceplate renders from the switch itself
 - **Genericity**: the Switch page no longer hardcodes the Arista DCS-7050TX-48.
   `show version` joins the eAPI batch (model, serial, EOS version exposed as a

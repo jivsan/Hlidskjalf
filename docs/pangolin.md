@@ -68,3 +68,63 @@ that check.
   response — exactly like the Proxmox token.
 - **Keys-only SSH.** Pair this with a keys-only VM image (no password auth) so an
   internet-reachable SSH port cannot be password-brute-forced.
+
+---
+
+# Tenant identity sync — SSO at the edge (optional)
+
+The SSH integration above tunnels *VM access*. This second, separate integration covers
+*panel access*: when the panel itself is published through a Pangolin resource
+(`docs/public-access.md`), that resource should keep **Platform SSO ON** — it is the
+phishing-resistant edge (per-user revocation, edge audit, and **passkey** support).
+For tenants to pass the wall, they need a Pangolin identity — and this sync provisions
+it from the place you already manage tenants: the panel's Users page.
+
+**On create** (user with an email): the panel invites that email into your Pangolin
+org's tenant role with `sendEmail: false`, and shows **you** the invite link exactly
+once — you relay it out-of-band (Signal, in person). The friend sets their own
+Pangolin password; the panel never sees it. Panel password and Pangolin password are
+independent credentials on two independent walls.
+
+**On delete**: the panel removes the edge identity too — the org user is deleted
+(matched by the invited *email*: the invitee picks their username at accept time, and
+an account under a different email is never touched), or the unaccepted invite is
+cancelled. Offboarding is complete in one click.
+
+**Retry/refresh**: `POST /api/users/{name}/pangolin-sync` (the retry chip in Users)
+re-invites after a failure, and flips `invited → active` once the friend accepts.
+
+All of it is **best-effort**: a Pangolin outage never fails a panel user create or
+delete — the failure lands in the audit log and on a red `error` chip with a retry
+button. The sync is **off by default**.
+
+## Setup (one-time, four steps)
+
+1. **Pangolin dashboard → the panel's resource → Authentication**: keep Platform SSO
+   **on**, and add the tenant role (default `Member`) to **Roles**. Every invitee joins
+   that role, so they pass by construction — no per-user resource lists to maintain.
+2. **Integration API key**: add the actions `inviteUser`, `listRoles`, `getOrgUser`,
+   `removeUser`. (Still no resource-creation rights needed for this part.)
+3. **Panel env**:
+
+   | Setting | Env var | Notes |
+   |---|---|---|
+   | Sync on/off | `HLIDSKJALF_PANGOLIN_SYNC_USERS` | `true` to enable (default `false`) |
+   | Tenant role | `HLIDSKJALF_PANGOLIN_TENANT_ROLE` | org role to invite into (default `Member`) |
+
+   (plus the five connection knobs from the table above — the sync rides the same
+   Integration API connection).
+4. **Each tenant**: invite link → set password → then **add a passkey** in Pangolin.
+   That edge login is the phishing-proof one.
+
+## Security
+
+- **Invite links are bearer secrets.** Returned by the API once, shown to the admin
+  once, never stored in the panel's database, never logged, and they expire
+  (`validHours`, 72 h by default).
+- **Least privilege**: the sync uses only invite/lookup/remove-user actions — it
+  cannot create, modify or delete any Pangolin *resource*.
+- **The email is the key.** Lookups match the invited email exactly (substring hits
+  like `malice@example.com` are rejected client-side), so a pre-existing Pangolin
+  account that merely shares a panel username is never deleted.
+
