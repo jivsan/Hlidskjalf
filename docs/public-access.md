@@ -100,6 +100,16 @@ exactly as above. You own the edge instead of renting it, and — unlike Cloudfl
 which carries HTTP/HTTPS only — such a tunnel can also forward **raw TCP/UDP** (SSH, VNC),
 which matters if you want to give tenants a direct path into their VM, not just the panel.
 
+> **Pangolin trap: turn OFF "Platform SSO" on the panel's resource.** Every resource
+> created in the Pangolin dashboard defaults to Platform SSO **enabled**, which puts
+> *Pangolin's own* account login in front of the resource. Tenants do not have Pangolin
+> accounts — the panel does its own multi-user auth — so they hit a wall reading
+> "Authentication required" and never reach the panel's login. When you create the
+> resource: **Resources → <panel resource> → Authentication → disable "Use Platform
+> SSO" → Save Users & Roles.** (Automating it instead: `POST /resource/{id}` on the
+> Integration API with `{"sso": false}`.) Leaving SSO on would be a second auth layer,
+> but one only Pangolin account-holders can pass — incompatible with the tenant model.
+
 ### Do you need a separate host for the tunnel?
 
 No — `cloudflared` dials *out*, so there is no inbound path to host and nothing to port
