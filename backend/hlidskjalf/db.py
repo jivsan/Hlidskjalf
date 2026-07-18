@@ -357,20 +357,20 @@ class Db:
 
     # --- users (multi-user + roles) -------------------------------------------
 
-    async def create_user(self, username: str, password_hash: str, role: str = "user", vmid: int | None = None) -> int:
+    async def create_user(self, username: str, password_hash: str, role: str = "user", vmid: int | None = None, email: str = "") -> int:
         if role not in ("admin", "user"):
             role = "user"
         now = datetime.now(timezone.utc).isoformat()
         cur = await self.conn.execute(
-            "INSERT INTO users (username, password_hash, role, vmid, created_at) VALUES (?, ?, ?, ?, ?)",
-            (username, password_hash, role, vmid, now),
+            "INSERT INTO users (username, password_hash, role, vmid, created_at, email) VALUES (?, ?, ?, ?, ?, ?)",
+            (username, password_hash, role, vmid, now, email.strip().lower()),
         )
         await self.conn.commit()
         return cur.lastrowid  # type: ignore
 
     async def get_user_by_username(self, username: str) -> dict | None:
         cur = await self.conn.execute(
-            "SELECT id, username, password_hash, role, vmid, created_at FROM users WHERE username = ?",
+            "SELECT id, username, password_hash, role, vmid, created_at, email, pangolin_state, pangolin_invite_id FROM users WHERE username = ?",
             (username,),
         )
         row = await cur.fetchone()
@@ -378,7 +378,7 @@ class Db:
 
     async def get_user_by_id(self, uid: int) -> dict | None:
         cur = await self.conn.execute(
-            "SELECT id, username, password_hash, role, vmid, created_at FROM users WHERE id = ?",
+            "SELECT id, username, password_hash, role, vmid, created_at, email, pangolin_state, pangolin_invite_id FROM users WHERE id = ?",
             (uid,),
         )
         row = await cur.fetchone()
@@ -386,7 +386,7 @@ class Db:
 
     async def list_users(self) -> list[dict]:
         cur = await self.conn.execute(
-            "SELECT id, username, role, vmid, created_at FROM users ORDER BY role DESC, username"
+            "SELECT id, username, role, vmid, created_at, email, pangolin_state FROM users ORDER BY role DESC, username"
         )
         return [dict(r) for r in await cur.fetchall()]
 
@@ -401,6 +401,16 @@ class Db:
         await self.conn.execute(
             "UPDATE users SET vmid = ? WHERE username = ?",
             (vmid, username),
+        )
+        await self.conn.commit()
+
+    async def set_user_pangolin_state(self, username: str, state: str, invite_id: str = "") -> None:
+        """Track the edge-identity sync: '', 'invited', 'active', 'error'.
+        The invite LINK is never stored — only the invitation's id, so an
+        unaccepted invite can be cancelled on user delete."""
+        await self.conn.execute(
+            "UPDATE users SET pangolin_state = ?, pangolin_invite_id = ? WHERE username = ?",
+            (state, invite_id, username),
         )
         await self.conn.commit()
 

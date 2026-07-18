@@ -10,10 +10,32 @@ interface UserRow {
   username: string;
   role: string;
   vmid: number | null;
+  email?: string;
+  pangolin_state?: "" | "invited" | "active" | "error";
+}
+
+// What POST /api/users (+ the sync endpoint) returns about the edge identity.
+interface PangolinSyncResult {
+  state: "invited" | "active" | "error";
+  inviteLink?: string;
+  expiresAt?: number;
+  error?: string;
+}
+
+// The one-time invite reveal: a bearer link, shown exactly once after create
+// (or after a successful retry) and never stored anywhere.
+interface InviteReveal {
+  username: string;
+  link: string;
+  expiresAt?: number;
 }
 
 const USERNAME_RE = /^[a-z0-9]([a-z0-9._-]{0,30}[a-z0-9])?$/;
 const MIN_PASSWORD_LEN = 8;
+
+// Pangolin reports expiresAt as an epoch; the unit differs across versions —
+// anything past 2100 in seconds is implausible, so small numbers are seconds.
+const formatExpiry = (ts: number) => new Date(ts < 1e12 ? ts * 1000 : ts).toLocaleString();
 
 export function UsersPage() {
   const toast = useToast();
@@ -22,8 +44,9 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [newUser, setNewUser] = useState({ username: "", password: "", role: "user", vmid: "" });
+  const [newUser, setNewUser] = useState({ username: "", password: "", role: "user", vmid: "", email: "" });
   const [creating, setCreating] = useState(false);
+  const [invite, setInvite] = useState<InviteReveal | null>(null);
 
   // Per-row modal state
   const [assignFor, setAssignFor] = useState<UserRow | null>(null);
@@ -64,20 +87,45 @@ export function UsersPage() {
     e.preventDefault();
     if (!createOk) return;
     setCreating(true);
+    setInvite(null);
     try {
-      await api.post("/api/users", {
+      const resp = await api.post<{ pangolin?: PangolinSyncResult }>("/api/users", {
         username: newUser.username,
         password: newUser.password,
         role: newUser.role,
         vmid: newUser.vmid ? Number(newUser.vmid) : null,
+        ...(newUser.email.trim() ? { email: newUser.email.trim() } : {}),
       });
       toast.success(`user ${newUser.username} created`);
-      setNewUser({ username: "", password: "", role: "user", vmid: "" });
+      const pg = resp.pangolin;
+      if (pg?.state === "invited" && pg.inviteLink) {
+        setInvite({ username: newUser.username, link: pg.inviteLink, expiresAt: pg.expiresAt });
+      } else if (pg?.state === "error") {
+        toast.error(`pangolin invite failed (user still created): ${pg.error ?? "unknown"}`);
+      }
+      setNewUser({ username: "", password: "", role: "user", vmid: "", email: "" });
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "create failed");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function retrySync(u: UserRow) {
+    try {
+      const pg = await api.post<PangolinSyncResult>(
+        `/api/users/${encodeURIComponent(u.username)}/pangolin-sync`,
+        {},
+      );
+      if (pg.state === "invited" && pg.inviteLink) {
+        setInvite({ username: u.username, link: pg.inviteLink, expiresAt: pg.expiresAt });
+      } else {
+        toast.success(`${u.username}: edge identity ${pg.state}`);
+      }
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "sync failed");
     }
   }
 
@@ -180,7 +228,7 @@ export function UsersPage() {
       {loadError && <ErrorState message={loadError} />}
 
       <Card title="Create user" className="card-brackets-hover">
-        <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <input
             className="input"
             placeholder="username"
@@ -198,6 +246,16 @@ export function UsersPage() {
             onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
             autoComplete="new-password"
             required
+          />
+          <input
+            className="input"
+            type="email"
+            placeholder="email (optional — SSO invite)"
+            value={newUser.email}
+            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="email for Pangolin SSO invite"
           />
           <select
             className="input"
@@ -234,8 +292,42 @@ export function UsersPage() {
             <p className="text-red">password must be at least {MIN_PASSWORD_LEN} characters</p>
           )}
           <p>Regular users see only their assigned VM (power, graphs, console, bandwidth, rescue). Admins manage everything.</p>
+          <p>With an email + Pangolin sync enabled, the tenant is also invited past the panel's SSO wall — the invite link is shown once.</p>
         </div>
       </Card>
+
+      {/* One-time invite reveal — the link is a bearer secret: shown here
+          exactly once, never stored, never sent by the panel. */}
+      {invite && (
+        <Card title={`Edge invite — ${invite.username}`} className="border-cyan/40">
+          <div className="space-y-2 text-sm">
+            <p className="text-muted text-xs">
+              Send this link to {invite.username} out-of-band (Signal, in person — not
+              email if you can avoid it). It is shown <span className="text-fg">once</span>
+              {invite.expiresAt ? <> and expires {formatExpiry(invite.expiresAt)}</> : null}.
+              They set their own Pangolin password — then should add a passkey in Pangolin:
+              that login is phishing-proof.
+            </p>
+            <div className="flex gap-2">
+              <input className="input metric text-xs flex-1" readOnly value={invite.link} onFocus={(e) => e.target.select()} aria-label="invite link" />
+              <button
+                className="btn-cyan text-xs px-3"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(invite.link).then(
+                    () => toast.success("invite link copied"),
+                    () => toast.error("copy failed — select and copy manually"),
+                  );
+                }}
+              >
+                copy
+              </button>
+              <button className="btn-plain text-xs px-3" onClick={() => setInvite(null)}>
+                done
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {list.length === 0 ? (
         <EmptyState message="no users yet" />
@@ -246,6 +338,7 @@ export function UsersPage() {
               <tr>
                 <th className="px-3 py-2.5 font-medium">Username</th>
                 <th className="px-3 py-2.5 font-medium">Role</th>
+                <th className="px-3 py-2.5 font-medium">Edge (SSO)</th>
                 <th className="px-3 py-2.5 font-medium">Assigned VM</th>
                 <th className="px-3 py-2.5 font-medium text-right">Actions</th>
               </tr>
@@ -264,6 +357,41 @@ export function UsersPage() {
                     >
                       {u.role}
                     </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {!u.email ? (
+                      <span className="text-muted text-xs">—</span>
+                    ) : u.pangolin_state === "invited" ? (
+                      <span
+                        className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border text-cyan border-cyan/30 bg-cyan/5"
+                        title={`invite sent to ${u.email} — not accepted yet`}
+                      >
+                        invited
+                      </span>
+                    ) : u.pangolin_state === "active" ? (
+                      <span
+                        className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border text-green border-green/30 bg-green/5"
+                        title={`edge identity live for ${u.email}`}
+                      >
+                        active
+                      </span>
+                    ) : u.pangolin_state === "error" ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border text-red border-red/40 bg-red/5"
+                          title="the last invite attempt failed — retry"
+                        >
+                          error
+                        </span>
+                        <button className="btn-plain px-1.5 py-0.5 text-[10px]" onClick={() => void retrySync(u)}>
+                          retry
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-muted text-xs" title={`${u.email} — no edge identity (sync off or not yet invited)`}>
+                        no edge
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 metric">
                     {u.vmid != null ? (
@@ -403,8 +531,9 @@ export function UsersPage() {
       >
         <p>
           <span className="text-red">{deleteFor?.username}</span> loses access immediately.
-          Their VM is not touched — it just becomes unassigned. The last admin cannot be
-          deleted.
+          Their VM is not touched — it just becomes unassigned.
+          {deleteFor?.email ? " Their Pangolin edge identity is removed too (best-effort)." : ""}{" "}
+          The last admin cannot be deleted.
         </p>
       </ConfirmDialog>
     </div>

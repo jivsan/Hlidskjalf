@@ -100,15 +100,22 @@ exactly as above. You own the edge instead of renting it, and — unlike Cloudfl
 which carries HTTP/HTTPS only — such a tunnel can also forward **raw TCP/UDP** (SSH, VNC),
 which matters if you want to give tenants a direct path into their VM, not just the panel.
 
-> **Pangolin trap: turn OFF "Platform SSO" on the panel's resource.** Every resource
-> created in the Pangolin dashboard defaults to Platform SSO **enabled**, which puts
-> *Pangolin's own* account login in front of the resource. Tenants do not have Pangolin
-> accounts — the panel does its own multi-user auth — so they hit a wall reading
-> "Authentication required" and never reach the panel's login. When you create the
-> resource: **Resources → <panel resource> → Authentication → disable "Use Platform
-> SSO" → Save Users & Roles.** (Automating it instead: `POST /resource/{id}` on the
-> Integration API with `{"sso": false}`.) Leaving SSO on would be a second auth layer,
-> but one only Pangolin account-holders can pass — incompatible with the tenant model.
+> **Pangolin and Platform SSO.** Every resource created in the Pangolin dashboard
+> defaults to Platform SSO **enabled** — Pangolin's own account login in front of the
+> resource. Two ways to deal with it:
+>
+> - **Recommended: keep SSO on and sync tenant identities** (`docs/pangolin.md` —
+>   "Tenant identity sync"). The edge wall is the phishing-resistant layer (per-user
+>   revocation, edge audit, passkeys), and the panel provisions each tenant's edge
+>   identity from the Users page when it creates their account. Tenants pass with
+>   their own Pangolin login, then the panel's.
+> - **Simple alternative: turn SSO off** — Resources → \<panel resource\> →
+>   Authentication → disable "Use Platform SSO" → Save Users & Roles (automating:
+>   `POST /resource/{id}` with `{"sso": false}` on the Integration API). The panel's
+>   own multi-user auth is the only wall. Fine for panels whose tenants don't need
+>   per-user edge identities — but anyone on the internet can see (and clone) the
+>   login page, so brief tenants: the panel never emails anyone, and the URL is the
+>   only door.
 
 ### Do you need a separate host for the tunnel?
 

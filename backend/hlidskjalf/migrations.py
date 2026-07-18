@@ -159,6 +159,25 @@ MIGRATIONS: list[tuple[int, str, str]] = [
         ALTER TABLE pangolin_resources_v4 RENAME TO pangolin_resources;
         """,
     ),
+    (
+        5,
+        "users: email + pangolin sync state for tenant identity sync",
+        """
+        -- Tenant identity sync (docs/pangolin.md): a panel user with an email
+        -- can be invited into the Pangolin org so they pass the panel
+        -- resource's Platform SSO wall. email is what the invite is sent to
+        -- (empty = no edge identity). pangolin_state tracks the sync:
+        -- '' (never synced) / 'invited' (link handed to the admin) /
+        -- 'active' (the invitee exists in the org) / 'error' (last attempt
+        -- failed; retry via the sync endpoint). pangolin_invite_id lets us
+        -- cancel an unaccepted invite when the panel user is deleted.
+        -- The invite LINK itself is never stored — it is a bearer secret,
+        -- shown to the admin exactly once.
+        ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN pangolin_state TEXT NOT NULL DEFAULT '';
+        ALTER TABLE users ADD COLUMN pangolin_invite_id TEXT NOT NULL DEFAULT '';
+        """,
+    ),
 ]
 
 LATEST = max(v for v, _, _ in MIGRATIONS)

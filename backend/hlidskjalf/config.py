@@ -157,6 +157,19 @@ class Settings(BaseSettings):
     # the next free port at or above this. 0 (default) = unset.
     pangolin_ssh_port_start: int = 0
 
+    # --- Pangolin tenant identity sync (optional, needs the knobs above) ------
+    # When ON, creating a panel user with an email also invites that email into
+    # the Pangolin org (tenant role below) so the tenant can pass the panel
+    # resource's Platform SSO wall; deleting the panel user removes the Pangolin
+    # org user. The invite LINK is shown to the admin exactly once — Pangolin
+    # never emails it (sendEmail:false), the panel never stores it. OFF by
+    # default: granting the api key user-management actions is a deliberate
+    # operator decision (inviteUser, listRoles, getOrgUser, removeUser).
+    pangolin_sync_users: bool = False
+    # The org role tenants are invited into; the panel resource's SSO config
+    # lists this role, so every invitee passes the wall by construction.
+    pangolin_tenant_role: str = "Member"
+
     # Metrics datasource: "rrd" (PVE rrddata, the default) or "prometheus"
     # (a Prometheus scraping prometheus-pve-exporter, see docs/prometheus.md).
     metrics_source: str = "rrd"
@@ -306,6 +319,13 @@ class Settings(BaseSettings):
             and self.pangolin_site_id
             and self.pangolin_ssh_port_start
         )
+
+    @property
+    def pangolin_user_sync_active(self) -> bool:
+        """Tenant identity sync rides on the same connection as the SSH-tunnel
+        integration, but only when the operator explicitly opted in — it means
+        the api key carries user-management actions."""
+        return self.pangolin_enabled and self.pangolin_sync_users
 
     @property
     def pve_base_url(self) -> str:
