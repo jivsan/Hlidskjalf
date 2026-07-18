@@ -1,24 +1,30 @@
 # handoff.md — Hlidskjalf build status
 
-_Last updated: 2026-07-17 (**v0.5.4-alpha — cyberpunk round four**; PRs #87–#89, 355 tests)._
+_Last updated: 2026-07-17 (**v0.5.5-alpha — the edge release**; PRs #90–#93, 368 tests)._
 
-## 🚧 ON MAIN, UNRELEASED — switch faceplate genericity + Pangolin tenant sync
+## ✅ v0.5.5-alpha — THE EDGE RELEASE
 
+- **Pangolin tenant identity sync (#92)**: the recommended tenant edge is
+  Platform SSO **ON** — per-user edge identities, edge audit, passkey support
+  (the phishing-proof factor). Creating a panel user **with an email** invites
+  that email into the Pangolin org's tenant role (`sendEmail: false`; the link
+  is shown to the admin exactly once and relayed out-of-band — the friend sets
+  a Pangolin password the panel never sees). Deleting the user removes the
+  edge identity too (matched **by email** — the invitee picks their username
+  at accept time; accounts under a different email are never touched;
+  unaccepted invites are cancelled). Retry/refresh chips in Users, best-effort
+  throughout (a Pangolin outage never blocks panel user management). Off by
+  default (`HLIDSKJALF_PANGOLIN_SYNC_USERS`); four one-time setup steps in
+  `docs/pangolin.md`. Born from a real incident: a tenant hit Pangolin's SSO
+  wall, and SSO-off had previously attracted phishing. Migration v5
+  (`users.email` + sync state); `docs/public-access.md` reframed around it.
 - **Switch faceplate renders from eAPI (#90)**: `show version` joins the batch
-  (model/serial/EOS in a `switch` block), per-port `kind`/`media` classification,
-  derived layout + labels (no more hardcoded 7050TX, no "RACK 47"), and honest
-  LINK/ACT LED pairs with rate-tiered blinking (WCAG-capped, reduced-motion
-  solid). Handoff gap #1 closed.
-- **Pangolin tenant identity sync (this branch)**: the recommended tenant edge
-  is Platform SSO **ON** — the panel invites each new user's email into the
-  Pangolin org's tenant role (link shown to the admin once, relayed
-  out-of-band), deletes the edge identity when the user is deleted, and offers
-  retry/refresh chips in Users. Off by default
-  (`HLIDSKJALF_PANGOLIN_SYNC_USERS`); four manual setup steps in
-  `docs/pangolin.md`. Motivation: a tenant hit Pangolin's SSO wall on
-  `hlidskjalf-pub`, and the alternative (SSO off) had already attracted
-  phishing once — the synced wall is per-user and passkey-capable.
-  Migration v5 (`users.email` + sync state); 368 backend tests green.
+  (model/serial/EOS in a `switch` block), per-port `kind`/`media`
+  classification, derived layout + labels (no more hardcoded 7050TX, no
+  "RACK 47"), and honest LINK/ACT LED pairs with rate-tiered blinking
+  (WCAG-capped, reduced-motion solid). Handoff gap #1 closed.
+- Plus a docs pin (#91): Pangolin resources default to Platform SSO — the
+  operator's guide says what to do about it.
 
 ## ✅ v0.5.4-alpha — CYBERPUNK ROUND FOUR (THE CHART CORE)
 

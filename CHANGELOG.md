@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5-alpha] - 2026-07-17
+
 ### Added — Pangolin tenant identity sync (SSO at the edge, passkey-ready)
 - **Keep Platform SSO on.** When the panel is published through a Pangolin
   resource, the recommended edge is now the SSO wall itself — per-user
