@@ -11,6 +11,7 @@ Supported cmds (in runCmds batch):
 - "show interfaces description"
 - "show interfaces counters rates"
 - "show lldp neighbors"
+- "show version"
 
 Returns realistic structured JSON. ~48 physical Ethernet ports.
 A subset are "connected" with descriptions, non-zero rates (some active),
@@ -158,11 +159,26 @@ def _lldp_data() -> dict:
         })
     return {"lldpNeighbors": neighs}
 
+def _version_data() -> dict:
+    # `show version` JSON — modelName/serialNumber/version are the stable
+    # fields every EOS release reports; the panel reads nothing else.
+    return {
+        "mfgName": "Arista",
+        "modelName": "DCS-7050TX-48",
+        "serialNumber": "MOCK-SN-0042",
+        "version": "4.31.0F",
+        "architecture": "i386",
+        "uptime": 1234567.89,
+        "memTotal": 4012345,
+        "memFree": 1234567,
+    }
+
 CMD_MAP = {
     "show interfaces status": _status_data,
     "show interfaces description": _desc_data,
     "show interfaces counters rates": _counters_data,
     "show lldp neighbors": _lldp_data,
+    "show version": _version_data,
 }
 
 @app.post("/command")

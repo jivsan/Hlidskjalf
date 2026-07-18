@@ -193,13 +193,8 @@ meets the setup wizard, and configures *their* Proxmox. They must never find our
   **Settings**. The install bar is "install → paste the Proxmox API token → set
   credentials → done".
 
-The one sanctioned exception, for now: the **switch faceplate**, hardcoded to a
-48-port Arista DCS-7050TX-48.
-
 # Known limitations
 
 - **Single Proxmox node only** — a cluster shows just `pve_node`.
-- The switch faceplate does not render from what the switch actually reports. (The
-  Switch page is optional — leaving `switch_host` unset hides it.)
 - Provisioning is QEMU-only (LXC list/power/console work; LXC create does not).
 - The panel **detects** updates (Settings → Updates) but does not apply them.

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — switch faceplate renders from the switch itself
+- **Genericity**: the Switch page no longer hardcodes the Arista DCS-7050TX-48.
+  `show version` joins the eAPI batch (model, serial, EOS version exposed as a
+  `switch` block on `GET /api/switch/ports`); every port carries a
+  backend-classified `kind` (`rj45`/`cage`, from `interfaceType` with a
+  bandwidth fallback) and its raw `media`. The faceplate derives its rows and
+  cages from the reported port list and composes every label — model, spec
+  line, serial footer — from live data. The last site-specific string in
+  tracked files ("RACK 47") is gone.
+- **Honest LEDs**: each port gains a real LINK/ACT LED pair — LINK solid green
+  when the link is up, ACT flickering at a speed that follows throughput
+  (three tiers, periods ≥360ms, under the WCAG 3-flashes/sec ceiling; frozen
+  solid-on under `prefers-reduced-motion`). The unrealistic always-on red LED
+  for down ports is gone: no link, no light — the dark jack says it. Status
+  LEDs (SYS/FAN/PS1/PS2) read green when the switch answers eAPI instead of
+  decorative blue/yellow.
+- Port `speed` is now human-formatted server-side (`10G`, `40G`, `1G`) instead
+  of the raw bits/sec integer.
+- Mock: `dev/mock_switch.py` answers `show version` too (the mock keeps the
+  Arista 7050TX as sample data — the code no longer assumes it).
+
 ## [0.5.4-alpha] - 2026-07-17
 
 ### Added — cyberpunk round four (the chart core)

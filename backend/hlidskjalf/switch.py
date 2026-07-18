@@ -87,6 +87,54 @@ class PortInfo:
     output_rate: int = 0 # bps
     active: bool = False # for UI blinking
     lldp_neighbor: Optional[dict] = field(default=None)  # e.g. {"system_name": "...", "port": "..."} from LLDP
+    media: str = ""      # interfaceType from the switch, e.g. "10GBASE-T", "40GBASE-SR4"
+    kind: str = "rj45"   # "rj45" (copper jack) or "cage" (SFP/QSFP optic) — see _classify_kind
+
+
+@dataclass
+class SwitchInfo:
+    """The switch's own identity, from `show version`. Safe "" defaults."""
+    model: str = ""
+    serial: str = ""
+    eos_version: str = ""
+
+
+_CAGE_MEDIA = re.compile(r"qsfp|sfp|sr4|lr4|cr4|aoc|base-sr|base-lr", re.I)
+
+
+def _classify_kind(media: str, bandwidth: int) -> str:
+    """RJ45 jack vs optic cage, from the switch's own report.
+
+    `interfaceType` ("10GBASE-T", "40GBASE-SR4") is the honest source. When it
+    is missing, bandwidth is the tell: 10GBASE-T tops out at 10G, so a ≥25G
+    interface is an optic cage on this class of hardware.
+    """
+    m = (media or "").lower()
+    if "base-t" in m:
+        return "rj45"
+    if _CAGE_MEDIA.search(m):
+        return "cage"
+    return "cage" if bandwidth >= 25_000_000_000 else "rj45"
+
+
+def _format_speed(bandwidth: object) -> str:
+    """`show interfaces status` reports bandwidth in bits/sec as an int —
+    printed raw it reads as noise ("10000000000"). Human units instead;
+    non-numeric values ("auto" and friends) pass through untouched.
+    """
+    try:
+        bps = int(bandwidth)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return str(bandwidth or "")
+    if bps <= 0:
+        return ""
+    if bps % 1_000_000_000 == 0:
+        return f"{bps // 1_000_000_000}G"
+    if bps >= 1_000_000_000:
+        return f"{bps / 1_000_000_000:g}G"  # 2.5G and friends
+    if bps % 1_000_000 == 0:
+        return f"{bps // 1_000_000}M"
+    return f"{bps // 1_000}k"
 
 
 class AristaClient:
@@ -104,6 +152,12 @@ class AristaClient:
         self._cache_ts: float = 0.0
         self._cache_ttl: float = 2.5
         self._lock = asyncio.Lock()
+        # The switch's own identity, refreshed with every successful fetch.
+        self._switch_info = SwitchInfo()
+
+    def get_switch_info(self) -> SwitchInfo:
+        """Last known `show version` identity (empty until the first fetch)."""
+        return self._switch_info
 
     async def get_ports(self) -> list[PortInfo]:
         """Return list of ports with status, rates, descriptions, LLDP (pure eAPI, no SSH fallback).
@@ -149,6 +203,7 @@ class AristaClient:
             "show interfaces description",
             "show interfaces counters rates",
             "show lldp neighbors",
+            "show version",
         ]
 
         payload: dict[str, Any] = {
@@ -174,7 +229,7 @@ class AristaClient:
             raise RuntimeError(f"eAPI error: {msg}")
 
         results = data.get("result")
-        if not isinstance(results, list) or len(results) < 4:
+        if not isinstance(results, list) or len(results) < 5:
             # partial or bad batch response
             return []
 
@@ -182,6 +237,15 @@ class AristaClient:
         desc_data = results[1] or {}
         counters_data = results[2] or {}
         lldp_data = results[3] or {}
+        version_data = results[4] or {}
+
+        # `show version` — the switch's own identity; every field optional.
+        if isinstance(version_data, dict):
+            self._switch_info = SwitchInfo(
+                model=str(version_data.get("modelName", "") or ""),
+                serial=str(version_data.get("serialNumber", "") or ""),
+                eos_version=str(version_data.get("version", "") or ""),
+            )
 
         # Build maps with normalized port names (handles Et1 / Ethernet1 / et1 variations)
         desc_map: dict[str, str] = {}
@@ -226,7 +290,12 @@ class AristaClient:
                 continue  # only physical Ethernet* (handles EtN, eth etc after norm)
 
             status = str(info.get("linkStatus", "notconnect") or "notconnect")
-            speed = str(info.get("bandwidth", "auto") or "")
+            media = str(info.get("interfaceType", "") or "")
+            try:
+                bw_int = int(info.get("bandwidth", 0) or 0)
+            except (TypeError, ValueError):
+                bw_int = 0
+            speed = _format_speed(info.get("bandwidth", "auto"))
             duplex = str(info.get("duplex", "") or "")
             vlan_info = info.get("vlanInformation") or {}
             vlan = str(vlan_info.get("vlanId", "")) or None if vlan_info.get("vlanId") is not None else None
@@ -246,6 +315,8 @@ class AristaClient:
                     output_rate=out_r,
                     active=active,
                     lldp_neighbor=lldp_map.get(name),
+                    media=media,
+                    kind=_classify_kind(media, bw_int),
                 )
             )
 

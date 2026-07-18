@@ -493,11 +493,17 @@ a new release without hand-pulling, hand-building, or reading a migration note.
 of an unversioned schema is how people lose their bandwidth history.
 
 ### Known gaps / next up
-1. **The switch faceplate is still hardcoded** to a 48-port + 4-QSFP Arista
-   DCS-7050TX-48 (`Switch.tsx` renders `Ethernet1..52` regardless of what the switch
-   reports). For genericity it should render from the ports the backend actually
-   returns, with the model read from eAPI (`show version` → `modelName`). The Switch
-   page is already optional (unset `switch_host` hides it).
+1. ~~The switch faceplate is still hardcoded~~ **DONE (feat/switch-faceplate):**
+   the faceplate renders from what the switch reports — `show version` joins the
+   eAPI batch (model/serial/EOS version in a `switch` block on
+   `/api/switch/ports`), each port carries a backend-classified `kind`
+   (rj45/cage from `interfaceType`, bandwidth fallback) and `media`, the layout
+   derives rows/cages from the port list, and every label is composed (no more
+   "RACK 47" in tracked files). LEDs are honest now: a LINK/ACT pair per port —
+   LINK solid when up, ACT flickering at a rate-tiered speed (≥360ms periods,
+   WCAG-capped, frozen solid under reduced-motion) — and the unrealistic
+   always-on red down-LED is gone. Site-specific hardware rendering survives
+   only as the *mock's* sample data.
 2. **Real-hardware validation — Phase 1 DONE (2026-07-13), Phases 2–4 remain.** The
    read-only validator passed against the real host (PVE 9.2.3): 35 pass, 0 FAIL — see the
    "START HERE" section at the top for full results and environment facts. The panel
@@ -583,7 +589,11 @@ see this on `main` it merged). **Frontend only** per Christian's request:
 ### Still TODO (next session)
 1. ~~Screenshots gallery~~ **DONE** — `docs/screenshots/v0.3.4-alpha/` supersedes the never-captured v0.3.3.3 gallery.
 2. **Branch protection is NOT available** on this private repo without GitHub Pro — both the classic branch-protection API and the Rulesets API return "Upgrade to GitHub Pro or make this repository public." Options: pay for Pro, make the repo public (NOT recommended — plan.md exposes homelab IPs/hostnames), or keep the current discipline (I verify local pytest green + scope before every merge). Nothing was applied.
-3. Stale remote branches to prune (all merged/abandoned): `feat/switch-*` (many), `feat/debug-section`, `feat/normalize-pve-shapes`, `feat/v0.3.2-alpha-multi-user`.
+3. ~~Stale remote branches to prune~~ **DONE (2026-07-17):** all merged/abandoned
+   remote branches deleted (`feat/switch-*`, `feat/cyberpunk-*`,
+   `feat/provision-*`, `fix/security-*`, `fix/cf-*`, old `release/*`); only
+   `main` remains on origin, and the local `worktree-agent-*` bookkeeping
+   branches + idle agent worktrees are gone too.
 4. Optional follow-ups: `/api/tasks/{upid}/status` is unscoped (low-sensitivity IDOR — backend, deferred from the frontend-only session); ~~frontend robustness pass~~ **DONE in v0.3.4-alpha**; consider code-splitting recharts (main JS chunk is ~630 kB min / 183 kB gz).
 
 ## Previous state (v0.3.2-alpha)
